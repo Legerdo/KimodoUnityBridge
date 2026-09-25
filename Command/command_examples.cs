@@ -44,6 +44,7 @@ namespace KimodoUnityBridge.Command
                     @"{'request_id':'11111111-1111-1111-1111-111111111111'}");
                 case CancelGenerationCommand: return Examples("Cancel using the exact active generation request_id.",
                     @"{'request_id':'11111111-1111-1111-1111-111111111111','reason':'User requested cancellation'}");
+                case SessionClearCommand: return Examples("Clear the current runtime session while retaining persisted assets.", @"{}");
                 default: throw new InvalidOperationException($"Command '{command}' is missing a help example.");
             }
         }

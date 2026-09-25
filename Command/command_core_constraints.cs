@@ -383,30 +383,28 @@ namespace KimodoUnityBridge.Command
                 throw new InvalidOperationException($"constraints[{constraintIndex}].root2d requires pose or position plus heading.");
             }
 
-            var result = new KimodoMarkerSampleResult
+            // A Root2D marker still needs the complete support pose for the
+            // editor preview. The Root2D mode controls export/solve channels;
+            // it must not discard the sampled muscles, feet, or root height.
+            // This is the same shape produced by the Timeline right-click
+            // marker path: sampled values are retained, while only the
+            // authored enable mask is reduced to Root2D channels.
+            KimodoMarkerSampleResult result = poseSample?.Clone() ?? new KimodoMarkerSampleResult();
+            result.constraintMode = "root2d";
+            result.sampleTime = sampleTime;
+            result.rootOverride = new KimodoRigidTransform
             {
-                constraintMode = "root2d",
-                sampleTime = sampleTime,
-                rootOverride = new KimodoRigidTransform
-                {
-                    t = rootPosition,
-                    q = rootRotation
-                },
-                enableMask = new KimodoConstraintMask
-                {
-                    rootPosition = hasPosition || hasRootPose,
-                    rootHeading = hasPosition || hasRootPose
-                },
-                validMask = new KimodoConstraintMask
-                {
-                    rootPosition = hasPosition || hasRootPose,
-                    rootHeading = hasPosition || hasRootPose
-                }
+                t = rootPosition,
+                q = rootRotation
             };
-            result.enableMask.muscle = false;
-            result.enableMask.rootTQ = false;
-            result.enableMask.leftFootTQ = false;
-            result.enableMask.rightFootTQ = false;
+            result.enableMask = KimodoConstraintMask.ForType("root2d");
+            result.validMask ??= new KimodoConstraintMask();
+            if (hasPosition || hasRootPose)
+            {
+                result.validMask.rootPosition = true;
+                result.validMask.rootHeading = true;
+            }
+            result.enabled = true;
             return result;
         }
 

@@ -654,11 +654,79 @@ namespace KimodoUnityBridge.Command
                 }
                 PersistTimelineSessionMetadata(automatic);
             }
-            if (currentTimelineSession.Director == null || currentTimelineSession.TimelineAsset == null)
+            if (!IsTimelineSessionValid(currentTimelineSession))
             {
-                throw new InvalidOperationException("Current scene context is no longer valid.");
+                TimelineSessionRecord invalidSession = currentTimelineSession;
+                string invalidName = invalidSession?.Name ?? "__AutoContext";
+                CancelTimelineSessionGenerations(invalidSession, "Scene context was invalidated; recreating the automatic context.");
+                ClearRuntimeSession(invalidSession);
+                currentTimelineSession = null;
+                Debug.LogWarning($"[Kimodo] Scene context '{invalidName}' was invalid; recreated automatic context.");
+                return RequireCurrentTimelineSession();
             }
             return currentTimelineSession;
+        }
+
+        private static bool IsTimelineSessionValid(TimelineSessionRecord session)
+        {
+            if (session == null || session.Director == null || session.TimelineAsset == null ||
+                session.Director.gameObject == null || !session.Director.gameObject.scene.IsValid() ||
+                session.SessionRoot == null || !session.SessionRoot.scene.IsValid())
+            {
+                return false;
+            }
+
+            return session.Characters.All(character => character != null && character.Root != null &&
+                character.Root.scene.IsValid() && character.Track != null && character.PoseCacheTrack != null);
+        }
+
+        private static void ClearRuntimeSession(TimelineSessionRecord session)
+        {
+            if (session == null) return;
+            if (session.Director != null) session.Director.Stop();
+            if (session.SessionRoot != null) UnityEngine.Object.DestroyImmediate(session.SessionRoot);
+            lock (TimelineSessionsLock)
+            {
+                TimelineSessions.Remove(session.Name);
+            }
+        }
+
+        internal static string ClearSession(string argumentsJson)
+        {
+            return Execute(argumentsJson, arguments =>
+            {
+                string requestedName = arguments.Value<string>("name")?.Trim();
+                EnsureTimelineSessionsRestored(requestedName);
+                TimelineSessionRecord session;
+                lock (TimelineSessionsLock)
+                {
+                    if (string.IsNullOrWhiteSpace(requestedName))
+                    {
+                        session = currentTimelineSession;
+                    }
+                    else
+                    {
+                        TimelineSessions.TryGetValue(requestedName, out session);
+                    }
+                }
+
+                if (session == null)
+                {
+                    return Ok(new JObject { ["cleared"] = false, ["reason"] = "not_found" });
+                }
+
+                bool wasCurrent = ReferenceEquals(currentTimelineSession, session);
+                CancelTimelineSessionGenerations(session, "Session cleared by session.clear.");
+                ClearRuntimeSession(session);
+                if (wasCurrent) currentTimelineSession = null;
+                Debug.LogWarning($"[Kimodo] Cleared runtime session '{session.Name}'; persisted Timeline and animation assets were retained.");
+                return Ok(new JObject
+                {
+                    ["cleared"] = true,
+                    ["name"] = session.Name,
+                    ["recreated_on_next_command"] = wasCurrent
+                });
+            });
         }
 
         private static TimelineSessionRecord RequireTimelineSession(JObject arguments)

@@ -66,6 +66,22 @@ Mesh analysis 对该字段返回 `NOT_APPLICABLE`。
 时长与该先验的偏差；不把权重相加做总质量分数。允许语义覆盖重叠（例如边走边挥手），
 但 `idle`/站立背景阶段的总覆盖不得超过 50%，除非请求明确要求长时间 idle。
 
+Evaluation has two separate outputs:
+
+```text
+constraint_compliance:
+  loop, heading, path, distance, transition, pose, contact, ending
+semantic_pose_coverage:
+  required semantic poses present, expressed, and non-conflicting
+```
+
+For ordered semantic requirements, the duration prior remains `w_i = 1/(i*i)`.
+Required semantic Pose coverage is evaluated separately: more verified required
+semantic Poses expressed without conflict receives higher coverage. This is
+evaluation evidence, not confidence, and never converts an analysis candidate
+into a generation Pose. Idle/background is invalid when it contains a
+conflicting action, such as sitting while the requested semantic is standing.
+
 交接结果的最小外壳为：
 
 ```json

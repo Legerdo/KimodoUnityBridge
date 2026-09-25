@@ -1360,6 +1360,27 @@
           }
         }
       ]
+    },
+    {
+      "name": "session.clear",
+      "description": "Clear a current runtime Timeline session. Persisted Timeline and animation assets are retained; the automatic context is recreated on the next scene-context command.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Optional session name; defaults to the current session."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "description": "Clear the current runtime session while retaining persisted assets.",
+          "arguments": {}
+        }
+      ]
     }
   ]
 }

@@ -185,7 +185,9 @@ analysis_frame_anchors = source_analysis.clips[0].phase_track[*].anchor_frame_60
 verification_frames = choose_phase_and_endpoint_frames(analysis_frame_anchors)
 path_constraint = source_analysis.clips[0].root_trajectory.path
 path_angle = derive_path_angle_from_motion_profile_and_request(source_profile, request)
-// No pose_get/pose_set: anchors are metadata, path/path_angle are generation inputs.
+// Analysis anchors are metadata only. They may enter the independent Pose loop,
+// but never become generation inputs without explicit conversion and
+// confirmation. Path/path_angle remain generation inputs only when requested.
 ```
 
 function execute_generate_skill(request):
@@ -524,6 +526,8 @@ function required(required_flag, evidence):
 
 ASSERT analysis_keyframes_are_used_as_evidence_and_timing_anchors()
 ASSERT default_generation_does_not_materialize_or_edit_pose_assets()
+ASSERT analysis_candidates_do_not_enter_generation_directly()
+ASSERT only_confirmed_pose_set_entries_enter_generation()
 ASSERT source_motion_profile_precedes_prompt_heuristics()
 ASSERT direct_pose_edit_requires_explicit_user_confirmation_and_opt_in()
 ASSERT analyzed_path_is_a_constraint_only_when_root_trajectory_path_is_reused()

@@ -7,6 +7,36 @@ description: Create and edit External Pose slots for explicit Humanoid pose cons
 
 负责 `pose_get`、`pose_set` 以及按需拆分使用的 `pose_set_root_transform` 和 `pose_set_muscle`。
 
+## Pose loop / Pose 闭环
+
+Analysis candidates are not generation inputs. They first pass through the
+implementation's pose conversion or materialization step, then inspection and
+explicit selection:
+
+```text
+AnalysisCandidate -> PoseCandidate -> inspect -> confirmed|disabled
+                  -> ConfirmedPoseSet -> generation constraints
+```
+
+Pose sources may be combined. A source can provide a whole pose, a body region,
+or a contact relationship. Record its role and scope instead of copying an
+entire source pose implicitly:
+
+```json
+{
+  "pose": { "track": "<returned track>", "index": 0 },
+  "role": "start|contact|impact|end|loop_seam",
+  "scope": ["fullbody", "left_hand", "right_hand", "root2d"],
+  "status": "candidate|confirmed|disabled",
+  "evidence": ["tile:<id>"]
+}
+```
+
+Adding, editing, or disabling a Pose creates a derived PoseSet for the next
+iteration. It does not mutate the previous Clip. Only `confirmed` Pose
+references may be passed to generation, and only when the request explicitly
+asks to use them.
+
 `transform_capture` 接受 `pose_get` 返回的 `pose: {track,index}`。在 `transforms`
 中使用特殊 key `@pose` 表示该 Pose 的角色，`@pose/<相对骨骼路径>` 表示该角色局部；
 同一数组中加入桌子、苹果等场景层级路径即可在真实世界坐标下合拍。返回四视图

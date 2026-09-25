@@ -36,7 +36,8 @@ namespace KimodoUnityBridge.Command
                 [PoseSetRootTransformCommand] = PoseSetRootTransform,
                 [PoseSetMuscleCommand] = PoseSetMuscle,
                 [GetGenerationCommand] = GetGeneration,
-                [CancelGenerationCommand] = CancelGeneration
+                [CancelGenerationCommand] = CancelGeneration,
+                [SessionClearCommand] = ClearSession
             };
 
             var registrations = new List<CommandRegistration>();

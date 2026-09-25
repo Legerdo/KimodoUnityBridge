@@ -31,6 +31,7 @@ namespace KimodoUnityBridge.Command
         public const string PoseSetMuscleCommand = "pose_set_muscle";
         public const string GetGenerationCommand = "kimodo_get_generation";
         public const string CancelGenerationCommand = "kimodo_cancel_generation";
+        public const string SessionClearCommand = "session.clear";
         internal const string HelpAssetPath = "Packages/com.unity.kimodo_unity_motion_tools/Command/help.json";
 
         private const int MaxRememberedJobs = 128;
@@ -143,7 +144,10 @@ namespace KimodoUnityBridge.Command
                         "Cancel an active animation generation request. Installation requests cannot be canceled.",
                         Properties(
                             Required("request_id", "string", "Generation request id returned by kimodo_generate_animation."),
-                            Optional("reason", "string", "Optional cancellation reason.")))
+                            Optional("reason", "string", "Optional cancellation reason."))),
+                    CommandDefinition(SessionClearCommand,
+                        "Clear a current runtime Timeline session. Persisted Timeline and animation assets are retained; the automatic context is recreated on the next scene-context command.",
+                        Properties(Optional("name", "string", "Optional session name; defaults to the current session.")))
                 }
             }.ToString(Formatting.None);
         }

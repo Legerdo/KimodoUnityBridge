@@ -70,22 +70,42 @@ ASSERT WORKFLOW_READY == YES before animation work
 ```pseudo
 function run_kimodo_task(request):
     intent = classify_intent(request)
-    tool = route_to_capability_tool(intent)
-
     ensure_installation_gate()
-    inputs = tool.resolve_scene_inputs(request)
-    inputs = tool.validate_command_arguments(inputs)
 
-    result = tool.execute(inputs)
-    evidence = tool.read_returned_evidence(result)
+    if request.has_animation_reference():
+        analysis = run_analysis_tool(request)
+        pose_set = run_pose_loop(analysis, request)
+    elif request.has_pose_or_keyframe_reference():
+        pose_set = run_pose_loop(request, request)
+    else:
+        pose_set = EMPTY_CONFIRMED_POSE_SET
 
-    if tool.supports_bounded_correction() and evidence.requires_correction():
-        preserve_completed_output()
-        result = tool.execute(derive_one_supported_correction(inputs, evidence))
-        evidence = tool.read_returned_evidence(result)
-
-    return unified_report(result, evidence)
+    best = NONE
+    no_improvement = 0
+    do:
+        generated = run_generation_tool(request, pose_set)
+        analysis = run_analysis_and_evaluation(generated, request)
+        if best == NONE:
+            best = generated
+            no_improvement += 1
+        else:
+            comparison = run_compare_tool(generated, best, request)
+            if comparison.improves_best == YES:
+                best = generated
+                no_improvement = 0
+            else:
+                no_improvement += 1
+        if no_improvement > request.max_no_improvement:
+            return unified_report(best, analysis)
+        request, pose_set = plan_next_iteration(request, pose_set, analysis)
+    while true
 ```
+
+Analysis evidence never enters generation directly. It must pass through the
+Pose loop and become an explicitly confirmed Pose before generation may use it.
+The first generated candidate is only a baseline; Compare must run before final
+output. The loop stops when consecutive non-improvement exceeds the configured
+`max_no_improvement`.
 
 路由至少覆盖 installation、scene context、generation、recognition、comparison、pose 和 retarget；未匹配到能力时才返回 `unsupported` 或 `needs_clarification`。
 
