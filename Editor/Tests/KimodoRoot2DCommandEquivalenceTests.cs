@@ -45,7 +45,7 @@ namespace KimodoUnityBridge.Command.Tests
                 marker.CommitSampleData();
 
                 var character = new command_context.TimelineCharacterRecord(
-                    "Character", null, null, null, animationTrack, poseTrack, string.Empty);
+                    "Character", directorObject, null, null, animationTrack, poseTrack, string.Empty);
                 var sessionType = typeof(command_context).GetNestedType(
                     "TimelineSessionRecord", BindingFlags.NonPublic);
                 var session = Activator.CreateInstance(sessionType, new object[]
@@ -86,6 +86,23 @@ namespace KimodoUnityBridge.Command.Tests
                 Object.DestroyImmediate(timeline);
                 Object.DestroyImmediate(directorObject);
             }
+        }
+
+        [Test]
+        public void CommandRoot2D_WithoutPoseReferenceIsRejected()
+        {
+            MethodInfo build = typeof(command_context).GetMethod(
+                "BuildRoot2DConstraint", PrivateStatic);
+            TargetInvocationException exception = Assert.Throws<TargetInvocationException>(() =>
+                build.Invoke(null, new object[]
+                {
+                    JObject.Parse("{'position':[1,2],'heading':[0,1]}"),
+                    1.0,
+                    0
+                }));
+
+            Assert.That(exception.InnerException, Is.TypeOf<InvalidOperationException>());
+            Assert.That(exception.InnerException.Message, Does.Contain("root2d.pose is required"));
         }
 
         private static KimodoMarkerSampleResult CreateSupportSample()

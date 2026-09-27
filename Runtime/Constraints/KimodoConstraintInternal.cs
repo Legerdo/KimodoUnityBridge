@@ -52,8 +52,8 @@ namespace KimodoBridge
 
         /// <summary>
         /// Selects the protocol constraints for one canonical sample.
-        /// Mix applies one family per frame: fullbody, otherwise all enabled
-        /// effectors, otherwise root2d.
+        /// Mix preserves the authored root and all enabled effectors in the
+        /// same sample; fullbody remains the higher-level override.
         /// </summary>
         internal static KimodoConstraintInternal[] GetConstraintInternal(
             KimodoMarkerSampleResult sample,
@@ -74,15 +74,11 @@ namespace KimodoBridge
                     result.Add(new KimodoFullBodyConstraintInternal(sample, modelType, exportContext));
                     return result.ToArray();
                 }
-                AddEffectors(result, sample, modelType, exportContext);
-                if (result.Count > 0)
-                {
-                    return result.ToArray();
-                }
                 if (KimodoConstraintMask.IsActive(sample, "rootposition"))
                 {
                     result.Add(new KimodoRoot2DConstraintInternal(sample, modelType, exportContext));
                 }
+                AddEffectors(result, sample, modelType, exportContext);
                 return result.ToArray();
             }
 
@@ -161,6 +157,9 @@ namespace KimodoBridge
             string mode = (value ?? string.Empty)
                 .Trim().ToLowerInvariant().Replace('_', '-');
             if (mode == string.Empty || mode == "constraint") return "fullbody";
+            // RootEffect is the public semantic name for the existing mixed
+            // root-plus-effector sample. Keep the solver/export family as mix.
+            if (mode == "root-effect") return "mix";
             return mode == "ik" ? "effector" : mode;
         }
     }
