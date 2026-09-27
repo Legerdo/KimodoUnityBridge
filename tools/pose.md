@@ -86,7 +86,7 @@ Timeline 采样完整支撑姿态，即使当前角色没有 Timeline Clip，也
 
 生成约束时，显式 Pose 需要先确认 root、feet 和身体通道，再把 `{track,index}` 原样传给
 约束；缺省时约束使用目标 Avatar skeleton 的 `avatar_rest`。Root2D、RootEffect、
-FullBody 和独立末端约束的完整协议见 [`constraints.md`](constraints.md)；Root2D 只覆盖
+FullBody、Root2D 和 RootEffect 三种约束的完整协议见 [`constraints.md`](constraints.md)；Root2D 只覆盖
 XZ 和平面 heading，根 Y 与支撑姿态来自 Reference Pose 或 Avatar rest pose。
 
 `pose_set` 可在一次调用中同时更新 root 和 muscles，至少提供其中一项。输出至少包含新的 `{track,index}`、来源角色/Clip/全局帧，以及未验证项目。

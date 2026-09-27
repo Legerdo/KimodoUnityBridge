@@ -324,7 +324,7 @@ namespace KimodoUnityBridge.Command
                 },
                 ["rules"] = new JArray
                 {
-                    "Every point constraint accepts an optional External Pose reference; when omitted, the target Avatar skeleton rest pose is used and a warning is returned. root_effect.root2d.pose is the root support Pose and each end-effector field may supply its own target Pose.",
+                    "Every point constraint uses one explicit type: fullbody, root2d, or root_effect. Fullbody requires pose; root2d supplies root2d position and heading; root_effect supplies root2d and effect targets. Omitted pose uses the target Avatar skeleton rest pose and returns a warning.",
                     "At the same frame, fullbody supplies the base pose, root2d overrides RootTQ, and hand/foot effector channels override their matching protocol fields. See tools/constraints.md for the canonical contract.",
                     "Use animation_analyze, then reference clips[].root_trajectory.path from root_path.",
                     "An explicit root2d at a frame overrides root_path at that frame.",

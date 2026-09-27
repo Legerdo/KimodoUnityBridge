@@ -149,6 +149,15 @@ namespace KimodoUnityBridge.Command.Tests
             CollectionAssert.DoesNotContain((JArray)effector["parameters"]["required"], "pose");
             Assert.That(properties["pose"], Is.Not.Null);
             Assert.That(properties["root2d"], Is.Not.Null);
+            JObject constraints = JObject.Parse((string)typeof(command_context)
+                .GetMethod("BuildCommandDefinitionsJson", PrivateStatic)
+                .Invoke(null, null));
+            JObject generate = ((JArray)constraints["tools"]).Values<JObject>()
+                .Single(item => item.Value<string>("name") == "kimodo_generate_animation");
+            string serialized = generate.ToString();
+            Assert.That(serialized, Does.Contain("root_effect"));
+            Assert.That(serialized, Does.Contain("effect"));
+            Assert.That(serialized, Does.Contain("\"type\""));
         }
 
         private static KimodoMarkerSampleResult CreateSupportSample()

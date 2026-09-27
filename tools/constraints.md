@@ -13,14 +13,15 @@ description: Canonical protocol for reference-Pose-backed generation constraints
 每个点约束都由两部分组成：
 
 ```text
-PointConstraint = (ExplicitPose | AvatarRestPose) + ChannelOverrides
+PointConstraint = { frame, type, pose?, root2d?, effect? }
 ```
 
 - `ExplicitPose` 是当前场景上下文中已经确认的 External Pose 引用：
   `{ "track": "<pose track>", "index": <non-negative integer> }`。
 - `AvatarRestPose` 是目标角色 Avatar skeleton 的 bind/rest pose。省略 `pose` 时由系统
   创建它，并在响应中记录 `avatar_rest` warning。
-- `ChannelOverrides` 是这个采样点要额外覆盖的 Root2D 平面位置/朝向或末端执行器目标。
+- `type` 是唯一的约束类型判别字段：`fullbody`、`root2d` 或 `root_effect`。
+- `root2d` 和 `effect` 是并列覆盖字段；三种类型不互相嵌套。
 
 Pose 是约束的起始状态，不是可选的装饰数据。显式 Pose 或 AvatarRestPose 都提供根节点
 完整变换、身体肌肉、双脚以及需要的末端数据，使约束不会退化为隐含的当前场景姿态、
@@ -39,19 +40,13 @@ Pose 是约束的起始状态，不是可选的装饰数据。显式 Pose 或 Av
 
 ## 3. 强制规则
 
-- `fullbody.pose` 可以省略；省略时使用目标 Avatar skeleton 的 bind/rest pose。
-- `root2d.pose` 可以省略；省略时使用目标 Avatar skeleton 的 bind/rest pose。`root2d` 可以只使用参考 Pose 的根状态，也可以额外提供
-  `position: [x,z]` 和 `heading: [x,z]`；两者必须成对出现。
-- `root_effect.root2d.pose` 可以省略；省略时使用目标 Avatar skeleton 的 bind/rest pose。
-- `root_effect` 至少需要一个 `left_hand`、`right_hand`、`left_foot` 或
-  `right_foot`。每个末端字段的 `pose` 也可以省略，省略时使用 Avatar rest pose
-  中对应末端的位置和旋转。
-- 独立的 `left_hand`、`right_hand`、`left_foot` 和 `right_foot` 约束同样可以省略
-  `pose`，默认使用 Avatar rest pose。
+- `fullbody` 必须提供 `pose`，用于完整身体参考。
+- `root2d` 必须提供 `root2d.position: [x,z]` 和 `root2d.heading: [x,z]`；`pose` 可省略。
+- `root_effect` 必须同时提供 `root2d` 和 `effect`；`effect` 至少包含一个手或脚目标，
+  每个目标必须提供 world-space `position`，旋转可选；`pose` 可省略。
 - 禁止从未声明的当前姿态、场景默认姿态、`root Y=0` 或零四元数隐式补全约束。
-- `root_effect` 不能和同一约束项中的 `fullbody`、`root2d` 或独立末端字段混用。
-  如果同一帧需要多个通道，应使用一个 `root_effect`，或使用多个独立点约束让系统
-  按通道合并。
+- 三种点约束由 `type` 严格区分，不能在同一项中混用字段。需要 Root 与 Effect
+  同时存在时使用 `type: "root_effect"`，不要再嵌套另一个 constraint 类型。
 - `root_path` 是分析得到的路径句柄，不是点约束。它不替代点约束的 Reference Pose，
   但会在生成时编译成 Root2D 路径样本。
 - `inout` 是从已完成 Clip 自动采样的边界上下文指令，不是用户提交的点约束；它由
@@ -67,9 +62,8 @@ Pose 是约束的起始状态，不是可选的装饰数据。显式 Pose 或 Av
 ```json
 {
   "frame": 90,
-  "fullbody": {
-    "pose": { "track": "Character Pose", "index": 3 }
-  }
+  "type": "fullbody",
+  "pose": { "track": "Character Pose", "index": 3 }
 }
 ```
 
@@ -81,8 +75,9 @@ Pose 是约束的起始状态，不是可选的装饰数据。显式 Pose 或 Av
 ```json
 {
   "frame": 60,
+  "type": "root2d",
+  "pose": { "track": "Character Pose", "index": 1 },
   "root2d": {
-    "pose": { "track": "Character Pose", "index": 1 },
     "position": [2.0, 5.0],
     "heading": [0.0, 1.0]
   }
@@ -97,14 +92,15 @@ Reference Pose（或省略时的 Avatar rest pose）保留根高度和支撑姿�
 ```json
 {
   "frame": 120,
-  "root_effect": {
-    "root2d": {
-      "pose": { "track": "Character Pose", "index": 4 },
+  "type": "root_effect",
+  "pose": { "track": "Character Pose", "index": 4 },
+  "root2d": {
       "position": [2.4, 5.0],
       "heading": [0.0, 1.0]
     },
+  "effect": {
     "right_hand": {
-      "pose": { "track": "Character Pose", "index": 5 }
+      "position": [2.55, 0.95, 5.35]
     }
   }
 }
@@ -113,24 +109,6 @@ Reference Pose（或省略时的 Avatar rest pose）保留根高度和支撑姿�
 RootEffect 是公共语义名称，内部仍映射到 `mix`，不新增底层 solver 类型。求解顺序
 是先应用 Root2D 支撑根，再应用声明的末端执行器。这样可以在同一采样点表达“角色
 位于这里，并且右手到达这里”。
-
-### Standalone effectors
-
-```json
-{
-  "frame": 120,
-  "right_hand": {
-    "pose": { "track": "Character Pose", "index": 5 }
-  }
-}
-```
-
-独立末端约束只覆盖对应的手或脚通道，但仍以自己的 Reference Pose 作为目标来源。
-它不会自动提供根位置或完整身体支撑；需要两者时，应使用同帧 FullBody/Root2D，或
-直接使用 RootEffect。
-
-缺省 Pose 时，Standalone effector 使用 Avatar rest pose 中对应末端的初始目标；这
-适合验证结构和默认姿态，不等于苹果接触目标。抓取任务仍建议显式提供目标 Pose。
 
 ## 5. Effector validation
 
@@ -163,11 +141,10 @@ warning。`projected_target` 只是建议值，不会自动修改目标或生成
 
 1. `fullbody` 提供身体肌肉、根完整变换和双脚支撑。
 2. `root2d` 覆盖根的平面位置和水平朝向。
-3. 独立末端约束覆盖对应的手脚目标。
-4. `root_effect` 同时提供第 2 和第 3 项，并在内部作为 `mix` 导出。
+3. `root_effect` 同时提供 Root2D 和末端目标，并在内部作为 `mix` 导出。
 
 同一通道被多个样本声明时，按样本顺序保留最后一个有效值。不同通道可以在同一帧
-组合，但 `root_effect` 自身不能再和同项的兄弟约束字段组合。
+组合，但单个 constraint 项只能有一个 `type`。
 
 ## 7. 苹果拾取的推荐编排
 
@@ -186,8 +163,8 @@ pose_get(scene/timeline time)
 
 - 接近和停止：`root2d` + 站立/行走支撑 Pose；
 - 下沉和伸手：`fullbody` 或 RootEffect 的 Root2D 支撑 Pose；
-- 抓取：`root_effect`，其中 `root2d.pose` 提供身体支撑，`right_hand.pose` 提供苹果
-  接触目标；
+- 抓取：`type: "root_effect"`，其中顶层 `pose` 提供身体支撑，`root2d` 提供根覆盖，
+  `effect.right_hand.position` 提供苹果接触目标；
 - 抬起和持有：后续 FullBody 或 RootEffect Pose，确保手目标随角色继续移动。
 
 所有 Pose、约束和生成结果都必须使用当前场景返回的安全名称和 `{track,index}`，不得

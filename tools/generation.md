@@ -26,11 +26,10 @@ Command `window_frames` and `source.frame` use **60 FPS**, unlike the Timeline U
 The complete point-constraint contract is defined in [`constraints.md`](constraints.md).
 The sections below summarize the generation-specific behavior.
 
-`constraints[].root_effect` is the public semantic form for one root-plus-effector sample. It is normalized to the existing internal `mix` mode; no new solver or export family is introduced. `root_effect.root2d.pose` supplies the support Pose, including root height and the full-body context; when omitted, the target Avatar skeleton rest pose is used and a warning is returned. One or more `left_hand`, `right_hand`, `left_foot`, or `right_foot` entries add world-space end-effector targets to that same sample. A `root_effect` item cannot be combined with sibling `root2d`, `fullbody`, or standalone effector fields at the same frame.
+`constraints[].type: "root_effect"` is the public semantic form for one root-plus-effector sample. It is normalized to the existing internal `mix` mode; no new solver or export family is introduced. The same item carries optional `pose`, required `root2d.position/heading`, and required `effect` targets. Each effect target contains world-space position and optional rotation. `effector_validate` must accept the target before generation.
 
-Each `root_effect` child effector may reference a Pose. If omitted, the target Avatar rest
-pose supplies its support state; direct target coordinates still remain explicit. See
-`constraints.md` for the complete shape and validation rules.
+The three point types are a discriminated union and are never nested. See `constraints.md`
+for the complete shape and validation rules.
 
 The solver applies the support root first, then the enabled end-effectors. The export keeps both root and effector constraints instead of treating effectors as a replacement for Root2D. This lets a pickup contact frame express "the character is here and the hand is here" as one explicit constraint sample.
 

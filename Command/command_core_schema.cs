@@ -271,86 +271,87 @@ namespace KimodoUnityBridge.Command
         private static PropertyDefinition OptionalConstraints(string name, string description)
         {
             JObject poseReference = PoseReferenceSchema();
-            var vector2 = new JObject
+            JObject vector2 = new JObject
             {
                 ["type"] = "array",
                 ["items"] = new JObject { ["type"] = "number" },
                 ["minItems"] = 2,
                 ["maxItems"] = 2
             };
-            var fullBody = new JObject
+            JObject effectTarget = new JObject
             {
                 ["type"] = "object",
                 ["additionalProperties"] = false,
                 ["properties"] = new JObject
                 {
-                    ["pose"] = poseReference.DeepClone()
+                    ["position"] = new JObject
+                    {
+                        ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3,
+                        ["items"] = new JObject { ["type"] = "number" }
+                    },
+                    ["rotation"] = new JObject
+                    {
+                        ["type"] = "array", ["minItems"] = 4, ["maxItems"] = 4,
+                        ["items"] = new JObject { ["type"] = "number" }
+                    }
                 },
-                ["description"] = "Optional External Pose; omitted pose uses the target Avatar skeleton rest pose."
+                ["required"] = new JArray("position")
             };
-            var root2D = new JObject
+            JObject effect = new JObject
             {
                 ["type"] = "object",
                 ["additionalProperties"] = false,
                 ["properties"] = new JObject
                 {
-                    ["pose"] = poseReference.DeepClone(),
+                    ["left_hand"] = effectTarget.DeepClone(),
+                    ["right_hand"] = effectTarget.DeepClone(),
+                    ["left_foot"] = effectTarget.DeepClone(),
+                    ["right_foot"] = effectTarget.DeepClone()
+                },
+                ["anyOf"] = new JArray(
+                    new JObject { ["required"] = new JArray("left_hand") },
+                    new JObject { ["required"] = new JArray("right_hand") },
+                    new JObject { ["required"] = new JArray("left_foot") },
+                    new JObject { ["required"] = new JArray("right_foot") })
+            };
+            JObject root2D = new JObject
+            {
+                ["type"] = "object",
+                ["additionalProperties"] = false,
+                ["properties"] = new JObject
+                {
                     ["position"] = vector2.DeepClone(),
                     ["heading"] = vector2.DeepClone()
                 },
-                ["description"] = "Optional External Pose; omitted pose uses the target Avatar skeleton rest pose."
+                ["required"] = new JArray("position", "heading")
             };
-            var endEffector = new JObject
-            {
-                ["type"] = "object",
-                ["additionalProperties"] = false,
-                ["properties"] = new JObject { ["pose"] = poseReference.DeepClone() },
-                ["description"] = "Optional External Pose; omitted pose uses the target Avatar skeleton rest pose."
-            };
-            var rootEffect = new JObject
+            JObject pointItem = new JObject
             {
                 ["type"] = "object",
                 ["additionalProperties"] = false,
                 ["properties"] = new JObject
                 {
+                    ["frame"] = new JObject { ["type"] = "integer", ["minimum"] = 0 },
+                    ["type"] = new JObject { ["type"] = "string", ["enum"] = new JArray("fullbody", "root2d", "root_effect") },
+                    ["pose"] = poseReference.DeepClone(),
                     ["root2d"] = root2D.DeepClone(),
-                    ["left_hand"] = endEffector.DeepClone(),
-                    ["right_hand"] = endEffector.DeepClone(),
-                    ["left_foot"] = endEffector.DeepClone(),
-                    ["right_foot"] = endEffector.DeepClone()
+                    ["effect"] = effect.DeepClone()
                 },
-                ["required"] = new JArray("root2d"),
-                ["anyOf"] = new JArray(
-                    new JObject { ["required"] = new JArray("left_hand") },
-                    new JObject { ["required"] = new JArray("right_hand") },
-                    new JObject { ["required"] = new JArray("left_foot") },
-                    new JObject { ["required"] = new JArray("right_foot") })
+                ["required"] = new JArray("frame", "type")
             };
-            var sparseItem = new JObject
-            {
-                ["type"] = "object",
-                ["additionalProperties"] = false,
-                ["properties"] = new JObject
-                {
-                    ["frame"] = new JObject { ["type"] = "integer", ["minimum"] = 0, ["description"] = "Relative frame in the generated clip at 60 FPS." },
-                    ["fullbody"] = fullBody,
-                    ["root2d"] = root2D,
-                    ["root_effect"] = rootEffect,
-                    ["left_hand"] = endEffector.DeepClone(),
-                    ["right_hand"] = endEffector.DeepClone(),
-                    ["left_foot"] = endEffector.DeepClone(),
-                    ["right_foot"] = endEffector.DeepClone()
-                },
-                ["required"] = new JArray("frame"),
-                ["anyOf"] = new JArray(
-                    new JObject { ["required"] = new JArray("fullbody") },
-                    new JObject { ["required"] = new JArray("root2d") },
-                    new JObject { ["required"] = new JArray("root_effect") },
-                    new JObject { ["required"] = new JArray("left_hand") },
-                    new JObject { ["required"] = new JArray("right_hand") },
-                    new JObject { ["required"] = new JArray("left_foot") },
-                    new JObject { ["required"] = new JArray("right_foot") })
-            };
+            JObject fullBodyItem = pointItem.DeepClone() as JObject;
+            ((JObject)fullBodyItem["properties"])["type"] = new JObject { ["const"] = "fullbody" };
+            ((JObject)fullBodyItem["properties"])["pose"] = poseReference.DeepClone();
+            ((JObject)fullBodyItem["properties"]).Remove("root2d");
+            ((JObject)fullBodyItem["properties"]).Remove("effect");
+            fullBodyItem["required"] = new JArray("frame", "type", "pose");
+            JObject root2DItem = pointItem.DeepClone() as JObject;
+            ((JObject)root2DItem["properties"])["type"] = new JObject { ["const"] = "root2d" };
+            ((JObject)root2DItem["properties"])["root2d"] = root2D.DeepClone();
+            root2DItem["required"] = new JArray("frame", "type", "root2d");
+            JObject rootEffectItem = pointItem.DeepClone() as JObject;
+            ((JObject)rootEffectItem["properties"])["type"] = new JObject { ["const"] = "root_effect" };
+            rootEffectItem["required"] = new JArray("frame", "type", "root2d", "effect");
             var rootPathItem = new JObject
             {
                 ["type"] = "object",
@@ -383,7 +384,7 @@ namespace KimodoUnityBridge.Command
             {
                 ["type"] = "array",
                 ["description"] = description,
-                ["items"] = new JObject { ["oneOf"] = new JArray(sparseItem, rootPathItem, InOutConstraintSchema()) }
+                ["items"] = new JObject { ["oneOf"] = new JArray(fullBodyItem, root2DItem, rootEffectItem, rootPathItem, InOutConstraintSchema()) }
             }, false);
         }
 
