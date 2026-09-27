@@ -50,7 +50,7 @@
     },
     {
       "name": "animation_analyze",
-      "description": "Analyze one immutable animation clip at the fixed command time base of 60 FPS and render unified graph-space picture evidence. Select standard tile types explicitly and choose composite, individual tiles, or both outputs. Results include root_trajectory, endpoint_pose_comparison, motion_profile, foot_contacts, phase_track, keyframes with timeline_frame_60, and evidence paths. Completed Clips are never modified.",
+      "description": "Analyze one immutable animation clip at the fixed command time base of 60 FPS and render unified graph-space picture evidence. Select standard tile types explicitly and choose composite, individual tiles, or both outputs. Results include root_trajectory, endpoint_pose_comparison, motion_profile, foot_contacts, phase_track, keyframes with timeline_frame_60, and evidence paths. Completed Clips are never modified. The clip input contains only character and clip.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -449,16 +449,188 @@
                           "maxItems": 2
                         }
                       },
-                      "anyOf": [
-                        {
+                      "required": [
+                        "pose"
+                      ]
+                    },
+                    "root_effect": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "root2d": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "pose": {
+                              "type": "object",
+                              "description": "External Pose slot in the current scene context.",
+                              "additionalProperties": false,
+                              "properties": {
+                                "track": {
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "track",
+                                "index"
+                              ]
+                            },
+                            "position": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            },
+                            "heading": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            }
+                          },
                           "required": [
                             "pose"
                           ]
                         },
+                        "left_hand": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "pose": {
+                              "type": "object",
+                              "description": "External Pose slot in the current scene context.",
+                              "additionalProperties": false,
+                              "properties": {
+                                "track": {
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "track",
+                                "index"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "pose"
+                          ]
+                        },
+                        "right_hand": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "pose": {
+                              "type": "object",
+                              "description": "External Pose slot in the current scene context.",
+                              "additionalProperties": false,
+                              "properties": {
+                                "track": {
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "track",
+                                "index"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "pose"
+                          ]
+                        },
+                        "left_foot": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "pose": {
+                              "type": "object",
+                              "description": "External Pose slot in the current scene context.",
+                              "additionalProperties": false,
+                              "properties": {
+                                "track": {
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "track",
+                                "index"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "pose"
+                          ]
+                        },
+                        "right_foot": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "pose": {
+                              "type": "object",
+                              "description": "External Pose slot in the current scene context.",
+                              "additionalProperties": false,
+                              "properties": {
+                                "track": {
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "track",
+                                "index"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "pose"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "root2d"
+                      ],
+                      "anyOf": [
                         {
                           "required": [
-                            "position",
-                            "heading"
+                            "left_hand"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "right_hand"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "left_foot"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "right_foot"
                           ]
                         }
                       ]
@@ -584,6 +756,11 @@
                     {
                       "required": [
                         "root2d"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "root_effect"
                       ]
                     },
                     {
@@ -874,12 +1051,40 @@
               }
             ]
           }
+        },
+        {
+          "description": "Use one RootEffect sample to keep root context and end-effector targets together; it is exported internally as mix.",
+          "arguments": {
+            "character": "<character>",
+            "prompt": "Reach to the apple",
+            "duration_frames": 180,
+            "loop": false,
+            "constraints": [
+              {
+                "frame": 90,
+                "root_effect": {
+                  "root2d": {
+                    "pose": {
+                      "track": "<pose track>",
+                      "index": 0
+                    }
+                  },
+                  "right_hand": {
+                    "pose": {
+                      "track": "<pose track>",
+                      "index": 1
+                    }
+                  }
+                }
+              }
+            ]
+          }
         }
       ]
     },
     {
       "name": "pose_get",
-      "description": "Sample one Timeline time or Clip-local time into a new External Pose slot. Use exactly one source mode: timeline_time_seconds, or clip with clip_time_seconds. Returns the reusable pose identity {track,index}.",
+      "description": "Sample one Timeline time, scene time, or Clip-local time into a new External Pose slot. Use exactly one source mode: timeline_time_seconds, scene_time_seconds, or clip with clip_time_seconds. Returns the reusable pose identity {track,index}.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -896,6 +1101,11 @@
               "timeline_time_seconds": {
                 "type": "number",
                 "description": "Absolute Timeline-global time in seconds."
+              },
+              "scene_time_seconds": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Absolute scene Timeline time in seconds. Samples the bound Animator directly, even when the character has no animation Clip."
               },
               "clip_time_seconds": {
                 "type": "number",
@@ -923,6 +1133,36 @@
                       "required": [
                         "clip_time_seconds"
                       ]
+                    },
+                    {
+                      "required": [
+                        "scene_time_seconds"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "character",
+                  "scene_time_seconds"
+                ],
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "timeline_time_seconds"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "clip"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "clip_time_seconds"
+                      ]
                     }
                   ]
                 }
@@ -934,8 +1174,17 @@
                   "clip_time_seconds"
                 ],
                 "not": {
-                  "required": [
-                    "timeline_time_seconds"
+                  "anyOf": [
+                    {
+                      "required": [
+                        "timeline_time_seconds"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "scene_time_seconds"
+                      ]
+                    }
                   ]
                 }
               }
@@ -958,6 +1207,16 @@
             "source": {
               "character": "<character>",
               "timeline_time_seconds": 1.5
+            },
+            "full_data": true
+          }
+        },
+        {
+          "description": "Capture the current scene Timeline pose when no source Clip exists.",
+          "arguments": {
+            "source": {
+              "character": "<character>",
+              "scene_time_seconds": 1.5
             },
             "full_data": true
           }

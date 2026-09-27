@@ -294,9 +294,7 @@ namespace KimodoUnityBridge.Command
                     ["position"] = vector2.DeepClone(),
                     ["heading"] = vector2.DeepClone()
                 },
-                ["anyOf"] = new JArray(
-                    new JObject { ["required"] = new JArray("pose") },
-                    new JObject { ["required"] = new JArray("position", "heading") })
+                ["required"] = new JArray("pose")
             };
             var endEffector = new JObject
             {
@@ -304,6 +302,25 @@ namespace KimodoUnityBridge.Command
                 ["additionalProperties"] = false,
                 ["properties"] = new JObject { ["pose"] = poseReference.DeepClone() },
                 ["required"] = new JArray("pose")
+            };
+            var rootEffect = new JObject
+            {
+                ["type"] = "object",
+                ["additionalProperties"] = false,
+                ["properties"] = new JObject
+                {
+                    ["root2d"] = root2D.DeepClone(),
+                    ["left_hand"] = endEffector.DeepClone(),
+                    ["right_hand"] = endEffector.DeepClone(),
+                    ["left_foot"] = endEffector.DeepClone(),
+                    ["right_foot"] = endEffector.DeepClone()
+                },
+                ["required"] = new JArray("root2d"),
+                ["anyOf"] = new JArray(
+                    new JObject { ["required"] = new JArray("left_hand") },
+                    new JObject { ["required"] = new JArray("right_hand") },
+                    new JObject { ["required"] = new JArray("left_foot") },
+                    new JObject { ["required"] = new JArray("right_foot") })
             };
             var sparseItem = new JObject
             {
@@ -314,6 +331,7 @@ namespace KimodoUnityBridge.Command
                     ["frame"] = new JObject { ["type"] = "integer", ["minimum"] = 0, ["description"] = "Relative frame in the generated clip at 60 FPS." },
                     ["fullbody"] = fullBody,
                     ["root2d"] = root2D,
+                    ["root_effect"] = rootEffect,
                     ["left_hand"] = endEffector.DeepClone(),
                     ["right_hand"] = endEffector.DeepClone(),
                     ["left_foot"] = endEffector.DeepClone(),
@@ -323,6 +341,7 @@ namespace KimodoUnityBridge.Command
                 ["anyOf"] = new JArray(
                     new JObject { ["required"] = new JArray("fullbody") },
                     new JObject { ["required"] = new JArray("root2d") },
+                    new JObject { ["required"] = new JArray("root_effect") },
                     new JObject { ["required"] = new JArray("left_hand") },
                     new JObject { ["required"] = new JArray("right_hand") },
                     new JObject { ["required"] = new JArray("left_foot") },
@@ -401,6 +420,12 @@ namespace KimodoUnityBridge.Command
                         ["type"] = "number",
                         ["description"] = "Absolute Timeline-global time in seconds."
                     },
+                    ["scene_time_seconds"] = new JObject
+                    {
+                        ["type"] = "number",
+                        ["minimum"] = 0,
+                        ["description"] = "Absolute scene Timeline time in seconds. Samples the bound Animator directly, even when the character has no animation Clip."
+                    },
                     ["clip_time_seconds"] = new JObject
                     {
                         ["type"] = "number",
@@ -415,12 +440,23 @@ namespace KimodoUnityBridge.Command
                         ["required"] = new JArray("character", "timeline_time_seconds"),
                         ["not"] = new JObject { ["anyOf"] = new JArray(
                             new JObject { ["required"] = new JArray("clip") },
+                            new JObject { ["required"] = new JArray("clip_time_seconds") },
+                            new JObject { ["required"] = new JArray("scene_time_seconds") }) }
+                    },
+                    new JObject
+                    {
+                        ["required"] = new JArray("character", "scene_time_seconds"),
+                        ["not"] = new JObject { ["anyOf"] = new JArray(
+                            new JObject { ["required"] = new JArray("timeline_time_seconds") },
+                            new JObject { ["required"] = new JArray("clip") },
                             new JObject { ["required"] = new JArray("clip_time_seconds") }) }
                     },
                     new JObject
                     {
                         ["required"] = new JArray("character", "clip", "clip_time_seconds"),
-                        ["not"] = new JObject { ["required"] = new JArray("timeline_time_seconds") }
+                        ["not"] = new JObject { ["anyOf"] = new JArray(
+                            new JObject { ["required"] = new JArray("timeline_time_seconds") },
+                            new JObject { ["required"] = new JArray("scene_time_seconds") }) }
                     })
             };
             return new PropertyDefinition(name, schema, true);

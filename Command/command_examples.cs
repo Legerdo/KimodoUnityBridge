@@ -28,10 +28,14 @@ namespace KimodoUnityBridge.Command
                     Example("Use explicit previous/next Clips as context on both sides; crop context from the returned two-second output.",
                         @"{'character':'<character>','prompt':'Reach for the apple and pick it up','duration_frames':120,'loop':false,'constraints':[{'inout':{'in':{'source':{'clip':'<previous clip>'},'window_frames':30,'sample_count':5},'out':{'source':{'clip':'<next clip>'},'window_frames':12,'sample_count':3}}}]}"),
                     Example("Keep sampled opening and closing windows inside the returned Clip.",
-                        @"{'character':'<character>','prompt':'Bend down then stand up','duration_frames':120,'loop':false,'constraints':[{'inout':{'mode':'inside','in':{'source':{'clip':'<reference clip>','frame':0},'window_frames':12,'sample_count':3},'out':{'source':{'clip':'<reference clip>'},'window_frames':12,'sample_count':3}}}]}"));
+                        @"{'character':'<character>','prompt':'Bend down then stand up','duration_frames':120,'loop':false,'constraints':[{'inout':{'mode':'inside','in':{'source':{'clip':'<reference clip>','frame':0},'window_frames':12,'sample_count':3},'out':{'source':{'clip':'<reference clip>'},'window_frames':12,'sample_count':3}}}]}"),
+                    Example("Use one RootEffect sample to keep root context and end-effector targets together; it is exported internally as mix.",
+                        @"{'character':'<character>','prompt':'Reach to the apple','duration_frames':180,'loop':false,'constraints':[{'frame':90,'root_effect':{'root2d':{'pose':{'track':'<pose track>','index':0}},'right_hand':{'pose':{'track':'<pose track>','index':1}}}}]}"));
                 case PoseGetCommand: return new JArray(
                     Example("Capture a pose at an absolute Timeline-global time in seconds.",
                         @"{'source':{'character':'<character>','timeline_time_seconds':1.5},'full_data':true}"),
+                    Example("Capture the current scene Timeline pose when no source Clip exists.",
+                        @"{'source':{'character':'<character>','scene_time_seconds':1.5},'full_data':true}"),
                     Example("Capture a pose at a time relative to a target Clip's Timeline range.",
                         @"{'source':{'character':'<character>','clip':'<clip>','clip_time_seconds':0.5},'full_data':true}"));
                 case PoseSetCommand: return Examples("Edit the root of the Pose slot returned by pose_get; position is in Character world space.",
