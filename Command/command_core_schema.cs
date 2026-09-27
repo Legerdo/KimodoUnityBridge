@@ -35,6 +35,7 @@ namespace KimodoUnityBridge.Command
                 [PoseSetCommand] = PoseSet,
                 [PoseSetRootTransformCommand] = PoseSetRootTransform,
                 [PoseSetMuscleCommand] = PoseSetMuscle,
+                [EffectorValidateCommand] = EffectorValidate,
                 [GetGenerationCommand] = GetGeneration,
                 [CancelGenerationCommand] = CancelGeneration,
                 [SessionClearCommand] = ClearSession
@@ -281,8 +282,11 @@ namespace KimodoUnityBridge.Command
             {
                 ["type"] = "object",
                 ["additionalProperties"] = false,
-                ["properties"] = new JObject { ["pose"] = poseReference.DeepClone() },
-                ["required"] = new JArray("pose")
+                ["properties"] = new JObject
+                {
+                    ["pose"] = poseReference.DeepClone()
+                },
+                ["description"] = "Optional External Pose; omitted pose uses the target Avatar skeleton rest pose."
             };
             var root2D = new JObject
             {
@@ -294,14 +298,14 @@ namespace KimodoUnityBridge.Command
                     ["position"] = vector2.DeepClone(),
                     ["heading"] = vector2.DeepClone()
                 },
-                ["required"] = new JArray("pose")
+                ["description"] = "Optional External Pose; omitted pose uses the target Avatar skeleton rest pose."
             };
             var endEffector = new JObject
             {
                 ["type"] = "object",
                 ["additionalProperties"] = false,
                 ["properties"] = new JObject { ["pose"] = poseReference.DeepClone() },
-                ["required"] = new JArray("pose")
+                ["description"] = "Optional External Pose; omitted pose uses the target Avatar skeleton rest pose."
             };
             var rootEffect = new JObject
             {
@@ -466,6 +470,70 @@ namespace KimodoUnityBridge.Command
         private static PropertyDefinition RequiredPoseReference(string name)
         {
             return new PropertyDefinition(name, PoseReferenceSchema(), true);
+        }
+
+        private static JObject EffectorValidateSchema()
+        {
+            JObject target = new JObject
+            {
+                ["type"] = "object",
+                ["additionalProperties"] = false,
+                ["properties"] = new JObject
+                {
+                    ["position"] = new JObject
+                    {
+                        ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3,
+                        ["items"] = new JObject { ["type"] = "number" },
+                        ["description"] = "World-space target position."
+                    },
+                    ["rotation"] = new JObject
+                    {
+                        ["type"] = "array", ["minItems"] = 4, ["maxItems"] = 4,
+                        ["items"] = new JObject { ["type"] = "number" },
+                        ["description"] = "Optional world-space target rotation quaternion."
+                    }
+                },
+                ["required"] = new JArray("position")
+            };
+            JObject root2D = new JObject
+            {
+                ["type"] = "object",
+                ["additionalProperties"] = false,
+                ["properties"] = new JObject
+                {
+                    ["position"] = new JObject
+                    {
+                        ["type"] = "array", ["minItems"] = 2, ["maxItems"] = 2,
+                        ["items"] = new JObject { ["type"] = "number" }
+                    },
+                    ["heading"] = new JObject
+                    {
+                        ["type"] = "array", ["minItems"] = 2, ["maxItems"] = 2,
+                        ["items"] = new JObject { ["type"] = "number" }
+                    }
+                },
+                ["oneOf"] = new JArray(
+                    new JObject { ["required"] = new JArray("position", "heading") },
+                    new JObject { ["maxProperties"] = 0 })
+            };
+            JObject options = new JObject
+            {
+                ["type"] = "object",
+                ["additionalProperties"] = false,
+                ["properties"] = new JObject
+                {
+                    ["position_tolerance"] = new JObject { ["type"] = "number", ["minimum"] = 0, ["default"] = 0.03 },
+                    ["rotation_tolerance_degrees"] = new JObject { ["type"] = "number", ["minimum"] = 0, ["default"] = 15.0 },
+                    ["project_if_unreachable"] = new JObject { ["type"] = "boolean", ["default"] = false }
+                }
+            };
+            return Properties(
+                Required("character", "string", "Safe character name in the current scene context."),
+                RequiredEnum("effector", "left_hand", "right_hand", "left_foot", "right_foot"),
+                new PropertyDefinition("pose", PoseReferenceSchema(), false),
+                new PropertyDefinition("target", target, true),
+                new PropertyDefinition("root2d", root2D, false),
+                new PropertyDefinition("options", options, false));
         }
 
         private static JObject PoseSetSchema()

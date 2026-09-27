@@ -63,7 +63,7 @@ namespace KimodoUnityBridge.Command.Tests
                 var commandValue = JObject.Parse(
                     "{'pose':{'track':'Character.Poses','index':0}} ");
                 var commandResult = (KimodoMarkerSampleResult)build.Invoke(
-                    null, new object[] { commandValue, 1.5, 0 });
+                    null, new object[] { commandValue, 1.5, 0, null, null, new List<string>() });
 
                 KimodoMarkerSampleResult rightClickResult =
                     KimodoMarkerSamplingUtility.NormalizeConstraintMarkerSample(marker, support);
@@ -89,20 +89,66 @@ namespace KimodoUnityBridge.Command.Tests
         }
 
         [Test]
-        public void CommandRoot2D_WithoutPoseReferenceIsRejected()
+        public void CommandRoot2D_WithoutPoseReferenceUsesAvatarRestPose()
         {
+            Assert.That(KimodoRuntimeAvatarSkeletonBuilder.TryLoadAvatarByModelName(
+                KimodoMotionModelProfiles.DefaultModelName,
+                out Avatar avatar,
+                out string avatarError), Is.True, avatarError);
+            Assert.That(KimodoRetargetAvatarUtility.TryBuildRetargetSkeleton(
+                avatar,
+                "Root2DAvatarRestFixture",
+                out RetargetSkeleton skeleton,
+                out string skeletonError), Is.True, skeletonError);
             MethodInfo build = typeof(command_context).GetMethod(
                 "BuildRoot2DConstraint", PrivateStatic);
-            TargetInvocationException exception = Assert.Throws<TargetInvocationException>(() =>
-                build.Invoke(null, new object[]
+            try
+            {
+                var warnings = new List<string>();
+                var result = (KimodoMarkerSampleResult)build.Invoke(null, new object[]
                 {
                     JObject.Parse("{'position':[1,2],'heading':[0,1]}"),
                     1.0,
-                    0
-                }));
+                    0,
+                    skeleton,
+                    null,
+                    warnings
+                });
 
-            Assert.That(exception.InnerException, Is.TypeOf<InvalidOperationException>());
-            Assert.That(exception.InnerException.Message, Does.Contain("root2d.pose is required"));
+                Assert.That(result.constraintMode, Is.EqualTo("root2d"));
+                Assert.That(result.sampleData, Is.Not.Null);
+                Assert.That(result.sampleData.IsValid, Is.True);
+                Assert.That(warnings, Has.Count.EqualTo(1));
+                Assert.That(warnings[0], Does.Contain("Avatar skeleton rest pose"));
+            }
+            finally
+            {
+                skeleton.Dispose();
+            }
+        }
+
+        [Test]
+        public void CommandContext_ExposesOptionalPoseAndEffectorValidationSchema()
+        {
+            JObject definitions = JObject.Parse(command_dispatcher.GetCommandDefinitionsJson());
+            JObject effector = null;
+            foreach (JObject tool in (JArray)definitions["tools"])
+            {
+                if (string.Equals(tool.Value<string>("name"), "effector_validate", StringComparison.Ordinal))
+                {
+                    effector = tool;
+                    break;
+                }
+            }
+
+            Assert.That(effector, Is.Not.Null);
+            JObject properties = (JObject)effector["parameters"]["properties"];
+            CollectionAssert.Contains((JArray)effector["parameters"]["required"], "character");
+            CollectionAssert.Contains((JArray)effector["parameters"]["required"], "effector");
+            CollectionAssert.Contains((JArray)effector["parameters"]["required"], "target");
+            CollectionAssert.DoesNotContain((JArray)effector["parameters"]["required"], "pose");
+            Assert.That(properties["pose"], Is.Not.Null);
+            Assert.That(properties["root2d"], Is.Not.Null);
         }
 
         private static KimodoMarkerSampleResult CreateSupportSample()

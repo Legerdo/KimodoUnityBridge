@@ -59,7 +59,9 @@ asks to use them.
 `pose_get` 支持三种互斥的时间寻址方式，底层统一使用双精度秒值采样：
 
 约束如何消费 `pose_get` 返回的 `{track,index}`，以及 Root2D、RootEffect、FullBody
-和末端约束的统一必需 Pose 规则，见 [`constraints.md`](constraints.md)。
+和末端约束的统一可选 Pose 规则，见 [`constraints.md`](constraints.md)。
+缺省 Pose 会使用 Avatar skeleton 的 `avatar_rest`；在把末端目标写入 Pose 或
+RootEffect 前，使用 `effector_validate` 运行实际 IK 可达性检查。
 
 ```json
 { "source": { "character": "<character>", "timeline_time_seconds": 1.5 } }
@@ -82,10 +84,10 @@ Timeline 采样完整支撑姿态，即使当前角色没有 Timeline Clip，也
 引用的 `{track,index}`。返回的 `timeline_frame_60` 是由全局秒值派生的 60 FPS 对齐字段；
 底层仍会根据 Timeline 的 `clipIn`、`timeScale` 和源动画帧率完成实际采样。
 
-生成约束时，先确认返回 Pose 的 root、feet 和身体通道，再把 `{track,index}` 原样传给
-约束。Root2D、RootEffect、FullBody 和独立末端约束的完整协议见
-[`constraints.md`](constraints.md)；Root2D 只覆盖 XZ 和平面 heading，根 Y 与支撑姿态
-来自 Reference Pose。
+生成约束时，显式 Pose 需要先确认 root、feet 和身体通道，再把 `{track,index}` 原样传给
+约束；缺省时约束使用目标 Avatar skeleton 的 `avatar_rest`。Root2D、RootEffect、
+FullBody 和独立末端约束的完整协议见 [`constraints.md`](constraints.md)；Root2D 只覆盖
+XZ 和平面 heading，根 Y 与支撑姿态来自 Reference Pose 或 Avatar rest pose。
 
 `pose_set` 可在一次调用中同时更新 root 和 muscles，至少提供其中一项。输出至少包含新的 `{track,index}`、来源角色/Clip/全局帧，以及未验证项目。
 

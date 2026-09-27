@@ -26,21 +26,22 @@ Command `window_frames` and `source.frame` use **60 FPS**, unlike the Timeline U
 The complete point-constraint contract is defined in [`constraints.md`](constraints.md).
 The sections below summarize the generation-specific behavior.
 
-`constraints[].root_effect` is the public semantic form for one root-plus-effector sample. It is normalized to the existing internal `mix` mode; no new solver or export family is introduced. `root_effect.root2d.pose` supplies the support Pose, including root height and the full-body context. One or more `left_hand`, `right_hand`, `left_foot`, or `right_foot` entries add world-space end-effector targets to that same sample. A `root_effect` item cannot be combined with sibling `root2d`, `fullbody`, or standalone effector fields at the same frame.
+`constraints[].root_effect` is the public semantic form for one root-plus-effector sample. It is normalized to the existing internal `mix` mode; no new solver or export family is introduced. `root_effect.root2d.pose` supplies the support Pose, including root height and the full-body context; when omitted, the target Avatar skeleton rest pose is used and a warning is returned. One or more `left_hand`, `right_hand`, `left_foot`, or `right_foot` entries add world-space end-effector targets to that same sample. A `root_effect` item cannot be combined with sibling `root2d`, `fullbody`, or standalone effector fields at the same frame.
 
-Each `root_effect` child effector is itself Pose-backed. The root support and each effector
-target therefore have explicit `{track,index}` references; direct target coordinates do not
-replace those references. See `constraints.md` for the complete shape and validation rules.
+Each `root_effect` child effector may reference a Pose. If omitted, the target Avatar rest
+pose supplies its support state; direct target coordinates still remain explicit. See
+`constraints.md` for the complete shape and validation rules.
 
 The solver applies the support root first, then the enabled end-effectors. The export keeps both root and effector constraints instead of treating effectors as a replacement for Root2D. This lets a pickup contact frame express "the character is here and the hand is here" as one explicit constraint sample.
 
 ### Root2D point constraints and support Pose
 
-The mandatory Reference Pose model, per-type schema, same-frame merge rules, and rejection
+The optional Reference Pose model, per-type schema, same-frame merge rules, and rejection
 conditions are defined in [`constraints.md`](constraints.md).
 推荐流程是：在目标时间调用 `pose_get`（没有源 Clip 时使用 `scene_time_seconds`），
-检查完整支撑姿态，再把确认后的 Pose 引用放入 Root2D 约束。命令路径与编辑器右键
-创建的 Root2D 约束使用相同的支撑数据。
+检查完整支撑姿态，再把确认后的 Pose 引用放入 Root2D 约束；如果没有显式 Pose，
+命令会使用 Avatar skeleton rest pose 并返回 warning。命令路径与编辑器右键创建的
+Root2D 约束使用相同的支撑数据。
 
 Command In/Out rejects insufficient source ranges, too many samples for distinct model frames, overlapping inside windows, same-frame explicit constraints, cross-character sources, loop generation, ARDY, and requests exceeding the model frame limit including context. These checks do not silently shorten or downgrade the request. Acceptance and `kimodo_get_generation` return `inout_sampling`: source-local and Timeline sample times, output/runtime model frames, padding counts, and the exclusive crop range. The output retains the requested duration. This metadata verifies sampling and transport, not visual seam quality.
 

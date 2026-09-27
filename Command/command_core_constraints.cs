@@ -26,8 +26,11 @@ namespace KimodoUnityBridge.Command
             Avatar targetAvatar,
             int frameCount,
             float frameRate,
-            int durationFrames)
+            int durationFrames,
+            GameObject sceneCharacterRoot,
+            out List<string> poseWarnings)
         {
+            poseWarnings = new List<string>();
             if (arguments?["constraints"] == null)
             {
                 return new List<KimodoMarkerSampleResult>();
@@ -142,17 +145,20 @@ namespace KimodoUnityBridge.Command
                     if (fullBody != null)
                     {
                         samples.Add(BuildReferencedPoseConstraint(
-                            fullBody, "fullbody", targetCache, modelName, frameRate, at, i));
+                            fullBody, "fullbody", targetCache, modelName, frameRate, at, i,
+                            sceneCharacterRoot, poseWarnings));
                     }
                     if (root2D != null)
                     {
-                        samples.Add(BuildRoot2DConstraint(root2D, at, i));
+                        samples.Add(BuildRoot2DConstraint(
+                            root2D, at, i, targetCache, sceneCharacterRoot, poseWarnings));
                     }
 
                     if (rootEffect != null)
                     {
                         samples.Add(BuildRootEffectConstraint(
-                            rootEffect, targetCache, modelName, frameRate, at, i));
+                            rootEffect, targetCache, modelName, frameRate, at, i,
+                            sceneCharacterRoot, poseWarnings));
                     }
 
                     for (int part = 0; part < endEffectors.Length; part++)
@@ -162,7 +168,8 @@ namespace KimodoUnityBridge.Command
                             continue;
                         }
                         samples.Add(BuildReferencedPoseConstraint(
-                            endEffectors[part], endEffectorTypes[part], targetCache, modelName, frameRate, at, i));
+                            endEffectors[part], endEffectorTypes[part], targetCache, modelName, frameRate, at, i,
+                            sceneCharacterRoot, poseWarnings));
                     }
                 }
                 // Root paths are profile-space Root2D overrides. Append them
@@ -185,20 +192,17 @@ namespace KimodoUnityBridge.Command
             string modelName,
             float frameRate,
             double sampleTime,
-            int constraintIndex)
+            int constraintIndex,
+            GameObject sceneCharacterRoot,
+            List<string> poseWarnings)
         {
             if (value?["root2d"] is not JObject root2D)
             {
                 throw new InvalidOperationException(
                     $"constraints[{constraintIndex}].root_effect.root2d is required.");
             }
-            if (root2D["pose"] is not JObject)
-            {
-                throw new InvalidOperationException(
-                    $"constraints[{constraintIndex}].root_effect.root2d.pose is required so root Y and the support pose are explicit.");
-            }
-
-            KimodoMarkerSampleResult result = BuildRoot2DConstraint(root2D, sampleTime, constraintIndex);
+            KimodoMarkerSampleResult result = BuildRoot2DConstraint(
+                root2D, sampleTime, constraintIndex, targetCache, sceneCharacterRoot, poseWarnings);
             result.constraintMode = "mix";
             result.enableMask = new KimodoConstraintMask
             {
@@ -223,7 +227,8 @@ namespace KimodoUnityBridge.Command
                 }
 
                 KimodoMarkerSampleResult effector = BuildReferencedPoseConstraint(
-                    effectorValue, types[i], targetCache, modelName, frameRate, sampleTime, constraintIndex);
+                    effectorValue, types[i], targetCache, modelName, frameRate, sampleTime, constraintIndex,
+                    sceneCharacterRoot, poseWarnings);
                 CopyEffector(result, effector, types[i]);
                 anyEffector = true;
             }
@@ -447,13 +452,13 @@ namespace KimodoUnityBridge.Command
         private static KimodoMarkerSampleResult BuildRoot2DConstraint(
             JObject value,
             double sampleTime,
-            int constraintIndex)
+            int constraintIndex,
+            RetargetSkeleton targetCache,
+            GameObject sceneCharacterRoot,
+            List<string> poseWarnings)
         {
-            KimodoMarkerSampleResult poseSample = value?["pose"] is JObject locator
-                ? ReadPoseSample(
-                    RequirePoseReference(locator),
-                    $"constraints[{constraintIndex}].root2d")
-                : null;
+            KimodoMarkerSampleResult poseSample = ResolveConstraintPose(
+                value, "root2d", targetCache, sceneCharacterRoot, poseWarnings, constraintIndex);
             Vector3 rootPosition = Vector3.zero;
             Quaternion rootRotation = Quaternion.identity;
             if (poseSample != null)
@@ -462,12 +467,7 @@ namespace KimodoUnityBridge.Command
             }
             bool hasPosition = value?["position"] != null;
             bool hasHeading = value?["heading"] != null;
-            bool hasRootPose = value?["pose"] is JObject;
-            if (!hasRootPose)
-            {
-                throw new InvalidOperationException(
-                    $"constraints[{constraintIndex}].root2d.pose is required. Capture the support pose first with pose_get, then reference its {{track,index}}.");
-            }
+            bool hasRootPose = poseSample != null;
             if (hasPosition != hasHeading)
             {
                 throw new InvalidOperationException($"constraints[{constraintIndex}].root2d requires position and heading together.");
@@ -519,17 +519,99 @@ namespace KimodoUnityBridge.Command
             string modelName,
             float frameRate,
             double sampleTime,
-            int constraintIndex)
+            int constraintIndex,
+            GameObject sceneCharacterRoot,
+            List<string> poseWarnings)
         {
-            if (value?["pose"] is not JObject poseReference)
-            {
-                throw new InvalidOperationException($"constraints[{constraintIndex}].{constraintType.Replace('-', '_')}.pose is required.");
-            }
-            KimodoMarkerSampleResult sourceResult = ReadPoseSample(
-                RequirePoseReference(poseReference),
-                $"constraints[{constraintIndex}].{constraintType.Replace('-', '_')}");
+            KimodoMarkerSampleResult sourceResult = ResolveConstraintPose(
+                value,
+                constraintType.Replace('-', '_'),
+                targetCache,
+                sceneCharacterRoot,
+                poseWarnings,
+                constraintIndex);
             return BuildModelNativeConstraintSample(
                 sourceResult, constraintType, targetCache, modelName, frameRate, sampleTime);
+        }
+
+        private static KimodoMarkerSampleResult ResolveConstraintPose(
+            JObject value,
+            string constraintType,
+            RetargetSkeleton targetCache,
+            GameObject sceneCharacterRoot,
+            List<string> poseWarnings,
+            int constraintIndex)
+        {
+            if (value?["pose"] is JObject poseReference)
+            {
+                return ReadPoseSample(
+                    RequirePoseReference(poseReference),
+                    $"constraints[{constraintIndex}].{constraintType}");
+            }
+
+            if (!TryCreateAvatarRestPoseSample(
+                    targetCache,
+                    sceneCharacterRoot,
+                    alignToSceneRoot: false,
+                    out KimodoMarkerSampleResult restPose,
+                    out string error))
+            {
+                throw new InvalidOperationException(
+                    $"constraints[{constraintIndex}].{constraintType} omitted pose and Avatar rest pose could not be created: {error}");
+            }
+
+            poseWarnings?.Add(
+                $"constraints[{constraintIndex}].{constraintType} omitted pose; used Avatar skeleton rest pose.");
+            return restPose;
+        }
+
+        internal static bool TryCreateAvatarRestPoseSample(
+            RetargetSkeleton targetCache,
+            GameObject sceneRoot,
+            bool alignToSceneRoot,
+            out KimodoMarkerSampleResult result,
+            out string error)
+        {
+            result = null;
+            error = string.Empty;
+            if (!KimodoRetargetAvatarUtility.ValidateRetargetSkeleton(targetCache, out error))
+            {
+                return false;
+            }
+
+            KimodoRetargetClipSamplingUtility.ResetRetargetSkeletonPose(targetCache);
+            if (alignToSceneRoot && sceneRoot != null && targetCache.root != null)
+            {
+                targetCache.root.transform.SetPositionAndRotation(
+                    sceneRoot.transform.position,
+                    sceneRoot.transform.rotation);
+                targetCache.root.transform.localScale = sceneRoot.transform.lossyScale;
+                targetCache.animator.Rebind();
+                targetCache.animator.Update(0f);
+            }
+
+            if (!KimodoRetargetSamplingUtility.TryCaptureSampleData(
+                    targetCache,
+                    out MuscleSample sampleData,
+                    out KimodoConstraintMask validMask,
+                    out error) ||
+                sampleData == null || !sampleData.IsValid)
+            {
+                if (string.IsNullOrEmpty(error)) error = "Avatar rest pose sampling returned no valid MuscleSample.";
+                return false;
+            }
+
+            result = new KimodoMarkerSampleResult
+            {
+                sampleData = sampleData,
+                constraintMode = "fullbody",
+                enabled = true,
+                validMask = validMask ?? new KimodoConstraintMask(),
+                enableMask = KimodoConstraintMask.ForType("fullbody"),
+                effectors = new KimodoConstraintEffectors()
+            };
+            KimodoRetargetMarkerSamplingUtility.CaptureWorldTargets(targetCache, result);
+            return true;
         }
 
         private static KimodoMarkerSampleResult BuildModelNativeConstraintSample(

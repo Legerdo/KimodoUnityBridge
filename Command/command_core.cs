@@ -29,6 +29,7 @@ namespace KimodoUnityBridge.Command
         public const string PoseSetCommand = "pose_set";
         public const string PoseSetRootTransformCommand = "pose_set_root_transform";
         public const string PoseSetMuscleCommand = "pose_set_muscle";
+        public const string EffectorValidateCommand = "effector_validate";
         public const string GetGenerationCommand = "kimodo_get_generation";
         public const string CancelGenerationCommand = "kimodo_cancel_generation";
         public const string SessionClearCommand = "session.clear";
@@ -47,7 +48,13 @@ namespace KimodoUnityBridge.Command
             {
                 try
                 {
-                    return JObject.Parse(help.text).ToString(Formatting.None);
+                    JObject parsed = JObject.Parse(help.text);
+                    bool hasCurrentCommandSet = parsed["tools"] is JArray tools &&
+                        tools.Values<JObject>().Any(item =>
+                            string.Equals(item.Value<string>("name"), EffectorValidateCommand, StringComparison.Ordinal));
+                    return hasCurrentCommandSet
+                        ? parsed.ToString(Formatting.None)
+                        : BuildCommandDefinitionsJson();
                 }
                 catch (JsonException)
                 {
@@ -136,6 +143,9 @@ namespace KimodoUnityBridge.Command
                         Properties(
                             RequiredPoseReference("pose"),
                             Required("muscles", "object", "Map of muscle channel names to values."))),
+                    CommandDefinition(EffectorValidateCommand,
+                        "Validate an end-effector target against the current Avatar and reference pose by running the Kimodo Humanoid IK pipeline.",
+                        EffectorValidateSchema()),
                     CommandDefinition(GetGenerationCommand,
                         "Get status, progress, remaining seconds, and message for an install or generation request. Generated animation metadata and its project-relative asset path are included only after a generation completes.",
                         Properties(
@@ -231,6 +241,7 @@ namespace KimodoUnityBridge.Command
                         Route("generate motion", GenerateAnimationCommand, "then " + GetGenerationCommand),
                         Route("analyze and render motion", AnimationAnalyzeCommand, "returns one composite picture and self-describing tiles"),
                         Route("materialize or edit a pose", PoseGetCommand, "then pose_set / pose_set_root_transform / pose_set_muscle"),
+                        Route("validate an end-effector target", EffectorValidateCommand, "before using it in root_effect"),
                         Route("obtain a reusable root trajectory", AnimationAnalyzeCommand, "then reference root_trajectory.path from a generation root_path constraint"),
                     },
                     ["handles"] = new JObject
@@ -281,13 +292,13 @@ namespace KimodoUnityBridge.Command
                     new JObject
                     {
                         ["type"] = "root2d",
-                        ["description"] = "A Root2D constraint backed by a required reference Pose. It constrains the root position and heading on the ground plane while preserving the reference support pose.",
+                        ["description"] = "A Root2D constraint backed by an optional reference Pose. When omitted, the target Avatar skeleton rest pose supplies the support pose. It constrains root position and heading on the ground plane.",
                         ["shape"] = new JObject
                         {
                             ["frame"] = "Relative frame in the generated clip.",
                             ["root2d"] = new JObject
                             {
-                                ["pose"] = "Required External Pose reference: {track,index}",
+                                ["pose"] = "Optional External Pose reference: {track,index}; omitted uses Avatar skeleton rest pose",
                                 ["position"] = "[x,z]",
                                 ["heading"] = "[x,z] forward direction"
                             }
@@ -313,7 +324,7 @@ namespace KimodoUnityBridge.Command
                 },
                 ["rules"] = new JArray
                 {
-                    "Every point constraint (fullbody, root2d, root_effect, and standalone hand/foot effectors) requires an External Pose reference; root_effect.root2d.pose is the root support Pose and each end-effector field has its own target Pose.",
+                    "Every point constraint accepts an optional External Pose reference; when omitted, the target Avatar skeleton rest pose is used and a warning is returned. root_effect.root2d.pose is the root support Pose and each end-effector field may supply its own target Pose.",
                     "At the same frame, fullbody supplies the base pose, root2d overrides RootTQ, and hand/foot effector channels override their matching protocol fields. See tools/constraints.md for the canonical contract.",
                     "Use animation_analyze, then reference clips[].root_trajectory.path from root_path.",
                     "An explicit root2d at a frame overrides root_path at that frame.",
@@ -598,7 +609,9 @@ namespace KimodoUnityBridge.Command
                     originAvatar,
                     frameCount,
                     frameRate,
-                    durationFrames);
+                    durationFrames,
+                    character.Root,
+                    out List<string> poseWarnings);
 
                 if (outputMode != "model_bone" && !KimodoRetargetCoreUtility.IsValidHumanoid(character.Avatar))
                 {
@@ -724,6 +737,12 @@ namespace KimodoUnityBridge.Command
                 {
                     startedResponse["warnings"] = new JArray(loopWarning);
                     startedResponse["loop_fallback"] = loopFallback;
+                }
+                if (poseWarnings != null && poseWarnings.Count > 0)
+                {
+                    JArray warnings = startedResponse["warnings"] as JArray ?? new JArray();
+                    foreach (string warning in poseWarnings) warnings.Add(warning);
+                    startedResponse["warnings"] = warnings;
                 }
                 return Started(generation, startedResponse);
             });

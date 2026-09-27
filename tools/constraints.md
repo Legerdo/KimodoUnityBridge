@@ -13,16 +13,18 @@ description: Canonical protocol for reference-Pose-backed generation constraints
 每个点约束都由两部分组成：
 
 ```text
-PointConstraint = ReferencePose + ChannelOverrides
+PointConstraint = (ExplicitPose | AvatarRestPose) + ChannelOverrides
 ```
 
-- `ReferencePose` 是当前场景上下文中已经确认的 External Pose 引用：
+- `ExplicitPose` 是当前场景上下文中已经确认的 External Pose 引用：
   `{ "track": "<pose track>", "index": <non-negative integer> }`。
+- `AvatarRestPose` 是目标角色 Avatar skeleton 的 bind/rest pose。省略 `pose` 时由系统
+  创建它，并在响应中记录 `avatar_rest` warning。
 - `ChannelOverrides` 是这个采样点要额外覆盖的 Root2D 平面位置/朝向或末端执行器目标。
 
-Reference Pose 是约束的起始状态，不是可选的装饰数据。它提供根节点完整变换、
-身体肌肉、双脚以及需要的末端数据，使约束不会退化为隐含的绑定姿态、`root Y=0`
-或零旋转。
+Pose 是约束的起始状态，不是可选的装饰数据。显式 Pose 或 AvatarRestPose 都提供根节点
+完整变换、身体肌肉、双脚以及需要的末端数据，使约束不会退化为隐含的当前场景姿态、
+`root Y=0` 或零旋转。
 
 ## 2. 统一生命周期
 
@@ -30,21 +32,22 @@ Reference Pose 是约束的起始状态，不是可选的装饰数据。它提�
    Clip 时使用 `scene_time_seconds`。
 2. 检查返回的根高度、双脚、身体姿态和目标末端。需要修改目标时，使用
    `pose_set` 创建派生 Pose。
-3. 只有经过确认的 `{track,index}` 才能进入 generation 请求。
+3. 显式 Pose 只有经过确认的 `{track,index}` 才能进入 generation 请求；省略 Pose 时由
+   Avatar skeleton 生成 `avatar_rest`，并在 generation 响应中记录 warning。
 4. 在目标帧引用该 Pose，并只声明需要覆盖的通道。
 5. 生成完成后，按同样的帧和 Pose 证据验证结果；生成请求本身不能反向修改 Pose。
 
 ## 3. 强制规则
 
-- `fullbody.pose` 必须存在，并且必须指向当前场景中的 External Pose。
-- `root2d.pose` 必须存在。`root2d` 可以只使用参考 Pose 的根状态，也可以额外提供
+- `fullbody.pose` 可以省略；省略时使用目标 Avatar skeleton 的 bind/rest pose。
+- `root2d.pose` 可以省略；省略时使用目标 Avatar skeleton 的 bind/rest pose。`root2d` 可以只使用参考 Pose 的根状态，也可以额外提供
   `position: [x,z]` 和 `heading: [x,z]`；两者必须成对出现。
-- `root_effect.root2d.pose` 必须存在；它是 Root2D 支撑状态的引用。
+- `root_effect.root2d.pose` 可以省略；省略时使用目标 Avatar skeleton 的 bind/rest pose。
 - `root_effect` 至少需要一个 `left_hand`、`right_hand`、`left_foot` 或
-  `right_foot`。每个末端字段也必须包含自己的 `pose` 引用，用于提供该末端的目标
-  变换。
-- 独立的 `left_hand`、`right_hand`、`left_foot` 和 `right_foot` 约束同样必须包含
-  `pose`。
+  `right_foot`。每个末端字段的 `pose` 也可以省略，省略时使用 Avatar rest pose
+  中对应末端的位置和旋转。
+- 独立的 `left_hand`、`right_hand`、`left_foot` 和 `right_foot` 约束同样可以省略
+  `pose`，默认使用 Avatar rest pose。
 - 禁止从未声明的当前姿态、场景默认姿态、`root Y=0` 或零四元数隐式补全约束。
 - `root_effect` 不能和同一约束项中的 `fullbody`、`root2d` 或独立末端字段混用。
   如果同一帧需要多个通道，应使用一个 `root_effect`，或使用多个独立点约束让系统
@@ -54,8 +57,8 @@ Reference Pose 是约束的起始状态，不是可选的装饰数据。它提�
 - `inout` 是从已完成 Clip 自动采样的边界上下文指令，不是用户提交的点约束；它由
   采样器生成内部 FullBody 数据，不要求用户为每个边界手写 `pose`。
 
-缺少必需的 Pose、Pose 引用失效、Pose 没有有效采样数据或末端目标缺失时，命令必须
-拒绝请求并返回错误；不得自动降级为无 Pose 约束。
+显式 Pose 引用失效、Pose 没有有效采样数据或末端目标缺失时，命令必须拒绝请求。
+缺省 Pose 必须明确记录为 `avatar_rest` warning，不得静默伪装成用户确认的 Pose。
 
 ## 4. 约束类型
 
@@ -86,7 +89,7 @@ Reference Pose 是约束的起始状态，不是可选的装饰数据。它提�
 }
 ```
 
-Reference Pose 保留根高度和支撑姿态；`position` 与 `heading` 只覆盖根的 XZ 平面
+Reference Pose（或省略时的 Avatar rest pose）保留根高度和支撑姿态；`position` 与 `heading` 只覆盖根的 XZ 平面
 位置和水平朝向。Root2D 的导出通道仍然是根平面通道，不会因此变成 FullBody 约束。
 
 ### RootEffect
@@ -126,7 +129,35 @@ RootEffect 是公共语义名称，内部仍映射到 `mix`，不新增底层 so
 它不会自动提供根位置或完整身体支撑；需要两者时，应使用同帧 FullBody/Root2D，或
 直接使用 RootEffect。
 
-## 5. 同帧合并和优先级
+缺省 Pose 时，Standalone effector 使用 Avatar rest pose 中对应末端的初始目标；这
+适合验证结构和默认姿态，不等于苹果接触目标。抓取任务仍建议显式提供目标 Pose。
+
+## 5. Effector validation
+
+`effector_validate` 在生成 `root_effect` 前验证一个末端目标。它使用当前角色的
+Avatar、显式 Pose 或 `avatar_rest`、可选 Root2D 覆盖，并运行与生成相同的 Humanoid IK
+管线。结果包含 `position_error`、可选的 `rotation_error_degrees`、几何 reach envelope
+和 `valid|unreachable|invalid` 状态。
+
+```json
+{
+  "character": "<character>",
+  "effector": "right_hand",
+  "pose": { "track": "<pose track>", "index": 5 },
+  "target": { "position": [0.25, 1.08, 0.42] },
+  "options": {
+    "position_tolerance": 0.03,
+    "rotation_tolerance_degrees": 15,
+    "project_if_unreachable": true
+  }
+}
+```
+
+缺省 `pose` 时结果会设置 `pose_source: "avatar_rest"`、`pose_defaulted: true` 并返回
+warning。`projected_target` 只是建议值，不会自动修改目标或生成请求；调用方必须明确
+接受后再写入 Pose 或 RootEffect。验证 API 不修改场景角色、Pose 或动画资产。
+
+## 6. 同帧合并和优先级
 
 同一帧的多个点约束按通道合并：
 
@@ -138,7 +169,7 @@ RootEffect 是公共语义名称，内部仍映射到 `mix`，不新增底层 so
 同一通道被多个样本声明时，按样本顺序保留最后一个有效值。不同通道可以在同一帧
 组合，但 `root_effect` 自身不能再和同项的兄弟约束字段组合。
 
-## 6. 苹果拾取的推荐编排
+## 7. 苹果拾取的推荐编排
 
 对接近、弯腰、伸手和抓取等关键帧，先分别获取或派生支撑 Pose，再生成约束：
 
@@ -147,6 +178,7 @@ pose_get(scene/timeline time)
     -> inspect root/feet/body
     -> pose_set for hand target when needed
     -> confirmed {track,index}
+    -> effector_validate against apple world position
     -> fullbody or root2d/root_effect constraint
 ```
 

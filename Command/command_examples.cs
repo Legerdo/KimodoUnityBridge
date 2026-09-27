@@ -44,6 +44,8 @@ namespace KimodoUnityBridge.Command
                     @"{'pose':{'track':'<returned pose track>','index':0},'root':{'position':[0,1,0]}}");
                 case PoseSetMuscleCommand: return Examples("Edit the Spine Front-Back muscle of a returned Pose slot.",
                     @"{'pose':{'track':'<returned pose track>','index':0},'muscles':{'Spine Front-Back':0.1}}");
+                case EffectorValidateCommand: return Examples("Validate a right-hand target with the current Avatar and reference Pose before using it in RootEffect.",
+                    @"{'character':'<character>','effector':'right_hand','pose':{'track':'<pose track>','index':1},'target':{'position':[0.25,1.08,0.42]},'options':{'position_tolerance':0.03,'rotation_tolerance_degrees':15}}");
                 case GetGenerationCommand: return Examples("Poll using the exact request_id returned by generation or installation.",
                     @"{'request_id':'11111111-1111-1111-1111-111111111111'}");
                 case CancelGenerationCommand: return Examples("Cancel using the exact active generation request_id.",
