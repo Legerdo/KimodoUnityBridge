@@ -63,16 +63,14 @@ namespace KimodoUnityBridge.Command
                     targetRootHeight = initialHipsPosition.y;
                 }
 
-                var explicitRootFrames = new HashSet<int>(constraints
-                    .OfType<JObject>()
-                    .Where(item => item["root2d"] is JObject)
-                    .Select(item => RequiredNonNegativeFrame(item, "frame")));
-                var existingConstraintFrames = new HashSet<int>(constraints
-                    .OfType<JObject>()
-                    .Where(item => item["root_path"] == null)
-                    .Select(item => item.Value<int?>("frame") ?? -1)
-                    .Where(frame => frame >= 0 && frame < durationFrames));
+                var pointFrames = new HashSet<int>();
+                var pathFrames = new HashSet<int>();
                 var occupiedPathFrames = new HashSet<int>();
+                string frameError = ValidateUniqueConstraintFrames(constraints, durationFrames);
+                if (!string.IsNullOrEmpty(frameError)) throw new InvalidOperationException(frameError);
+                foreach (JObject item in constraints.OfType<JObject>())
+                    if (item.Property("inout") == null && item["root_path"] == null)
+                        pointFrames.Add(RequiredNonNegativeFrame(item, "frame"));
                 for (int i = 0; i < constraints.Count; i++)
                 {
                     if (constraints[i] is JObject item && item["root_path"] is JObject rootPath)
@@ -84,6 +82,8 @@ namespace KimodoUnityBridge.Command
                                 $"constraints[{i}].frame must be within [0,{durationFrames}).");
                         }
                         PoseReference reference = RequirePoseReference(rootPath["path"] as JObject);
+                        if (!pathFrames.Add(startFrame))
+                            throw new InvalidOperationException($"constraints[{i}].root_path reuses frame {startFrame}; command constraints are not merged.");
                         pathSamples.AddRange(BuildRootPathConstraintsSparse(
                             RequirePathMarker(reference).PathData,
                             i,
@@ -91,12 +91,10 @@ namespace KimodoUnityBridge.Command
                             durationFrames,
                             targetRootHeight,
                             targetCache != null ? Mathf.Max(1e-6f, targetCache.humanScale) : 1f,
-                            explicitRootFrames,
-                            existingConstraintFrames,
+                            pointFrames,
                             occupiedPathFrames));
                     }
                 }
-
                 for (int i = 0; i < constraints.Count; i++)
                 {
                     if (constraints[i] is not JObject constraint)
@@ -119,6 +117,8 @@ namespace KimodoUnityBridge.Command
                     {
                         throw new InvalidOperationException($"constraints[{i}].frame must be within [0,{durationFrames}).");
                     }
+                    if (pathFrames.Contains(relativeFrame))
+                        throw new InvalidOperationException($"constraints[{i}].frame {relativeFrame} collides with root_path; command constraints are not merged.");
                     double at = relativeFrame / SessionFrameRate;
                     string type = constraint.Value<string>("type")?.Trim().ToLowerInvariant();
                     if (type != "fullbody" && type != "root2d" && type != "root_effect")
@@ -142,9 +142,8 @@ namespace KimodoUnityBridge.Command
                             sceneCharacterRoot, poseWarnings));
                     }
                 }
-                // Root paths are profile-space Root2D overrides. Append them
-                // after FullBody rows so they replace only Root XZ/heading at
-                // shared frames; explicit root2d rows were excluded above.
+                // Root paths remain independent samples. No command-side row is
+                // merged with a point constraint or overwritten by frame order.
                 samples.AddRange(pathSamples);
             }
             finally
@@ -154,6 +153,23 @@ namespace KimodoUnityBridge.Command
                 targetCache?.Dispose();
             }
             return samples;
+        }
+
+        internal static string ValidateUniqueConstraintFrames(JArray constraints, int durationFrames)
+        {
+            if (constraints == null) return string.Empty;
+            var frames = new HashSet<int>();
+            for (int i = 0; i < constraints.Count; i++)
+            {
+                if (constraints[i] is not JObject item || item.Property("inout") != null || item["root_path"] is JObject)
+                    continue;
+                int frame = RequiredNonNegativeFrame(item, "frame");
+                if (frame >= durationFrames)
+                    return $"constraints[{i}].frame must be within [0,{durationFrames}).";
+                if (!frames.Add(frame))
+                    return $"constraints[{i}].frame {frame} duplicates another point constraint; command constraints are not merged.";
+            }
+            return string.Empty;
         }
 
         private static KimodoMarkerSampleResult BuildRootEffectConstraint(
@@ -397,8 +413,7 @@ namespace KimodoUnityBridge.Command
             int durationFrames,
             float targetRootHeight,
             float targetHumanScale,
-            ISet<int> explicitRootFrames,
-            ISet<int> existingConstraintFrames,
+            ISet<int> explicitPointFrames,
             ISet<int> occupiedPathFrames)
         {
             List<KimodoRootPathKnot> knots = path?.knots;
@@ -420,11 +435,7 @@ namespace KimodoUnityBridge.Command
                 ? path.length / sourceLength * retargetScale
                 : retargetScale;
             int endFrame = durationFrames - 1;
-            var sampleFrames = new SortedSet<int>(existingConstraintFrames ?? new HashSet<int>())
-            {
-                startFrame,
-                endFrame
-            };
+            var sampleFrames = new SortedSet<int> { startFrame, endFrame };
             foreach (int frame in sampleFrames)
             {
                 if (frame < startFrame || frame > endFrame)
@@ -458,16 +469,15 @@ namespace KimodoUnityBridge.Command
                     throw new InvalidOperationException(
                         $"constraints[{constraintIndex}].root_path has a zero heading at frame {frame}.");
                 }
-                if (!explicitRootFrames.Contains(frame))
-                {
-                    result.Add(CreateRootOverrideSample(
-                        frame,
-                        // Root paths constrain the planar trajectory and heading.
-                        // Vertical placement remains the canonical hips height;
-                        // path data never carries a separate delta-Y channel.
-                        new Vector3(position.x, targetRootHeight, position.y),
-                        new Vector3(tangent.x, 0f, tangent.y).normalized));
-                }
+                if (explicitPointFrames != null && explicitPointFrames.Contains(frame))
+                    throw new InvalidOperationException($"constraints[{constraintIndex}].root_path collides with point frame {frame}; command constraints are not merged.");
+                result.Add(CreateRootOverrideSample(
+                    frame,
+                    // Root paths constrain the planar trajectory and heading.
+                    // Vertical placement remains the canonical hips height;
+                    // path data never carries a separate delta-Y channel.
+                    new Vector3(position.x, targetRootHeight, position.y),
+                    new Vector3(tangent.x, 0f, tangent.y).normalized));
             }
             return result;
         }

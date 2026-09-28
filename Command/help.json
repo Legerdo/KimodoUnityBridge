@@ -1678,6 +1678,22 @@
           "arguments": {}
         }
       ]
+    },
+    {
+      "name": "scene.context",
+      "description": "Inspect the active Unity scene, its resolved PlayableDirector, characters, Animators, Avatars, and loaded animation context without changing it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "description": "Inspect the active scene and the real PlayableDirector before selecting character, pose, or clip handles.",
+          "arguments": {}
+        }
+      ]
     }
   ]
 }

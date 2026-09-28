@@ -62,7 +62,7 @@ ASSERT WORKFLOW_READY == YES before animation work
 | recognition | 根据明确语义识别动作 | `tools/recognition.md` |
 | comparison | 在相同证据条件下比较两个候选 | `tools/comparison.md` |
 | pose | 创建、编辑和复用 External Pose | `tools/pose.md` |
-| constraints | 统一的 Reference Pose 约束协议、默认 Avatar rest pose、同帧合并和效应器检查 | `tools/constraints.md` |
+| constraints | 统一的 Reference Pose 约束协议、默认 Avatar rest pose、同帧冲突检查和效应器检查 | `tools/constraints.md` |
 
 命令目录只在调用边界使用；不要把完整参数结构复制到工具文档中。
 

@@ -38,7 +38,8 @@ namespace KimodoUnityBridge.Command
                 [EffectorValidateCommand] = EffectorValidate,
                 [GetGenerationCommand] = GetGeneration,
                 [CancelGenerationCommand] = CancelGeneration,
-                [SessionClearCommand] = ClearSession
+                [SessionClearCommand] = ClearSession,
+                [SceneContextGetCommand] = SceneContextGet
             };
 
             var registrations = new List<CommandRegistration>();

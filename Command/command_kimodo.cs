@@ -11,6 +11,7 @@ namespace KimodoUnityBridge.Command
         public const string GetGenerationCommand = command_context.GetGenerationCommand;
         public const string CancelGenerationCommand = command_context.CancelGenerationCommand;
         public const string SessionClearCommand = command_context.SessionClearCommand;
+        public const string SceneContextGetCommand = command_context.SceneContextGetCommand;
         public const string EffectorValidateCommand = command_context.EffectorValidateCommand;
 
         public static string Help(string argumentsJson = "{}") => command_dispatcher.Invoke(HelpCommand, argumentsJson);
@@ -21,6 +22,7 @@ namespace KimodoUnityBridge.Command
         public static string GetGeneration(string argumentsJson) => command_dispatcher.Invoke(GetGenerationCommand, argumentsJson);
         public static string CancelGeneration(string argumentsJson) => command_dispatcher.Invoke(CancelGenerationCommand, argumentsJson);
         public static string ClearSession(string argumentsJson = "{}") => command_dispatcher.Invoke(SessionClearCommand, argumentsJson);
+        public static string SceneContext(string argumentsJson = "{}") => command_dispatcher.Invoke(SceneContextGetCommand, argumentsJson);
         public static string ValidateEffector(string argumentsJson = "{}") => command_dispatcher.Invoke(EffectorValidateCommand, argumentsJson);
     }
 }

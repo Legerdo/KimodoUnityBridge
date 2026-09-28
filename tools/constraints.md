@@ -54,6 +54,9 @@ Pose 是约束的起始状态，不是可选的装饰数据。显式 Pose 或 Av
   但会在生成时编译成 Root2D 路径样本。
 - `inout` 是从已完成 Clip 自动采样的边界上下文指令，不是用户提交的点约束；它由
   采样器生成内部 FullBody 数据，不要求用户为每个边界手写 `pose`。
+- Command 输入不合并约束：同一帧只能有一个显式点约束，`root_path` 生成的采样帧也不能
+  与显式点约束重叠。冲突必须报错，不能靠数组顺序覆盖。后端接收时 RootEffect 仍是一个
+  `mix` 样本，这是序列化类型，不是 Command 侧合并规则。
 
 显式 Pose 引用失效、Pose 没有有效采样数据或末端目标缺失时，命令必须拒绝请求。
 缺省 Pose 必须明确记录为 `avatar_rest` warning，不得静默伪装成用户确认的 Pose。
@@ -115,9 +118,10 @@ RootEffect 是公共语义名称，内部仍映射到 `mix`，不新增底层 so
 
 ## 5. Effector validation
 
-`effector_validate` 在生成 `root_effect` 前验证一个末端目标。它使用当前角色的
-Avatar、显式 Pose 或 `avatar_rest`、可选 Root2D 覆盖，并运行与生成相同的 Humanoid IK
-管线。结果包含 `position_error`、可选的 `rotation_error_degrees`、几何 reach envelope
+`effector_validate` 在生成 `root_effect` 前验证一个末端目标。它使用当前 generation
+model 的 Avatar、显式 Pose 或 `avatar_rest`、可选 Root2D 覆盖，并运行与生成相同的
+Humanoid IK 管线和 RootEffect 输入结构。结果包含 `position_error`、可选的
+`rotation_error_degrees`、几何 reach envelope
 和 `valid|unreachable|invalid` 状态。
 
 ```json
@@ -138,17 +142,17 @@ Avatar、显式 Pose 或 `avatar_rest`、可选 Root2D 覆盖，并运行与生�
 warning。`projected_target` 只是建议值，不会自动修改目标或生成请求；调用方必须明确
 接受后再写入 Pose 或 RootEffect。验证 API 不修改场景角色、Pose 或动画资产。
 
-## 6. 同帧合并和优先级
+## 6. 同帧冲突和底层映射
 
-同一帧的多个点约束按通道合并。每个项仍然只有一个 `type`；如果需要根和末端目标，
-使用一个 `root_effect` 项，不要在 `root2d` 项中附加 `effect`：
+Command 输入不会把多个点约束按通道合并，也不会按数组顺序覆盖。每个采样帧只能有
+一个显式点约束；`root_path` 编译出的起止采样帧也不能与显式点约束重叠，冲突直接
+拒绝。每个项仍然只有一个 `type`；如果需要根和末端目标，使用一个 `root_effect` 项：
 
 1. `fullbody` 提供身体肌肉、根完整变换和双脚支撑。
 2. `root2d` 覆盖根的平面位置和水平朝向。
-3. `root_effect` 同时提供 Root2D 和末端目标，并在内部作为 `mix` 导出。
+3. `root_effect` 同时提供 Root2D 和末端目标，并在后端序列化为一个 `mix` 样本。
 
-同一通道被多个样本声明时，按样本顺序保留最后一个有效值。不同通道可以在同一帧
-组合，但单个 constraint 项只能有一个 `type`。
+`mix` 是后端接收的单一约束类型，不是 Command 输入的合并步骤。
 
 ## 7. 苹果拾取的推荐编排
 

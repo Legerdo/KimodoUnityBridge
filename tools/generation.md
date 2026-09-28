@@ -35,14 +35,14 @@ The solver applies the support root first, then the enabled end-effectors. The e
 
 ### Root2D point constraints and support Pose
 
-The optional Reference Pose model, per-type schema, same-frame merge rules, and rejection
+The optional Reference Pose model, per-type schema, no-merge collision rules, and rejection
 conditions are defined in [`constraints.md`](constraints.md).
 推荐流程是：在目标时间调用 `pose_get`（没有源 Clip 时使用 `scene_time_seconds`），
 检查完整支撑姿态，再把确认后的 Pose 引用放入 Root2D 约束；如果没有显式 Pose，
 命令会使用 Avatar skeleton rest pose 并返回 warning。命令路径与编辑器右键创建的
 Root2D 约束使用相同的支撑数据。
 
-Command In/Out rejects insufficient source ranges, too many samples for distinct model frames, overlapping inside windows, same-frame explicit constraints, cross-character sources, loop generation, ARDY, and requests exceeding the model frame limit including context. These checks do not silently shorten or downgrade the request. Acceptance and `kimodo_get_generation` return `inout_sampling`: source-local and Timeline sample times, output/runtime model frames, padding counts, and the exclusive crop range. The output retains the requested duration. This metadata verifies sampling and transport, not visual seam quality.
+Command In/Out rejects insufficient source ranges, too many samples for distinct model frames, overlapping inside windows, same-frame explicit constraints, cross-character sources, loop generation, ARDY, and requests exceeding the model frame limit including context. These checks do not silently shorten or downgrade the request. Acceptance and `kimodo_get_generation` return `inout_sampling`: source-local and Timeline sample times, output/runtime model frames, padding counts, and the exclusive crop range. The output retains the requested duration. This metadata verifies sampling and transport, not visual seam quality. Loop is enabled only by the explicit `loop` argument; prompt wording is never parsed as a loop flag.
 
 Every command's help entry includes `examples`. Replace illustrative names and request IDs with actual returned handles before executing them.
 
@@ -538,7 +538,7 @@ function derive_supported_correction_from_failed_macros():
         return no_supported_correction
 
     if LOOP_MATCH == NO and SHOULD_LOOP == YES:
-        return request_with_loop_enabled_unless_runtime_declares_loop_fallback()
+        return request_with_loop_enabled_after_explicit_review()
 
     return no_supported_correction
 
@@ -549,15 +549,15 @@ ASSERT analysis_keyframes_are_used_as_evidence_and_timing_anchors()
 ASSERT default_generation_does_not_materialize_or_edit_pose_assets()
 ASSERT analysis_candidates_do_not_enter_generation_directly()
 ASSERT only_confirmed_pose_set_entries_enter_generation()
-ASSERT source_motion_profile_precedes_prompt_heuristics()
+ASSERT loop_flag_is_explicit_and_prompt_text_never_enables_it()
 ASSERT direct_pose_edit_requires_explicit_user_confirmation_and_opt_in()
 ASSERT analyzed_path_is_a_constraint_only_when_root_trajectory_path_is_reused()
 ASSERT path_override_and_loop_are_independent_and_may_coexist()
 ASSERT default_loop_locks_are_pos_y_and_rot_xz()
 ASSERT loop_lock_axes_change_only_on_explicit_user_request()
 ASSERT fixed_heading_overrides_path_tangent_heading_but_not_path_positions()
-ASSERT explicit_root2d_at_a_frame_overrides_root_path_at_that_frame()
-ASSERT same_frame_precedence_is_fullbody_then_root2d_then_root_effect_channels()
+ASSERT root_path_and_point_frame_collisions_are_rejected()
+ASSERT duplicate_point_frames_are_rejected()
 ASSERT no_source_target_range_pose_path_contact_or_constraint_is_invented()
 ASSERT completed_outputs_are_preserved_and_corrections_are_derived_outputs()
 ASSERT failed_canceled_or_fallback_results_are_reported_as_returned()
