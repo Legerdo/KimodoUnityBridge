@@ -62,7 +62,7 @@ ASSERT WORKFLOW_READY == YES before animation work
 | recognition | 根据明确语义识别动作 | `tools/recognition.md` |
 | comparison | 在相同证据条件下比较两个候选 | `tools/comparison.md` |
 | pose | 创建、编辑和复用 External Pose | `tools/pose.md` |
-| constraints | 统一的 Reference Pose 约束协议、默认 Avatar rest pose、同帧冲突检查和效应器检查 | `tools/constraints.md` |
+| constraints | 点约束格式、Pose 使用规则、同帧冲突和效应器预检 | `tools/constraints.md` |
 
 命令目录只在调用边界使用；不要把完整参数结构复制到工具文档中。
 
@@ -120,6 +120,6 @@ output. The loop stops when consecutive non-improvement exceeds the configured
 - 安装和生成都返回 `request_id`，并通过 `kimodo_get_generation` 轮询。安装终态为 `done` 或 `error`；生成终态为 `completed`、`failed` 或 `canceled`。轮询必须有固定间隔和总超时；过期或未知请求按失败/未验证报告。
 - assembly reload、Editor 退出、切换场景或进入 Play Mode 导致的取消必须如实报告，不声称自动恢复。
 - 工具报告至少包含 `result`、`output`、`criteria`、`evidence`、`unverified`；工具可附加专属字段。
-- 请求未声明的 source、target、range、path 或 constraint 不得自行补全；约束中的 `pose` 可以省略，省略时必须使用目标 Avatar skeleton rest pose 并返回 warning。
+- 请求未声明的 source、target、range、path 或 constraint 不得自行补全；按约束格式决定 `pose` 是否需要提供。
 
 需要 Unity 对象细节时，使用命令返回的路径、角色名、动画名或 `{track,index}` 引用；不读取内部上下文文件。

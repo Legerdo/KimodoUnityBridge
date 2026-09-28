@@ -275,10 +275,11 @@ namespace KimodoUnityBridge.Command
                     new JObject
                     {
                         ["type"] = "root2d",
-                        ["description"] = "A Root2D constraint backed by an optional reference Pose. When omitted, the target Avatar skeleton rest pose supplies the support pose. It constrains root position and heading on the ground plane.",
+                        ["description"] = "Constrains the root position and heading on the ground plane. A reference Pose may be supplied when a specific support pose is needed.",
                         ["shape"] = new JObject
                         {
                             ["frame"] = "Relative frame in the generated clip.",
+                            ["pose"] = "Optional External Pose reference: {track,index}.",
                             ["root2d"] = new JObject
                             {
                                 ["position"] = "[x,z]",
@@ -293,7 +294,7 @@ namespace KimodoUnityBridge.Command
                         ["shape"] = new JObject
                         {
                             ["frame"] = "Relative frame in the generated clip.",
-                            ["pose"] = "Optional External Pose reference: {track,index}; omitted uses Avatar skeleton rest pose",
+                            ["pose"] = "Optional External Pose reference: {track,index}.",
                             ["root2d"] = new JObject
                             {
                                 ["position"] = "[x,z]",
@@ -305,7 +306,7 @@ namespace KimodoUnityBridge.Command
                     new JObject
                     {
                         ["type"] = "inout",
-                        ["description"] = "Explicit source Clip windows sampled in C# into FullBody constraints. Outside adds and crops context; inside retains constrained windows within the output. Source times include Timeline offsets, clipIn, speed and blends.",
+                        ["description"] = "Explicit source Clip windows used as boundary context. Outside adds and crops context; inside retains constrained windows within the output.",
                         ["shape"] = InOutConstraintSchema(),
                         ["examples"] = BuildCommandExamples(GenerateAnimationCommand)
                     },
@@ -322,8 +323,8 @@ namespace KimodoUnityBridge.Command
                 },
                 ["rules"] = new JArray
                 {
-                    "Every point constraint uses one explicit type: fullbody, root2d, or root_effect. Fullbody requires pose; root2d supplies root2d position and heading; root_effect supplies root2d and effect targets. Omitted pose uses the target Avatar skeleton rest pose and returns a warning.",
-                    "Point constraints are independent typed samples. Command input does not merge or overwrite same-frame constraints; duplicate point frames and root_path/point frame collisions are rejected. RootEffect is serialized as one backend mix sample.",
+                    "Every point constraint uses one explicit type: fullbody, root2d, or root_effect. Fullbody requires pose; root2d requires root2d position and heading; root_effect requires root2d and effect targets.",
+                    "Point constraints are independent typed samples. Duplicate point frames and root_path/point frame collisions are rejected.",
                     "Use animation_analyze, then reference clips[].root_trajectory.path from root_path.",
                     "An explicit point frame cannot overlap a root_path sample frame; the command rejects the collision.",
                     "At most one standalone inout entry; in/out each require an explicit completed source Clip. Source character defaults to the generation character and must be the same character.",

@@ -26,21 +26,18 @@ Command `window_frames` and `source.frame` use **60 FPS**, unlike the Timeline U
 The complete point-constraint contract is defined in [`constraints.md`](constraints.md).
 The sections below summarize the generation-specific behavior.
 
-`constraints[].type: "root_effect"` is the public semantic form for one root-plus-effector sample. It is normalized to the existing internal `mix` mode; no new solver or export family is introduced. The same item carries optional `pose`, required `root2d.position/heading`, and required `effect` targets. Each effect target contains world-space position and optional rotation. `effector_validate` must accept the target before generation.
+`constraints[].type: "root_effect"` expresses a root position and one or more end-effector targets at the same frame. It carries optional `pose`, required `root2d.position/heading`, and required `effect` targets. Each effect target contains world-space position and optional rotation. Use `effector_validate` before generation.
 
 The three point types are a discriminated union and are never nested. See `constraints.md`
 for the complete shape and validation rules.
 
-The solver applies the support root first, then the enabled end-effectors. The export keeps both root and effector constraints instead of treating effectors as a replacement for Root2D. This lets a pickup contact frame express "the character is here and the hand is here" as one explicit constraint sample.
+This lets a pickup contact frame express "the character is here and the hand is here" as one constraint sample.
 
 ### Root2D point constraints and support Pose
 
 The optional Reference Pose model, per-type schema, no-merge collision rules, and rejection
 conditions are defined in [`constraints.md`](constraints.md).
-推荐流程是：在目标时间调用 `pose_get`（没有源 Clip 时使用 `scene_time_seconds`），
-检查完整支撑姿态，再把确认后的 Pose 引用放入 Root2D 约束；如果没有显式 Pose，
-命令会使用 Avatar skeleton rest pose 并返回 warning。命令路径与编辑器右键创建的
-Root2D 约束使用相同的支撑数据。
+需要指定支撑姿态时，在目标时间调用 `pose_get`，检查后把 Pose 引用放入 Root2D 约束。
 
 Command In/Out rejects insufficient source ranges, too many samples for distinct model frames, overlapping inside windows, same-frame explicit constraints, cross-character sources, loop generation, ARDY, and requests exceeding the model frame limit including context. These checks do not silently shorten or downgrade the request. Acceptance and `kimodo_get_generation` return `inout_sampling`: source-local and Timeline sample times, output/runtime model frames, padding counts, and the exclusive crop range. The output retains the requested duration. This metadata verifies sampling and transport, not visual seam quality. Loop is enabled only by the explicit `loop` argument; prompt wording is never parsed as a loop flag.
 
@@ -551,8 +548,8 @@ ASSERT analysis_candidates_do_not_enter_generation_directly()
 ASSERT only_confirmed_pose_set_entries_enter_generation()
 ASSERT loop_flag_is_explicit_and_prompt_text_never_enables_it()
 ASSERT direct_pose_edit_requires_explicit_user_confirmation_and_opt_in()
-ASSERT analyzed_path_is_a_constraint_only_when_root_trajectory_path_is_reused()
-ASSERT path_override_and_loop_are_independent_and_may_coexist()
+ASSERT analyzed_path_is_a_constraint_only_when_root_trajectory_path_is_explicitly_reused()
+ASSERT path_override_and_loop_are_independent_explicit_options()
 ASSERT default_loop_locks_are_pos_y_and_rot_xz()
 ASSERT loop_lock_axes_change_only_on_explicit_user_request()
 ASSERT fixed_heading_overrides_path_tangent_heading_but_not_path_positions()

@@ -18,8 +18,7 @@ description: Shared execution contract for all Kimodo capability tools.
 - 需要单张图片时传 `picture: {output: "tile", tile_index: N}`；`tile_index` 从 1 开始，`resolution` 在该模式表示高度，默认 720px，宽度按 4:3 自适应。
 - `kimodo_generate_animation` 的普通调用只需要 `character` 与 `prompt`；模型、采样、命名、存储和分析覆盖项均可省略。
 - generation 的 `fullbody`、`root2d` 和 `root_effect` 统一遵守
-  [`constraints.md`](constraints.md)；末端目标只通过 `root_effect.effect` 表达。点约束可以
-  引用当前场景的 External Pose，也可以省略并显式记录为 Avatar skeleton rest pose。
+  [`constraints.md`](constraints.md)；末端目标通过 `root_effect.effect` 表达。
 
 - 只使用用户明确提供的 source、target、range、pose、path 和 constraint。
 - 只要生成请求指定了动作，先检查当前活动场景中的语义匹配动画；“修复/改进/替换/续作/变体 + 指定动作”绝不能跳过这一步。检查结果要记录为上下文证据，不能把发现的动画自动升级为生成约束。
