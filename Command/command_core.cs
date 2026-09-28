@@ -33,6 +33,7 @@ namespace KimodoUnityBridge.Command
         public const string GetGenerationCommand = "kimodo_get_generation";
         public const string CancelGenerationCommand = "kimodo_cancel_generation";
         public const string SessionClearCommand = "session.clear";
+        public const string SceneContextGetCommand = "scene.context";
         internal const string HelpAssetPath = "Packages/com.unity.kimodo_unity_motion_tools/Command/help.json";
 
         private const int MaxRememberedJobs = 128;
@@ -136,7 +137,10 @@ namespace KimodoUnityBridge.Command
                             Optional("reason", "string", "Optional cancellation reason."))),
                     CommandDefinition(SessionClearCommand,
                         "Clear a current runtime Timeline session. Persisted Timeline and animation assets are retained; the automatic context is recreated on the next scene-context command.",
-                        Properties(Optional("name", "string", "Optional session name; defaults to the current session.")))
+                        Properties(Optional("name", "string", "Optional session name; defaults to the current session."))),
+                    CommandDefinition(SceneContextGetCommand,
+                        "Inspect the active Unity scene, its resolved PlayableDirector, characters, Animators, Avatars, and loaded animation context without changing it.",
+                        Properties())
                 }
             }.ToString(Formatting.None);
         }
@@ -319,9 +323,9 @@ namespace KimodoUnityBridge.Command
                 ["rules"] = new JArray
                 {
                     "Every point constraint uses one explicit type: fullbody, root2d, or root_effect. Fullbody requires pose; root2d supplies root2d position and heading; root_effect supplies root2d and effect targets. Omitted pose uses the target Avatar skeleton rest pose and returns a warning.",
-                    "At the same frame, fullbody supplies the base pose, root2d overrides RootTQ, and hand/foot effector channels override their matching protocol fields. See tools/constraints.md for the canonical contract.",
+                    "Point constraints are independent typed samples. Command input does not merge or overwrite same-frame constraints; duplicate point frames and root_path/point frame collisions are rejected. RootEffect is serialized as one backend mix sample.",
                     "Use animation_analyze, then reference clips[].root_trajectory.path from root_path.",
-                    "An explicit root2d at a frame overrides root_path at that frame.",
+                    "An explicit point frame cannot overlap a root_path sample frame; the command rejects the collision.",
                     "At most one standalone inout entry; in/out each require an explicit completed source Clip. Source character defaults to the generation character and must be the same character.",
                     "In/Out window_frames and source.frame use 60 FPS. Windows round up to model frames; sample_count must fit distinct model frames. One sample uses the seam; multiple samples include both endpoints.",
                     "In/Out rejects short sources, overlapping inside windows, conflicting point samples, unsupported ARDY models, loop generation, and runtime duration above the model limit. It does not silently clamp or downgrade.",
@@ -525,8 +529,7 @@ namespace KimodoUnityBridge.Command
                 JObject loopObject = arguments["loop"] as JObject;
                 bool loopRequested = loopObject != null
                     ? loopObject.Value<bool?>("enabled") ?? true
-                    : arguments.Value<bool?>("loop") ??
-                        prompt.IndexOf("loop", StringComparison.OrdinalIgnoreCase) >= 0;
+                    : arguments.Value<bool?>("loop") ?? false;
                 JObject lockPosition = loopObject?["lock_pos"] as JObject;
                 JObject lockRotation = loopObject?["lock_rot"] as JObject;
                 bool loopLockPositionX = lockPosition?.Value<bool?>("x") ?? false;

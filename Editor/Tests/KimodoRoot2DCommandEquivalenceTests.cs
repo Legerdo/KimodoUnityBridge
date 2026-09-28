@@ -175,6 +175,18 @@ namespace KimodoUnityBridge.Command.Tests
         }
 
         [Test]
+        public void CommandContext_ExposesReadOnlySceneContextDiscovery()
+        {
+            JObject definitions = JObject.Parse(command_dispatcher.GetCommandDefinitionsJson());
+            JObject command = ((JArray)definitions["tools"]).Values<JObject>()
+                .Single(item => item.Value<string>("name") == "scene.context");
+            Assert.That(command["inputSchema"]["properties"], Is.Not.Null);
+            Assert.That(command["inputSchema"]["properties"].Children(), Is.Empty);
+            Assert.That(command["description"]?.Value<string>(), Does.Contain("PlayableDirector"));
+        }
+
+
+        [Test]
         public void GeneratedConstraintSchema_HasStrictTypedBranches()
         {
             JObject definitions = JObject.Parse((string)typeof(command_context)
@@ -253,6 +265,39 @@ namespace KimodoUnityBridge.Command.Tests
             };
             Assert.Throws<TargetInvocationException>(() => validate.Invoke(
                 null, new object[] { fullBodyWithRoot, "fullbody", 1 }));
+        }
+
+        [Test]
+        public void BuildPoseConstraints_RejectsDuplicatePointFramesBeforeSolving()
+        {
+            MethodInfo build = typeof(command_context).GetMethod("BuildPoseConstraints", PrivateStatic);
+            var constraints = new JArray
+            {
+                new JObject
+                {
+                    ["frame"] = 8,
+                    ["type"] = "root2d",
+                    ["root2d"] = new JObject
+                    {
+                        ["position"] = new JArray(0, 0),
+                        ["heading"] = new JArray(0, 1)
+                    }
+                },
+                new JObject
+                {
+                    ["frame"] = 8,
+                    ["type"] = "root2d",
+                    ["root2d"] = new JObject
+                    {
+                        ["position"] = new JArray(1, 0),
+                        ["heading"] = new JArray(0, 1)
+                    }
+                }
+            };
+            MethodInfo validateFrames = typeof(command_context).GetMethod("ValidateUniqueConstraintFrames", PrivateStatic);
+            Assert.That(validateFrames, Is.Not.Null);
+            var error = (string)validateFrames.Invoke(null, new object[] { constraints, 30 });
+            Assert.That(error, Does.Contain("duplicates another point constraint"));
         }
 
         [Test]

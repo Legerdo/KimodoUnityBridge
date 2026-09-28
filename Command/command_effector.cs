@@ -2,6 +2,7 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using KimodoBridge;
+using KimodoBridge.Editor;
 using KimodoUnityBridge;
 using UnityEngine;
 
@@ -27,6 +28,19 @@ namespace KimodoUnityBridge.Command
             Quaternion targetRotation = hasRotation
                 ? ReadQuaternion(target["rotation"] as JArray ?? throw new InvalidOperationException("target.rotation must be an array."), "target.rotation")
                 : Quaternion.identity;
+            var point = new JObject
+            {
+                ["frame"] = 0,
+                ["type"] = "root_effect",
+                ["root2d"] = arguments["root2d"]?.DeepClone() ?? new JObject
+                {
+                    ["position"] = new JArray(0, 0),
+                    ["heading"] = new JArray(0, 1)
+                },
+                ["effect"] = new JObject { [effectorName] = target.DeepClone() }
+            };
+            if (arguments["pose"] != null) point["pose"] = arguments["pose"].DeepClone();
+            ValidatePointConstraintShape(point, "root_effect", 0);
 
             JObject options = arguments["options"] as JObject;
             float positionTolerance = ReadNonNegativeOption(
@@ -35,13 +49,15 @@ namespace KimodoUnityBridge.Command
                 options, "rotation_tolerance_degrees", 15f);
             bool projectIfUnreachable = options?.Value<bool?>("project_if_unreachable") ?? false;
 
-            if (!KimodoRetargetCoreUtility.IsValidHumanoid(character.Avatar))
+            Avatar validationAvatar = KimodoTimelineGenerationOutputPlanner.ResolveOriginRetargetAvatar(
+                ResolveModelName(null));
+            if (!KimodoRetargetCoreUtility.IsValidHumanoid(validationAvatar))
             {
                 throw new InvalidOperationException(
-                    $"Character '{character.Name}' does not provide a valid humanoid Avatar.");
+                    $"The active generation model '{ResolveModelName(null)}' does not provide a valid humanoid Avatar for effector validation.");
             }
             if (!KimodoRetargetAvatarUtility.TryBuildRetargetSkeleton(
-                    character.Avatar,
+                    validationAvatar,
                     "KimodoEffectorValidate",
                     out RetargetSkeleton cache,
                     out string cacheError))
@@ -58,7 +74,7 @@ namespace KimodoUnityBridge.Command
                 {
                     if (!TryCreateAvatarRestPoseSample(
                             cache,
-                            character.Root,
+                            null,
                             alignToSceneRoot: false,
                             out source,
                             out string restError))

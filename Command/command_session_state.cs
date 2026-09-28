@@ -1564,6 +1564,68 @@ namespace KimodoUnityBridge.Command
             };
         }
 
+        public static string SceneContextGet(string argumentsJson) => Execute(argumentsJson, _ =>
+        {
+            TimelineSessionRecord session = RequireCurrentTimelineSession();
+            PlayableDirector commandDirector = session.Director;
+            TimelineAsset timeline = session.TimelineAsset;
+            var characters = new JArray();
+            foreach (TimelineCharacterRecord character in session.Characters)
+            {
+                Animator animator = character.Animator;
+                characters.Add(new JObject
+                {
+                    ["name"] = character.Name,
+                    ["scene_object"] = character.Root != null ? GetSceneHierarchyPath(character.Root) : string.Empty,
+                    ["object_ref"] = character.CharacterRef ?? string.Empty,
+                    ["animator"] = animator != null ? GetSceneHierarchyPath(animator.gameObject) : string.Empty,
+                    ["avatar"] = character.Avatar != null ? character.Avatar.name : string.Empty,
+                    ["avatar_valid_humanoid"] = KimodoRetargetCoreUtility.IsValidHumanoid(character.Avatar),
+                    ["animations"] = new JArray(character.Animations.Select(DescribeAnimation))
+                });
+            }
+            Scene scene = SceneManager.GetActiveScene();
+            PlayableDirector[] authoredDirectors = Resources.FindObjectsOfTypeAll<PlayableDirector>()
+                .Where(item => item != null && item.gameObject != null && item.gameObject.scene == scene &&
+                    !IsSessionObject(item.gameObject))
+                .GroupBy(item => GetObjectReference(item))
+                .Select(group => group.First())
+                .ToArray();
+            var directorDescriptions = new JArray(authoredDirectors.Select(item => new JObject
+            {
+                ["object_ref"] = GetObjectReference(item),
+                ["hierarchy_path"] = GetSceneHierarchyPath(item.gameObject),
+                ["name"] = item.name,
+                ["enabled"] = item.enabled,
+                ["playable_asset"] = item.playableAsset != null ? item.playableAsset.name : string.Empty,
+                ["time_seconds"] = item.time,
+                ["duration_seconds"] = item.playableAsset != null ? item.playableAsset.duration : 0.0,
+                ["frame_rate"] = item.playableAsset is TimelineAsset authoredTimeline
+                    ? authoredTimeline.editorSettings.frameRate
+                    : 0.0
+            }));
+            PlayableDirector activeAuthoredDirector = authoredDirectors.FirstOrDefault(item => item.enabled)
+                ?? authoredDirectors.FirstOrDefault();
+            var result = new JObject
+            {
+                ["scene"] = scene.IsValid() ? scene.path : string.Empty,
+                ["scene_name"] = scene.IsValid() ? scene.name : string.Empty,
+                ["director"] = activeAuthoredDirector != null ? GetSceneHierarchyPath(activeAuthoredDirector.gameObject) : string.Empty,
+                ["directors"] = directorDescriptions,
+                ["command_context_director"] = commandDirector != null ? GetSceneHierarchyPath(commandDirector.gameObject) : string.Empty,
+                ["playable_asset"] = timeline != null ? timeline.name : string.Empty,
+                ["playable_asset_path"] = session.TimelineAssetPath ?? string.Empty,
+                ["time_seconds"] = activeAuthoredDirector != null ? activeAuthoredDirector.time : 0.0,
+                ["duration_seconds"] = timeline != null ? timeline.duration : 0.0,
+                ["frame_rate"] = timeline != null ? timeline.editorSettings.frameRate : SessionFrameRate,
+                ["current_frame_60"] = activeAuthoredDirector != null
+                    ? Mathf.RoundToInt((float)(activeAuthoredDirector.time * SessionFrameRate))
+                    : 0,
+                ["characters"] = characters
+            };
+            return Ok(result);
+        });
+
         private static JObject DescribeCharacter(TimelineCharacterRecord character)
         {
             return new JObject

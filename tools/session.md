@@ -1,16 +1,16 @@
 ---
 name: kimodo-scene-context
-description: Resolve and reuse the hidden automatic context shared by Kimodo commands.
+description: Resolve and inspect the automatic context shared by Kimodo commands.
 ---
 
 # Scene context / 场景上下文
 
-Kimodo commands no longer expose Session creation, switching, raw lookup, or closing. Each command resolves the active Unity scene and reuses one hidden automatic context for Timeline evaluation, generation, analysis, and pose sampling.
+Kimodo commands do not expose Session creation or switching. Each command resolves the active Unity scene and reuses one automatic context for Timeline evaluation, generation, analysis, and pose sampling. `scene.context` is the read-only discovery command for the real scene, Director, Timeline asset, characters, Animators, Avatars, and loaded clips.
 
 - Scene characters are resolved from the active scene and the selected/open `Animator` when available.
 - Existing clips remain immutable; generation, analysis, retargeting, and corrections append derived assets.
 - Returned character and animation names, `{track,index}` pose references, and project-relative paths are the only handles passed between commands.
-- Do not invoke removed lifecycle or raw lookup commands; the command surface resolves scene context automatically.
+- Use `scene.context` before selecting handles when the active Director or character identity is unknown. The command does not mutate the scene.
 - Scene changes, Editor reloads, and Play Mode transitions can cancel active generation requests and must be reported.
 
 The hidden context may persist internal metadata for reliable polling and analysis caching. That metadata is an implementation detail and is not a public query API.
