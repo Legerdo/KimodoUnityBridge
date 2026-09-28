@@ -325,33 +325,33 @@ namespace KimodoUnityBridge.Command
                 },
                 ["required"] = new JArray("position", "heading")
             };
-            JObject pointItem = new JObject
+            JObject PointProperties(bool includePose, bool includeRoot2D, bool includeEffect, string type)
             {
-                ["type"] = "object",
-                ["additionalProperties"] = false,
-                ["properties"] = new JObject
+                var properties = new JObject
                 {
                     ["frame"] = new JObject { ["type"] = "integer", ["minimum"] = 0 },
-                    ["type"] = new JObject { ["type"] = "string", ["enum"] = new JArray("fullbody", "root2d", "root_effect") },
-                    ["pose"] = poseReference.DeepClone(),
-                    ["root2d"] = root2D.DeepClone(),
-                    ["effect"] = effect.DeepClone()
-                },
-                ["required"] = new JArray("frame", "type")
-            };
-            JObject fullBodyItem = pointItem.DeepClone() as JObject;
-            ((JObject)fullBodyItem["properties"])["type"] = new JObject { ["const"] = "fullbody" };
-            ((JObject)fullBodyItem["properties"])["pose"] = poseReference.DeepClone();
-            ((JObject)fullBodyItem["properties"]).Remove("root2d");
-            ((JObject)fullBodyItem["properties"]).Remove("effect");
-            fullBodyItem["required"] = new JArray("frame", "type", "pose");
-            JObject root2DItem = pointItem.DeepClone() as JObject;
-            ((JObject)root2DItem["properties"])["type"] = new JObject { ["const"] = "root2d" };
-            ((JObject)root2DItem["properties"])["root2d"] = root2D.DeepClone();
-            root2DItem["required"] = new JArray("frame", "type", "root2d");
-            JObject rootEffectItem = pointItem.DeepClone() as JObject;
-            ((JObject)rootEffectItem["properties"])["type"] = new JObject { ["const"] = "root_effect" };
-            rootEffectItem["required"] = new JArray("frame", "type", "root2d", "effect");
+                    ["type"] = new JObject { ["const"] = type }
+                };
+                if (includePose) properties["pose"] = poseReference.DeepClone();
+                if (includeRoot2D) properties["root2d"] = root2D.DeepClone();
+                if (includeEffect) properties["effect"] = effect.DeepClone();
+                return properties;
+            }
+
+            JObject PointItem(bool includePose, bool includeRoot2D, bool includeEffect, string type, params string[] required)
+            {
+                return new JObject
+                {
+                    ["type"] = "object",
+                    ["additionalProperties"] = false,
+                    ["properties"] = PointProperties(includePose, includeRoot2D, includeEffect, type),
+                    ["required"] = new JArray(required)
+                };
+            }
+
+            JObject fullBodyItem = PointItem(true, false, false, "fullbody", "frame", "type", "pose");
+            JObject root2DItem = PointItem(true, true, false, "root2d", "frame", "type", "root2d");
+            JObject rootEffectItem = PointItem(true, true, true, "root_effect", "frame", "type", "root2d", "effect");
             var rootPathItem = new JObject
             {
                 ["type"] = "object",

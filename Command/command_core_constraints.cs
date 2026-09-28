@@ -123,10 +123,9 @@ namespace KimodoUnityBridge.Command
                     string type = constraint.Value<string>("type")?.Trim().ToLowerInvariant();
                     if (type != "fullbody" && type != "root2d" && type != "root_effect")
                         throw new InvalidOperationException($"constraints[{i}].type must be fullbody, root2d, or root_effect.");
+                    ValidatePointConstraintShape(constraint, type, i);
                     if (type == "fullbody")
                     {
-                        if (constraint["pose"] is not JObject)
-                            throw new InvalidOperationException($"constraints[{i}].pose is required for fullbody.");
                         samples.Add(BuildReferencedPoseConstraint(
                             constraint, "fullbody", targetCache, modelName, frameRate, at, i,
                             sceneCharacterRoot, poseWarnings));
@@ -139,7 +138,7 @@ namespace KimodoUnityBridge.Command
                     else
                     {
                         samples.Add(BuildRootEffectConstraint(
-                            constraint, targetCache, modelName, frameRate, at, i,
+                            constraint, targetCache, frameRate, at, i,
                             sceneCharacterRoot, poseWarnings));
                     }
                 }
@@ -160,7 +159,6 @@ namespace KimodoUnityBridge.Command
         private static KimodoMarkerSampleResult BuildRootEffectConstraint(
             JObject value,
             RetargetSkeleton targetCache,
-            string modelName,
             float frameRate,
             double sampleTime,
             int constraintIndex,
@@ -173,12 +171,7 @@ namespace KimodoUnityBridge.Command
                     $"constraints[{constraintIndex}].root_effect requires root2d.");
             }
             KimodoMarkerSampleResult result = BuildRoot2DConstraint(
-                new JObject
-                {
-                    ["pose"] = value["pose"],
-                    ["position"] = root2D["position"],
-                    ["heading"] = root2D["heading"]
-                }, sampleTime, constraintIndex, targetCache, sceneCharacterRoot, poseWarnings);
+                value, sampleTime, constraintIndex, targetCache, sceneCharacterRoot, poseWarnings);
             result.constraintMode = "mix";
             result.enableMask = new KimodoConstraintMask
             {
@@ -208,16 +201,7 @@ namespace KimodoUnityBridge.Command
                 }
 
                 KimodoMarkerSampleResult effector = BuildEffectorTargetConstraint(
-                    effectorValue, types[i], targetCache, sampleTime, constraintIndex);
-                KimodoMarkerSampleResult validation = result.Clone();
-                CopyEffector(validation, effector, types[i]);
-                validation.constraintMode = "mix";
-                if (!KimodoConstraintPosePipeline.TryApply(
-                        validation, frameRate, targetCache, out _, out _, out string validationError))
-                {
-                    throw new InvalidOperationException(
-                        $"constraints[{constraintIndex}].effect.{names[i]} failed preflight IK validation: {validationError}");
-                }
+                    effectorValue, types[i], sampleTime, constraintIndex);
                 CopyEffector(result, effector, types[i]);
                 anyEffector = true;
             }
@@ -228,8 +212,112 @@ namespace KimodoUnityBridge.Command
                     $"constraints[{constraintIndex}].root_effect requires at least one end effector.");
             }
 
+            // Validate the complete RootEffect sample from one unchanged support
+            // pose. Solving each effector independently on the same skeleton would
+            // make later targets depend on earlier solver mutations.
+            if (!KimodoConstraintPosePipeline.TryApply(
+                    result, frameRate, targetCache, out _, out _, out string validationError))
+            {
+                throw new InvalidOperationException(
+                    $"constraints[{constraintIndex}].root_effect failed preflight IK validation: {validationError}");
+            }
+            ValidateSolvedRootEffectors(result, targetCache, effect, constraintIndex);
+
             result.enabled = true;
             return result;
+        }
+
+        private static void ValidateSolvedRootEffectors(
+            KimodoMarkerSampleResult result,
+            RetargetSkeleton targetCache,
+            JObject effect,
+            int constraintIndex)
+        {
+            string[] names = { "left_hand", "right_hand", "left_foot", "right_foot" };
+            HumanBodyBones[] bones =
+            {
+                HumanBodyBones.LeftHand,
+                HumanBodyBones.RightHand,
+                HumanBodyBones.LeftFoot,
+                HumanBodyBones.RightFoot
+            };
+            for (int i = 0; i < names.Length; i++)
+            {
+                if (effect[names[i]] is not JObject)
+                {
+                    continue;
+                }
+                if (!targetCache.GetBonePose(bones[i], out Vector3 solvedPosition, out Quaternion solvedRotation))
+                {
+                    throw new InvalidOperationException(
+                        $"constraints[{constraintIndex}].effect.{names[i]} could not be read after IK preflight.");
+                }
+
+                KimodoRigidTransform target = names[i] switch
+                {
+                    "left_hand" => result.effectors.leftHand,
+                    "right_hand" => result.effectors.rightHand,
+                    "left_foot" => result.effectors.leftFoot,
+                    "right_foot" => result.effectors.rightFoot,
+                    _ => KimodoRigidTransform.Identity
+                };
+                float positionError = Vector3.Distance(solvedPosition, target.t);
+                float rotationError = target.enableRotation
+                    ? Quaternion.Angle(solvedRotation, target.q)
+                    : 0f;
+                if (positionError > 0.03f || rotationError > 15f)
+                {
+                    throw new InvalidOperationException(
+                        $"constraints[{constraintIndex}].effect.{names[i]} is unreachable " +
+                        $"(position_error={positionError.ToString("0.####", CultureInfo.InvariantCulture)}, " +
+                        $"rotation_error_degrees={rotationError.ToString("0.##", CultureInfo.InvariantCulture)}).");
+                }
+            }
+        }
+
+        private static void ValidatePointConstraintShape(JObject constraint, string type, int index)
+        {
+            var allowed = new HashSet<string>(StringComparer.Ordinal)
+            {
+                "frame", "type"
+            };
+            if (type == "fullbody") allowed.Add("pose");
+            if (type == "root2d")
+            {
+                allowed.Add("pose");
+                allowed.Add("root2d");
+            }
+            if (type == "root_effect")
+            {
+                allowed.Add("pose");
+                allowed.Add("root2d");
+                allowed.Add("effect");
+            }
+
+            string unexpected = constraint.Properties()
+                .Select(property => property.Name)
+                .FirstOrDefault(name => !allowed.Contains(name));
+            if (unexpected != null)
+            {
+                throw new InvalidOperationException(
+                    $"constraints[{index}] field '{unexpected}' is not valid for type '{type}'.");
+            }
+
+            if (type == "fullbody" && constraint["pose"] is not JObject)
+            {
+                throw new InvalidOperationException($"constraints[{index}].pose is required for fullbody.");
+            }
+            if (type == "root2d" && constraint["root2d"] is not JObject)
+            {
+                throw new InvalidOperationException($"constraints[{index}].root2d is required for root2d.");
+            }
+            if (type == "root_effect")
+            {
+                if (constraint["root2d"] is not JObject)
+                    throw new InvalidOperationException($"constraints[{index}].root2d is required for root_effect.");
+                if (constraint["effect"] is not JObject)
+                    throw new InvalidOperationException($"constraints[{index}].effect is required for root_effect.");
+            }
         }
 
         private static void CopyEffector(
@@ -267,7 +355,6 @@ namespace KimodoUnityBridge.Command
         private static KimodoMarkerSampleResult BuildEffectorTargetConstraint(
             JObject value,
             string type,
-            RetargetSkeleton targetCache,
             double sampleTime,
             int constraintIndex)
         {
@@ -301,18 +388,6 @@ namespace KimodoUnityBridge.Command
                 default: throw new InvalidOperationException($"Unsupported effect type '{type}'.");
             }
             return result;
-        }
-
-        private static Vector3 ReadVector3(JArray value, string name)
-        {
-            if (value == null || value.Count != 3) throw new InvalidOperationException($"{name} must be [x,y,z].");
-            return new Vector3(ReadFiniteFloat(value[0], name + "[0]"), ReadFiniteFloat(value[1], name + "[1]"), ReadFiniteFloat(value[2], name + "[2]"));
-        }
-
-        private static Quaternion ReadQuaternion(JArray value, string name)
-        {
-            if (value == null || value.Count != 4) throw new InvalidOperationException($"{name} must be [x,y,z,w].");
-            return new Quaternion(ReadFiniteFloat(value[0], name + "[0]"), ReadFiniteFloat(value[1], name + "[1]"), ReadFiniteFloat(value[2], name + "[2]"), ReadFiniteFloat(value[3], name + "[3]")).normalized;
         }
 
         private static IEnumerable<KimodoMarkerSampleResult> BuildRootPathConstraintsSparse(
@@ -505,8 +580,9 @@ namespace KimodoUnityBridge.Command
             {
                 GetRootTransform(poseSample, out rootPosition, out rootRotation);
             }
-            bool hasPosition = value?["position"] != null;
-            bool hasHeading = value?["heading"] != null;
+            JObject root2D = value?["root2d"] as JObject;
+            bool hasPosition = root2D?["position"] != null;
+            bool hasHeading = root2D?["heading"] != null;
             bool hasRootPose = poseSample != null;
             if (hasPosition != hasHeading)
             {
@@ -514,8 +590,8 @@ namespace KimodoUnityBridge.Command
             }
             if (hasPosition)
             {
-                Vector2 position = RequiredVector2(value, "position");
-                Vector2 heading = RequiredVector2(value, "heading");
+                Vector2 position = RequiredVector2(root2D, "position");
+                Vector2 heading = RequiredVector2(root2D, "heading");
                 if (heading.sqrMagnitude <= 1e-8f)
                 {
                     throw new InvalidOperationException($"constraints[{constraintIndex}].root2d.heading must be non-zero.");
