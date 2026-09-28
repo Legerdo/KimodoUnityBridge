@@ -59,7 +59,7 @@ namespace KimodoUnityBridge.Command
                     if (!TryCreateAvatarRestPoseSample(
                             cache,
                             character.Root,
-                            alignToSceneRoot: true,
+                            alignToSceneRoot: false,
                             out source,
                             out string restError))
                     {
@@ -112,7 +112,7 @@ namespace KimodoUnityBridge.Command
 
                 if (!KimodoConstraintPosePipeline.TryApply(
                         candidate,
-                        KimodoFrameTimeUtility.CommandFrameRate,
+                        (float)KimodoFrameTimeUtility.CommandFrameRate,
                         cache,
                         out _,
                         out _,

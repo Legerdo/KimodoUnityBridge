@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using KimodoBridge;
 using KimodoBridge.Editor;
 using KimodoUnityBridge.Command;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Playables;
 using UnityEngine.Timeline;
@@ -60,8 +62,17 @@ namespace KimodoUnityBridge.Command.Tests
 
                 MethodInfo build = typeof(command_context).GetMethod(
                     "BuildRoot2DConstraint", PrivateStatic);
-                var commandValue = JObject.Parse(
-                    "{'pose':{'track':'Character.Poses','index':0}} ");
+                Vector3 supportRoot = support.rootOverride.t;
+                Vector3 supportForward = support.rootOverride.q * Vector3.forward;
+                var commandValue = new JObject
+                {
+                    ["pose"] = new JObject { ["track"] = "Character.Poses", ["index"] = 0 },
+                    ["root2d"] = new JObject
+                    {
+                        ["position"] = new JArray(supportRoot.x, supportRoot.z),
+                        ["heading"] = new JArray(supportForward.x, supportForward.z)
+                    }
+                };
                 var commandResult = (KimodoMarkerSampleResult)build.Invoke(
                     null, new object[] { commandValue, 1.5, 0, null, null, new List<string>() });
 
@@ -107,7 +118,7 @@ namespace KimodoUnityBridge.Command.Tests
                 var warnings = new List<string>();
                 var result = (KimodoMarkerSampleResult)build.Invoke(null, new object[]
                 {
-                    JObject.Parse("{'position':[1,2],'heading':[0,1]}"),
+                    JObject.Parse("{'root2d':{'position':[1,2],'heading':[0,1]}}"),
                     1.0,
                     0,
                     skeleton,
@@ -118,6 +129,8 @@ namespace KimodoUnityBridge.Command.Tests
                 Assert.That(result.constraintMode, Is.EqualTo("root2d"));
                 Assert.That(result.sampleData, Is.Not.Null);
                 Assert.That(result.sampleData.IsValid, Is.True);
+                Assert.That(result.rootOverride.t.x, Is.EqualTo(1f).Within(1e-5f));
+                Assert.That(result.rootOverride.t.z, Is.EqualTo(2f).Within(1e-5f));
                 Assert.That(warnings, Has.Count.EqualTo(1));
                 Assert.That(warnings[0], Does.Contain("Avatar skeleton rest pose"));
             }
@@ -142,11 +155,12 @@ namespace KimodoUnityBridge.Command.Tests
             }
 
             Assert.That(effector, Is.Not.Null);
-            JObject properties = (JObject)effector["parameters"]["properties"];
-            CollectionAssert.Contains((JArray)effector["parameters"]["required"], "character");
-            CollectionAssert.Contains((JArray)effector["parameters"]["required"], "effector");
-            CollectionAssert.Contains((JArray)effector["parameters"]["required"], "target");
-            CollectionAssert.DoesNotContain((JArray)effector["parameters"]["required"], "pose");
+            JObject properties = (JObject)effector["inputSchema"]["properties"];
+            IEnumerable<string> required = ((JArray)effector["inputSchema"]["required"]).Values<string>();
+            CollectionAssert.Contains(required, "character");
+            CollectionAssert.Contains(required, "effector");
+            CollectionAssert.Contains(required, "target");
+            CollectionAssert.DoesNotContain(required, "pose");
             Assert.That(properties["pose"], Is.Not.Null);
             Assert.That(properties["root2d"], Is.Not.Null);
             JObject constraints = JObject.Parse((string)typeof(command_context)
@@ -158,6 +172,99 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(serialized, Does.Contain("root_effect"));
             Assert.That(serialized, Does.Contain("effect"));
             Assert.That(serialized, Does.Contain("\"type\""));
+        }
+
+        [Test]
+        public void GeneratedConstraintSchema_HasStrictTypedBranches()
+        {
+            JObject definitions = JObject.Parse((string)typeof(command_context)
+                .GetMethod("BuildCommandDefinitionsJson", PrivateStatic)
+                .Invoke(null, null));
+            JObject generate = ((JArray)definitions["tools"]).Values<JObject>()
+                .Single(item => item.Value<string>("name") == "kimodo_generate_animation");
+            JObject constraints = (JObject)generate["inputSchema"]["properties"]["constraints"];
+            JArray branches = (JArray)constraints["items"]["oneOf"];
+
+            JObject fullBody = branches.Values<JObject>().Single(item =>
+                item["properties"]?["type"]?["const"]?.Value<string>() == "fullbody");
+            JObject root2D = branches.Values<JObject>().Single(item =>
+                item["properties"]?["type"]?["const"]?.Value<string>() == "root2d");
+            JObject rootEffect = branches.Values<JObject>().Single(item =>
+                item["properties"]?["type"]?["const"]?.Value<string>() == "root_effect");
+
+            Assert.That(fullBody["properties"]["pose"], Is.Not.Null);
+            Assert.That(fullBody["properties"]["root2d"], Is.Null);
+            Assert.That(fullBody["properties"]["effect"], Is.Null);
+            Assert.That(root2D["properties"]["root2d"], Is.Not.Null);
+            Assert.That(root2D["properties"]["effect"], Is.Null);
+            Assert.That(rootEffect["properties"]["root2d"], Is.Not.Null);
+            Assert.That(rootEffect["properties"]["effect"], Is.Not.Null);
+        }
+
+        [Test]
+        public void ConstraintManual_UsesTopLevelTypedProtocol()
+        {
+            JObject manual = (JObject)typeof(command_context)
+                .GetMethod("BuildConstraintManual", PrivateStatic)
+                .Invoke(null, null);
+            JArray entries = (JArray)manual["constraints"];
+            JObject fullBody = entries.Values<JObject>().Single(item => item.Value<string>("type") == "fullbody");
+            JObject rootEffect = entries.Values<JObject>().Single(item => item.Value<string>("type") == "root_effect");
+            Assert.That(fullBody["shape"]["fullbody"], Is.Null);
+            Assert.That(fullBody["shape"]["pose"], Is.Not.Null);
+            Assert.That(rootEffect["shape"]["root2d"], Is.Not.Null);
+            Assert.That(rootEffect["shape"]["effect"], Is.Not.Null);
+        }
+
+        [Test]
+        public void PointConstraintParser_RejectsCrossTypeFields()
+        {
+            MethodInfo validate = typeof(command_context).GetMethod(
+                "ValidatePointConstraintShape", PrivateStatic);
+            Assert.That(validate, Is.Not.Null);
+
+            var root2DWithEffect = new JObject
+            {
+                ["frame"] = 10,
+                ["type"] = "root2d",
+                ["root2d"] = new JObject
+                {
+                    ["position"] = new JArray(0, 0),
+                    ["heading"] = new JArray(0, 1)
+                },
+                ["effect"] = new JObject
+                {
+                    ["right_hand"] = new JObject { ["position"] = new JArray(0, 1, 0) }
+                }
+            };
+            Assert.Throws<TargetInvocationException>(() => validate.Invoke(
+                null, new object[] { root2DWithEffect, "root2d", 0 }));
+
+            var fullBodyWithRoot = new JObject
+            {
+                ["frame"] = 10,
+                ["type"] = "fullbody",
+                ["pose"] = new JObject { ["track"] = "Pose", ["index"] = 0 },
+                ["root2d"] = new JObject
+                {
+                    ["position"] = new JArray(0, 0),
+                    ["heading"] = new JArray(0, 1)
+                }
+            };
+            Assert.Throws<TargetInvocationException>(() => validate.Invoke(
+                null, new object[] { fullBodyWithRoot, "fullbody", 1 }));
+        }
+
+        [Test]
+        public void StaticHelp_MatchesCodeGeneratedDefinitions()
+        {
+            TextAsset help = AssetDatabase.LoadAssetAtPath<TextAsset>(
+                "Packages/com.unity.kimodo_unity_motion_tools/Command/help.json");
+            Assert.That(help, Is.Not.Null);
+            JObject generated = JObject.Parse(command_dispatcher.GetCommandDefinitionsJson());
+            JObject committed = JObject.Parse(help.text);
+            Assert.That(JToken.DeepEquals(committed, generated), Is.True,
+                "Command/help.json must be exported from the code-generated definitions.");
         }
 
         private static KimodoMarkerSampleResult CreateSupportSample()

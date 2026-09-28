@@ -22,6 +22,9 @@ PointConstraint = { frame, type, pose?, root2d?, effect? }
   创建它，并在响应中记录 `avatar_rest` warning。
 - `type` 是唯一的约束类型判别字段：`fullbody`、`root2d` 或 `root_effect`。
 - `root2d` 和 `effect` 是并列覆盖字段；三种类型不互相嵌套。
+- 每个项只能包含该 `type` 允许的字段：`fullbody` 只允许 `pose`；`root2d` 允许可选
+  `pose` 和必需的 `root2d`；`root_effect` 允许可选 `pose`、必需的 `root2d` 和
+  `effect`。未知字段必须拒绝，不能被静默忽略。
 
 Pose 是约束的起始状态，不是可选的装饰数据。显式 Pose 或 AvatarRestPose 都提供根节点
 完整变换、身体肌肉、双脚以及需要的末端数据，使约束不会退化为隐含的当前场景姿态、
@@ -137,7 +140,8 @@ warning。`projected_target` 只是建议值，不会自动修改目标或生成
 
 ## 6. 同帧合并和优先级
 
-同一帧的多个点约束按通道合并：
+同一帧的多个点约束按通道合并。每个项仍然只有一个 `type`；如果需要根和末端目标，
+使用一个 `root_effect` 项，不要在 `root2d` 项中附加 `effect`：
 
 1. `fullbody` 提供身体肌肉、根完整变换和双脚支撑。
 2. `root2d` 覆盖根的平面位置和水平朝向。

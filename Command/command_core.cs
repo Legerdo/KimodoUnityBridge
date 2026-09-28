@@ -41,28 +41,7 @@ namespace KimodoUnityBridge.Command
         private static readonly object JobsLock = new object();
         private static readonly Lazy<CommandCatalog> Commands = new Lazy<CommandCatalog>(BuildCommandCatalog, LazyThreadSafetyMode.ExecutionAndPublication);
 
-        public static string GetCommandDefinitionsJson()
-        {
-            TextAsset help = AssetDatabase.LoadAssetAtPath<TextAsset>(HelpAssetPath);
-            if (help != null)
-            {
-                try
-                {
-                    JObject parsed = JObject.Parse(help.text);
-                    bool hasCurrentCommandSet = parsed["tools"] is JArray tools &&
-                        tools.Values<JObject>().Any(item =>
-                            string.Equals(item.Value<string>("name"), EffectorValidateCommand, StringComparison.Ordinal));
-                    return hasCurrentCommandSet
-                        ? parsed.ToString(Formatting.None)
-                        : BuildCommandDefinitionsJson();
-                }
-                catch (JsonException)
-                {
-                    // The code-built schema keeps command discovery available while an edited help file is invalid.
-                }
-            }
-            return BuildCommandDefinitionsJson();
-        }
+        public static string GetCommandDefinitionsJson() => BuildCommandDefinitionsJson();
 
         private static string BuildCommandDefinitionsJson()
         {
@@ -124,7 +103,7 @@ namespace KimodoUnityBridge.Command
                             OptionalGeneration(),
                             OptionalOutput(),
                             Optional("analysis_option", "object", "Optional analysis object for the phase-track analyzer. Legacy uniform keyframe-count controls are removed; Humanoid output always uses phase_track_version and continuous phase_track intervals."),
-                            OptionalConstraints("constraints", "Point, root_path, and inout boundary constraints. In/Out sources are explicit Clips sampled in C#; command frames use 60 FPS."))),
+                            OptionalConstraints("constraints", "Typed point, root_path, and inout boundary constraints. Point items use exactly one of fullbody, root2d, or root_effect; command frames use 60 FPS."))),
                     CommandDefinition(PoseGetCommand,
                         "Sample one Timeline time, scene time, or Clip-local time into a new External Pose slot. Use exactly one source mode: timeline_time_seconds, scene_time_seconds, or clip with clip_time_seconds. Returns the reusable pose identity {track,index}.",
                         Properties(
@@ -286,7 +265,7 @@ namespace KimodoUnityBridge.Command
                         ["shape"] = new JObject
                         {
                             ["frame"] = "Relative frame in the generated clip.",
-                            ["fullbody"] = new JObject { ["pose"] = "{track,index}" }
+                            ["pose"] = "{track,index}"
                         }
                     },
                     new JObject
@@ -298,10 +277,25 @@ namespace KimodoUnityBridge.Command
                             ["frame"] = "Relative frame in the generated clip.",
                             ["root2d"] = new JObject
                             {
-                                ["pose"] = "Optional External Pose reference: {track,index}; omitted uses Avatar skeleton rest pose",
                                 ["position"] = "[x,z]",
                                 ["heading"] = "[x,z] forward direction"
                             }
+                        }
+                    },
+                    new JObject
+                    {
+                        ["type"] = "root_effect",
+                        ["description"] = "A RootEffect constraint that combines Root2D support with one or more world-space hand or foot targets.",
+                        ["shape"] = new JObject
+                        {
+                            ["frame"] = "Relative frame in the generated clip.",
+                            ["pose"] = "Optional External Pose reference: {track,index}; omitted uses Avatar skeleton rest pose",
+                            ["root2d"] = new JObject
+                            {
+                                ["position"] = "[x,z]",
+                                ["heading"] = "[x,z] forward direction"
+                            },
+                            ["effect"] = "One or more of left_hand, right_hand, left_foot, right_foot with {position:[x,y,z], rotation?:[x,y,z,w]}"
                         }
                     },
                     new JObject

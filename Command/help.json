@@ -371,7 +371,7 @@
           },
           "constraints": {
             "type": "array",
-            "description": "Point, root_path, and inout boundary constraints. In/Out sources are explicit Clips sampled in C#; command frames use 60 FPS.",
+            "description": "Typed point, root_path, and inout boundary constraints. Point items use exactly one of fullbody, root2d, or root_effect; command frames use 60 FPS.",
             "items": {
               "oneOf": [
                 {
@@ -380,58 +380,69 @@
                   "properties": {
                     "frame": {
                       "type": "integer",
-                      "minimum": 0,
-                      "description": "Relative frame in the generated clip at 60 FPS."
+                      "minimum": 0
                     },
-                    "fullbody": {
+                    "type": {
+                      "const": "fullbody"
+                    },
+                    "pose": {
                       "type": "object",
+                      "description": "External Pose slot in the current scene context.",
                       "additionalProperties": false,
                       "properties": {
-                        "pose": {
-                          "type": "object",
-                          "description": "External Pose slot in the current scene context.",
-                          "additionalProperties": false,
-                          "properties": {
-                            "track": {
-                              "type": "string"
-                            },
-                            "index": {
-                              "type": "integer",
-                              "minimum": 0
-                            }
-                          },
-                          "required": [
-                            "track",
-                            "index"
-                          ]
+                        "track": {
+                          "type": "string"
+                        },
+                        "index": {
+                          "type": "integer",
+                          "minimum": 0
                         }
                       },
                       "required": [
-                        "pose"
+                        "track",
+                        "index"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "frame",
+                    "type",
+                    "pose"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "frame": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "type": {
+                      "const": "root2d"
+                    },
+                    "pose": {
+                      "type": "object",
+                      "description": "External Pose slot in the current scene context.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "track": {
+                          "type": "string"
+                        },
+                        "index": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "track",
+                        "index"
                       ]
                     },
                     "root2d": {
                       "type": "object",
                       "additionalProperties": false,
                       "properties": {
-                        "pose": {
-                          "type": "object",
-                          "description": "External Pose slot in the current scene context.",
-                          "additionalProperties": false,
-                          "properties": {
-                            "track": {
-                              "type": "string"
-                            },
-                            "index": {
-                              "type": "integer",
-                              "minimum": 0
-                            }
-                          },
-                          "required": [
-                            "track",
-                            "index"
-                          ]
-                        },
                         "position": {
                           "type": "array",
                           "items": {
@@ -450,168 +461,177 @@
                         }
                       },
                       "required": [
-                        "pose"
+                        "position",
+                        "heading"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "frame",
+                    "type",
+                    "root2d"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "frame": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "type": {
+                      "const": "root_effect"
+                    },
+                    "pose": {
+                      "type": "object",
+                      "description": "External Pose slot in the current scene context.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "track": {
+                          "type": "string"
+                        },
+                        "index": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "track",
+                        "index"
                       ]
                     },
-                    "root_effect": {
+                    "root2d": {
                       "type": "object",
                       "additionalProperties": false,
                       "properties": {
-                        "root2d": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "properties": {
-                            "pose": {
-                              "type": "object",
-                              "description": "External Pose slot in the current scene context.",
-                              "additionalProperties": false,
-                              "properties": {
-                                "track": {
-                                  "type": "string"
-                                },
-                                "index": {
-                                  "type": "integer",
-                                  "minimum": 0
-                                }
-                              },
-                              "required": [
-                                "track",
-                                "index"
-                              ]
-                            },
-                            "position": {
-                              "type": "array",
-                              "items": {
-                                "type": "number"
-                              },
-                              "minItems": 2,
-                              "maxItems": 2
-                            },
-                            "heading": {
-                              "type": "array",
-                              "items": {
-                                "type": "number"
-                              },
-                              "minItems": 2,
-                              "maxItems": 2
-                            }
+                        "position": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
                           },
-                          "required": [
-                            "pose"
-                          ]
+                          "minItems": 2,
+                          "maxItems": 2
                         },
+                        "heading": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        }
+                      },
+                      "required": [
+                        "position",
+                        "heading"
+                      ]
+                    },
+                    "effect": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
                         "left_hand": {
                           "type": "object",
                           "additionalProperties": false,
                           "properties": {
-                            "pose": {
-                              "type": "object",
-                              "description": "External Pose slot in the current scene context.",
-                              "additionalProperties": false,
-                              "properties": {
-                                "track": {
-                                  "type": "string"
-                                },
-                                "index": {
-                                  "type": "integer",
-                                  "minimum": 0
-                                }
-                              },
-                              "required": [
-                                "track",
-                                "index"
-                              ]
+                            "position": {
+                              "type": "array",
+                              "minItems": 3,
+                              "maxItems": 3,
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "rotation": {
+                              "type": "array",
+                              "minItems": 4,
+                              "maxItems": 4,
+                              "items": {
+                                "type": "number"
+                              }
                             }
                           },
                           "required": [
-                            "pose"
+                            "position"
                           ]
                         },
                         "right_hand": {
                           "type": "object",
                           "additionalProperties": false,
                           "properties": {
-                            "pose": {
-                              "type": "object",
-                              "description": "External Pose slot in the current scene context.",
-                              "additionalProperties": false,
-                              "properties": {
-                                "track": {
-                                  "type": "string"
-                                },
-                                "index": {
-                                  "type": "integer",
-                                  "minimum": 0
-                                }
-                              },
-                              "required": [
-                                "track",
-                                "index"
-                              ]
+                            "position": {
+                              "type": "array",
+                              "minItems": 3,
+                              "maxItems": 3,
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "rotation": {
+                              "type": "array",
+                              "minItems": 4,
+                              "maxItems": 4,
+                              "items": {
+                                "type": "number"
+                              }
                             }
                           },
                           "required": [
-                            "pose"
+                            "position"
                           ]
                         },
                         "left_foot": {
                           "type": "object",
                           "additionalProperties": false,
                           "properties": {
-                            "pose": {
-                              "type": "object",
-                              "description": "External Pose slot in the current scene context.",
-                              "additionalProperties": false,
-                              "properties": {
-                                "track": {
-                                  "type": "string"
-                                },
-                                "index": {
-                                  "type": "integer",
-                                  "minimum": 0
-                                }
-                              },
-                              "required": [
-                                "track",
-                                "index"
-                              ]
+                            "position": {
+                              "type": "array",
+                              "minItems": 3,
+                              "maxItems": 3,
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "rotation": {
+                              "type": "array",
+                              "minItems": 4,
+                              "maxItems": 4,
+                              "items": {
+                                "type": "number"
+                              }
                             }
                           },
                           "required": [
-                            "pose"
+                            "position"
                           ]
                         },
                         "right_foot": {
                           "type": "object",
                           "additionalProperties": false,
                           "properties": {
-                            "pose": {
-                              "type": "object",
-                              "description": "External Pose slot in the current scene context.",
-                              "additionalProperties": false,
-                              "properties": {
-                                "track": {
-                                  "type": "string"
-                                },
-                                "index": {
-                                  "type": "integer",
-                                  "minimum": 0
-                                }
-                              },
-                              "required": [
-                                "track",
-                                "index"
-                              ]
+                            "position": {
+                              "type": "array",
+                              "minItems": 3,
+                              "maxItems": 3,
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "rotation": {
+                              "type": "array",
+                              "minItems": 4,
+                              "maxItems": 4,
+                              "items": {
+                                "type": "number"
+                              }
                             }
                           },
                           "required": [
-                            "pose"
+                            "position"
                           ]
                         }
                       },
-                      "required": [
-                        "root2d"
-                      ],
                       "anyOf": [
                         {
                           "required": [
@@ -634,155 +654,13 @@
                           ]
                         }
                       ]
-                    },
-                    "left_hand": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "pose": {
-                          "type": "object",
-                          "description": "External Pose slot in the current scene context.",
-                          "additionalProperties": false,
-                          "properties": {
-                            "track": {
-                              "type": "string"
-                            },
-                            "index": {
-                              "type": "integer",
-                              "minimum": 0
-                            }
-                          },
-                          "required": [
-                            "track",
-                            "index"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "pose"
-                      ]
-                    },
-                    "right_hand": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "pose": {
-                          "type": "object",
-                          "description": "External Pose slot in the current scene context.",
-                          "additionalProperties": false,
-                          "properties": {
-                            "track": {
-                              "type": "string"
-                            },
-                            "index": {
-                              "type": "integer",
-                              "minimum": 0
-                            }
-                          },
-                          "required": [
-                            "track",
-                            "index"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "pose"
-                      ]
-                    },
-                    "left_foot": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "pose": {
-                          "type": "object",
-                          "description": "External Pose slot in the current scene context.",
-                          "additionalProperties": false,
-                          "properties": {
-                            "track": {
-                              "type": "string"
-                            },
-                            "index": {
-                              "type": "integer",
-                              "minimum": 0
-                            }
-                          },
-                          "required": [
-                            "track",
-                            "index"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "pose"
-                      ]
-                    },
-                    "right_foot": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "pose": {
-                          "type": "object",
-                          "description": "External Pose slot in the current scene context.",
-                          "additionalProperties": false,
-                          "properties": {
-                            "track": {
-                              "type": "string"
-                            },
-                            "index": {
-                              "type": "integer",
-                              "minimum": 0
-                            }
-                          },
-                          "required": [
-                            "track",
-                            "index"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "pose"
-                      ]
                     }
                   },
                   "required": [
-                    "frame"
-                  ],
-                  "anyOf": [
-                    {
-                      "required": [
-                        "fullbody"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "root2d"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "root_effect"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "left_hand"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "right_hand"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "left_foot"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "right_foot"
-                      ]
-                    }
+                    "frame",
+                    "type",
+                    "root2d",
+                    "effect"
                   ]
                 },
                 {
@@ -1053,7 +931,7 @@
           }
         },
         {
-          "description": "Use one RootEffect sample to keep root context and end-effector targets together; it is exported internally as mix.",
+          "description": "Use one root_effect sample with root and effect coordinates; effector validation runs before generation.",
           "arguments": {
             "character": "<character>",
             "prompt": "Reach to the apple",
@@ -1062,18 +940,28 @@
             "constraints": [
               {
                 "frame": 90,
-                "root_effect": {
-                  "root2d": {
-                    "pose": {
-                      "track": "<pose track>",
-                      "index": 0
-                    }
-                  },
+                "type": "root_effect",
+                "pose": {
+                  "track": "<pose track>",
+                  "index": 0
+                },
+                "root2d": {
+                  "position": [
+                    2.4,
+                    5.0
+                  ],
+                  "heading": [
+                    0,
+                    1
+                  ]
+                },
+                "effect": {
                   "right_hand": {
-                    "pose": {
-                      "track": "<pose track>",
-                      "index": 1
-                    }
+                    "position": [
+                      2.55,
+                      0.95,
+                      5.35
+                    ]
                   }
                 }
               }
@@ -1560,6 +1448,156 @@
             },
             "muscles": {
               "Spine Front-Back": 0.1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "effector_validate",
+      "description": "Validate an end-effector target against the current Avatar and reference pose by running the Kimodo Humanoid IK pipeline.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string",
+            "description": "Safe character name in the current scene context."
+          },
+          "effector": {
+            "type": "string",
+            "enum": [
+              "left_hand",
+              "right_hand",
+              "left_foot",
+              "right_foot"
+            ]
+          },
+          "pose": {
+            "type": "object",
+            "description": "External Pose slot in the current scene context.",
+            "additionalProperties": false,
+            "properties": {
+              "track": {
+                "type": "string"
+              },
+              "index": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "track",
+              "index"
+            ]
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "position": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": {
+                  "type": "number"
+                },
+                "description": "World-space target position."
+              },
+              "rotation": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 4,
+                "items": {
+                  "type": "number"
+                },
+                "description": "Optional world-space target rotation quaternion."
+              }
+            },
+            "required": [
+              "position"
+            ]
+          },
+          "root2d": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "position": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "number"
+                }
+              },
+              "heading": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "number"
+                }
+              }
+            },
+            "oneOf": [
+              {
+                "required": [
+                  "position",
+                  "heading"
+                ]
+              },
+              {
+                "maxProperties": 0
+              }
+            ]
+          },
+          "options": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "position_tolerance": {
+                "type": "number",
+                "minimum": 0,
+                "default": 0.03
+              },
+              "rotation_tolerance_degrees": {
+                "type": "number",
+                "minimum": 0,
+                "default": 15.0
+              },
+              "project_if_unreachable": {
+                "type": "boolean",
+                "default": false
+              }
+            }
+          }
+        },
+        "required": [
+          "character",
+          "effector",
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "description": "Validate a right-hand target with the current Avatar and reference Pose before using it in RootEffect.",
+          "arguments": {
+            "character": "<character>",
+            "effector": "right_hand",
+            "pose": {
+              "track": "<pose track>",
+              "index": 1
+            },
+            "target": {
+              "position": [
+                0.25,
+                1.08,
+                0.42
+              ]
+            },
+            "options": {
+              "position_tolerance": 0.03,
+              "rotation_tolerance_degrees": 15
             }
           }
         }
