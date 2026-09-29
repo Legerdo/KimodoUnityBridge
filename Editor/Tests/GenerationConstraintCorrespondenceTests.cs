@@ -37,7 +37,7 @@ namespace KimodoUnityBridge.Command.Tests
                 KimodoEditorGenerateRequest request = fixture.BuildRequest(
                     fixture.Capture("root2d", 30.0 / 30.0));
                 request.Prompt = "a person standing still";
-                request.DiffusionSteps = 2;
+                request.DiffusionSteps = 100;
                 request.EffectiveSeed = 1701;
                 request.Token = timeout.Token;
 
@@ -100,9 +100,29 @@ namespace KimodoUnityBridge.Command.Tests
                     KimodoRetargetMarkerSamplingUtility.CaptureWorldTargets(fixture.Skeleton, actual);
 
                     KimodoMarkerSampleResult expected = request.ConstraintSamples.Single();
-                    Assert.That(Vector3.Distance(actual.rootOverride.t, expected.rootOverride.t),
+                    Vector2 actualPlanar = new Vector2(actual.rootOverride.t.x, actual.rootOverride.t.z);
+                    Vector2 expectedPlanar = new Vector2(expected.rootOverride.t.x, expected.rootOverride.t.z);
+                    float planarDistance = Vector2.Distance(actualPlanar, expectedPlanar);
+                    float verticalDelta = Mathf.Abs(actual.rootOverride.t.y - expected.rootOverride.t.y);
+                    string rawRootDescription = "raw motion unavailable";
+                    if (KimodoRawMotionUtility.TryParse(
+                        result.MotionJsonCompact,
+                        out KimodoRawMotionData rawMotion,
+                        out _))
+                    {
+                        int rawFrame = Mathf.Clamp(30, 0, rawMotion.FrameCount - 1);
+                        if (rawMotion.TryReadUnityRootPosition(rawFrame, out Vector3 rawRoot))
+                        {
+                            rawRootDescription = $"raw frames 29/30/31=" +
+                                $"{ReadRawRoot(rawMotion, 29)}/{ReadRawRoot(rawMotion, 30)}/{ReadRawRoot(rawMotion, 31)}";
+                        }
+                    }
+                    Assert.That(
+                        planarDistance,
                         Is.LessThanOrEqualTo(PositionToleranceMeters),
-                        $"KModel retargeted root differs by {Vector3.Distance(actual.rootOverride.t, expected.rootOverride.t):F4}m.");
+                        $"KModel retargeted root XZ differs by {planarDistance:F4}m " +
+                        $"(actual={actual.rootOverride.t}, expected={expected.rootOverride.t}, " +
+                        $"unconstrained Y delta={verticalDelta:F4}m, {rawRootDescription}).");
                 }
                 catch (OperationCanceledException) when (timeout.IsCancellationRequested)
                 {
@@ -117,6 +137,18 @@ namespace KimodoUnityBridge.Command.Tests
                     }
                 }
             }
+        }
+
+        private static Vector3 ReadRawRoot(KimodoRawMotionData motion, int frame)
+        {
+            if (motion == null || !motion.TryReadUnityRootPosition(
+                    Mathf.Clamp(frame, 0, motion.FrameCount - 1),
+                    out Vector3 root))
+            {
+                return Vector3.zero;
+            }
+
+            return root;
         }
 
         [Test]
