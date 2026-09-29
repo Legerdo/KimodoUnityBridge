@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using KimodoBridge;
 using KimodoBridge.Editor;
 using KimodoUnityBridge;
@@ -24,6 +25,89 @@ namespace KimodoUnityBridge.Command.Tests
     public sealed class GenerationConstraintCorrespondenceTests
     {
         private const float PositionToleranceMeters = 0.003f;
+
+        [Test, Explicit("Requires a reachable QuickServer and an installed Kimodo model.")]
+        public void RealKModelGeneration_RetargetedClipMatchesRoot2DKeyframe()
+        {
+            using (var fixture = new GenerationFixture("RealKModelGeneration"))
+            {
+                KimodoEditorGenerateRequest request = fixture.BuildRequest(
+                    fixture.Capture("root2d", 30.0 / 30.0));
+                request.Prompt = "a person standing still";
+                request.DiffusionSteps = 2;
+                request.EffectiveSeed = 1701;
+
+                KimodoBridgeService bridge = KimodoBridgeService.Shared;
+                JObject modelStatus;
+                try
+                {
+                    modelStatus = bridge.ListModelConfigurationsAsync(
+                        KimodoMotionModelProfiles.DefaultModelName,
+                        KimodoTextEncoderModeProtocol.HighPerformance,
+                        request.ModelsRoot,
+                        null,
+                        CancellationToken.None).GetAwaiter().GetResult();
+                }
+                catch (Exception exception)
+                {
+                    Assert.Ignore($"KModel runtime is unavailable: {exception.Message}");
+                    return;
+                }
+
+                if (!ModelStatusContainsUsableModel(modelStatus, KimodoMotionModelProfiles.DefaultModelName))
+                {
+                    Assert.Ignore("The configured QuickServer does not report a usable default Kimodo model.");
+                    return;
+                }
+
+                KimodoEditorGenerationResult result = null;
+                try
+                {
+                    result = KimodoEditorGeneratePipeline.ExecuteAsync(request).GetAwaiter().GetResult();
+                    Assert.That(result, Is.Not.Null);
+                    Assert.That(result.GeneratedClip, Is.Not.Null);
+
+                    Assert.That(
+                        KimodoRetargetSamplingUtility.SampleBoneClipToBoneSample(
+                            result.GeneratedClip,
+                            fixture.Skeleton,
+                            1.0,
+                            KimodoRetargetClipSamplingUtility.ResolveClipSamplingMode(result.GeneratedClip),
+                            out BoneSample actualBone,
+                            out string sampleError),
+                        Is.True,
+                        sampleError);
+                    Assert.That(
+                        KimodoRetargetSamplingUtility.TryApplyBoneSampleToRetargetSkeleton(
+                            actualBone,
+                            fixture.Skeleton,
+                            out sampleError),
+                        Is.True,
+                        sampleError);
+                    var actual = new KimodoMarkerSampleResult
+                    {
+                        rootOverride = KimodoRigidTransform.Identity,
+                        effectors = new KimodoConstraintEffectors(),
+                        enableMask = new KimodoConstraintMask(),
+                        validMask = new KimodoConstraintMask()
+                    };
+                    KimodoRetargetMarkerSamplingUtility.CaptureWorldTargets(fixture.Skeleton, actual);
+
+                    KimodoMarkerSampleResult expected = request.ConstraintSamples.Single();
+                    Assert.That(Vector3.Distance(actual.rootOverride.t, expected.rootOverride.t),
+                        Is.LessThanOrEqualTo(PositionToleranceMeters),
+                        $"KModel retargeted root differs by {Vector3.Distance(actual.rootOverride.t, expected.rootOverride.t):F4}m.");
+                }
+                finally
+                {
+                    request.CleanupGeneratedClips();
+                    if (result?.GeneratedClip != null && result.GeneratedClip != request.TargetClip)
+                    {
+                        Object.DestroyImmediate(result.GeneratedClip);
+                    }
+                }
+            }
+        }
 
         [Test]
         public void GenerationRequest_DifferentConstraintFamilies_PreserveFramesAndCoordinates()
@@ -129,6 +213,23 @@ namespace KimodoUnityBridge.Command.Tests
                 .SingleOrDefault(value => string.Equals(value.Value<string>("type"), type, StringComparison.Ordinal));
             Assert.That(result, Is.Not.Null, $"Expected generated constraint type '{type}'. Payload: {values}");
             return result;
+        }
+
+        private static bool ModelStatusContainsUsableModel(JObject status, string modelName)
+        {
+            if (status == null) return false;
+            foreach (JToken token in status.Descendants())
+            {
+                if (token.Type != JTokenType.String) continue;
+                string value = token.Value<string>();
+                if (string.Equals(value, modelName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(value, "ready", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(value, "available", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static int[] Frames(JObject value)
@@ -237,6 +338,8 @@ namespace KimodoUnityBridge.Command.Tests
                     CancellationToken.None,
                     timelineClipOverride: timelineClip);
             }
+
+            internal RetargetSkeleton Skeleton => skeleton;
 
             public void Dispose()
             {
