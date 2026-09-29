@@ -18,52 +18,58 @@ using Object = UnityEngine.Object;
 namespace KimodoUnityBridge.Command.Tests
 {
     /// <summary>
-    /// Generation-facing correspondence checks. These tests stop at the
-    /// generated request boundary so they verify the exact payload that would
-    /// be sent to the motion backend without requiring a network generation.
+    /// Generation-facing correspondence checks. The regular tests verify the
+    /// request boundary; the real KModel test also samples the returned,
+    /// retargeted AnimationClip.
     /// </summary>
     public sealed class GenerationConstraintCorrespondenceTests
     {
         private const float PositionToleranceMeters = 0.003f;
 
-        [Test, Explicit("Requires a reachable QuickServer and an installed Kimodo model.")]
-        public void RealKModelGeneration_RetargetedClipMatchesRoot2DKeyframe()
+        [Test, Timeout(10 * 60 * 1000)]
+        public async Task RealKModelGeneration_RetargetedClipMatchesRoot2DKeyframe()
         {
             using (var fixture = new GenerationFixture("RealKModelGeneration"))
             {
+                const int generationTimeoutMinutes = 10;
+                using var timeout = new CancellationTokenSource(
+                    TimeSpan.FromMinutes(generationTimeoutMinutes));
                 KimodoEditorGenerateRequest request = fixture.BuildRequest(
                     fixture.Capture("root2d", 30.0 / 30.0));
                 request.Prompt = "a person standing still";
                 request.DiffusionSteps = 2;
                 request.EffectiveSeed = 1701;
+                request.Token = timeout.Token;
 
                 KimodoBridgeService bridge = KimodoBridgeService.Shared;
-                JObject modelStatus;
+                JObject modelStatus = null;
                 try
                 {
-                    modelStatus = bridge.ListModelConfigurationsAsync(
+                    modelStatus = await (bridge.ListModelConfigurationsAsync(
                         KimodoMotionModelProfiles.DefaultModelName,
                         KimodoTextEncoderModeProtocol.HighPerformance,
                         request.ModelsRoot,
                         null,
-                        CancellationToken.None).GetAwaiter().GetResult();
+                        timeout.Token));
                 }
                 catch (Exception exception)
                 {
-                    Assert.Ignore($"KModel runtime is unavailable: {exception.Message}");
-                    return;
+                    if (timeout.IsCancellationRequested)
+                    {
+                        Assert.Fail($"KModel availability probe timed out after {generationTimeoutMinutes} minutes.");
+                    }
+                    Assert.Fail($"KModel runtime is unavailable: {exception.Message}");
                 }
 
                 if (!ModelStatusContainsUsableModel(modelStatus, KimodoMotionModelProfiles.DefaultModelName))
                 {
-                    Assert.Ignore("The configured QuickServer does not report a usable default Kimodo model.");
-                    return;
+                    Assert.Fail("The configured QuickServer does not report a usable default Kimodo model.");
                 }
 
                 KimodoEditorGenerationResult result = null;
                 try
                 {
-                    result = KimodoEditorGeneratePipeline.ExecuteAsync(request).GetAwaiter().GetResult();
+                    result = await KimodoEditorGeneratePipeline.ExecuteAsync(request);
                     Assert.That(result, Is.Not.Null);
                     Assert.That(result.GeneratedClip, Is.Not.Null);
 
@@ -97,6 +103,10 @@ namespace KimodoUnityBridge.Command.Tests
                     Assert.That(Vector3.Distance(actual.rootOverride.t, expected.rootOverride.t),
                         Is.LessThanOrEqualTo(PositionToleranceMeters),
                         $"KModel retargeted root differs by {Vector3.Distance(actual.rootOverride.t, expected.rootOverride.t):F4}m.");
+                }
+                catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+                {
+                    Assert.Fail($"KModel generation timed out after {generationTimeoutMinutes} minutes; the request was cancelled.");
                 }
                 finally
                 {
