@@ -34,8 +34,9 @@ namespace KimodoUnityBridge.Command.Tests
                 const int generationTimeoutMinutes = 10;
                 using var timeout = new CancellationTokenSource(
                     TimeSpan.FromMinutes(generationTimeoutMinutes));
-                KimodoEditorGenerateRequest request = fixture.BuildRequest(
-                    fixture.Capture("root2d", 30.0 / 30.0));
+                KimodoMarkerSampleResult root2D = fixture.Capture("root2d", 30.0 / 30.0);
+                root2D.rootOverride.t = new Vector3(0f, root2D.rootOverride.t.y, 0f);
+                KimodoEditorGenerateRequest request = fixture.BuildRequest(root2D);
                 request.Prompt = "a person standing still";
                 request.DiffusionSteps = 100;
                 request.EffectiveSeed = 1701;
@@ -73,11 +74,17 @@ namespace KimodoUnityBridge.Command.Tests
                     Assert.That(result, Is.Not.Null);
                     Assert.That(result.GeneratedClip, Is.Not.Null);
 
+                    JObject exportedRoot2D = JArray.Parse(request.Constraints.json)
+                        .OfType<JObject>()
+                        .Single(item => string.Equals(item.Value<string>("type"), "root2d", StringComparison.OrdinalIgnoreCase));
+                    int constrainedFrame = exportedRoot2D["frame_indices"]?.Values<int>().Single() ??
+                        throw new AssertionException("Generated root2d constraint has no frame index.");
+                    double constrainedTime = constrainedFrame / KimodoMotionModelProfiles.DefaultFrameRate;
                     Assert.That(
                         KimodoRetargetSamplingUtility.SampleBoneClipToBoneSample(
                             result.GeneratedClip,
                             fixture.Skeleton,
-                            1.0,
+                            constrainedTime,
                             KimodoRetargetClipSamplingUtility.ResolveClipSamplingMode(result.GeneratedClip),
                             out BoneSample actualBone,
                             out string sampleError),
@@ -104,17 +111,20 @@ namespace KimodoUnityBridge.Command.Tests
                     Vector2 expectedPlanar = new Vector2(expected.rootOverride.t.x, expected.rootOverride.t.z);
                     float planarDistance = Vector2.Distance(actualPlanar, expectedPlanar);
                     float verticalDelta = Mathf.Abs(actual.rootOverride.t.y - expected.rootOverride.t.y);
+                    Vector2 exportedPlanar = new Vector2(
+                        exportedRoot2D["smooth_root_2d"]?[0]?[0]?.Value<float>() ?? float.NaN,
+                        exportedRoot2D["smooth_root_2d"]?[0]?[1]?.Value<float>() ?? float.NaN);
                     string rawRootDescription = "raw motion unavailable";
                     if (KimodoRawMotionUtility.TryParse(
                         result.MotionJsonCompact,
                         out KimodoRawMotionData rawMotion,
                         out _))
                     {
-                        int rawFrame = Mathf.Clamp(30, 0, rawMotion.FrameCount - 1);
+                        int rawFrame = Mathf.Clamp(constrainedFrame, 0, rawMotion.FrameCount - 1);
                         if (rawMotion.TryReadUnityRootPosition(rawFrame, out Vector3 rawRoot))
                         {
-                            rawRootDescription = $"raw frames 29/30/31=" +
-                                $"{ReadRawRoot(rawMotion, 29)}/{ReadRawRoot(rawMotion, 30)}/{ReadRawRoot(rawMotion, 31)}";
+                            rawRootDescription = $"raw frames {rawFrame - 1}/{rawFrame}/{rawFrame + 1}=" +
+                                $"{ReadRawRoot(rawMotion, rawFrame - 1)}/{ReadRawRoot(rawMotion, rawFrame)}/{ReadRawRoot(rawMotion, rawFrame + 1)}";
                         }
                     }
                     Assert.That(
@@ -122,6 +132,7 @@ namespace KimodoUnityBridge.Command.Tests
                         Is.LessThanOrEqualTo(PositionToleranceMeters),
                         $"KModel retargeted root XZ differs by {planarDistance:F4}m " +
                         $"(actual={actual.rootOverride.t}, expected={expected.rootOverride.t}, " +
+                        $"exported protocol smooth_root_2d={exportedPlanar}, " +
                         $"unconstrained Y delta={verticalDelta:F4}m, {rawRootDescription}).");
                 }
                 catch (OperationCanceledException) when (timeout.IsCancellationRequested)
