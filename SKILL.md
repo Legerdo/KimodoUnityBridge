@@ -5,9 +5,38 @@ description: Install KimodoUnityBridge and route Unity animation work through it
 
 # KimodoUnityBridge
 
-根 Skill 只负责安装门槛、任务入口、工具编排和统一结果；公共规则见 `tools/common.md`，具体命令参数由各工具在调用边界校验。
+根 Skill 负责安装门槛、任务入口、命令调用方式、工具编排和统一结果；公共规则见 `tools/common.md`，具体命令参数以实时 schema 为准。
 
 本文件及同目录 `tools/*.md` 是已导入 `com.unity.kimodo_unity_motion_tools` package 的唯一权威 Skill 文档。使用项目入口时，必须先定位该 package 根目录，再按相对路径读取这里的文档；不得使用外部复制的旧工具文档。
+
+## Public command entry / 公共命令入口
+
+CLI、`exec_editor_script` 和其他外部脚本只使用下面的公共 Editor 入口：
+
+```csharp
+using KimodoUnityBridge.Command;
+
+string schema = command_dispatcher.GetCommandDefinitionsJson();
+string result = command_dispatcher.Invoke(commandName, argumentsJson);
+```
+
+调用顺序固定为：
+
+1. 读取 `GetCommandDefinitionsJson()`，或调用 `kimodo_help` 获取实时命令和 schema。
+2. 使用 schema 中的协议命令名，例如 `kimodo_generate_animation`、`scene.context`。
+3. 将 JSON 参数传给 `command_dispatcher.Invoke(commandName, argumentsJson)`。
+4. 对 JSON 返回值检查 `ok`、`status`、`error` 和 `request_id`。
+
+下面这些名称不是 CLI 的命令入口，不要用它们做命令索引或通过反射调用：
+
+- `command_context` 的内部 Handler，例如 `GenerateAnimationAsset`；
+- `command_kimodo` 的便利包装方法；
+- `KimodoBridgeService.GenerateAsync`、`KimodoBridgeCommand.ExecuteAsync`；
+- `KimodoEditorGeneratePipeline.ExecuteAsync` 及其他内部 Editor 管线方法。
+
+`command_kimodo`、Bridge service 和 Editor pipeline 可以供包内 C# 代码使用，但不替代命令目录，也不保证覆盖全部协议命令。CLI 的稳定标识是 schema 中的命令名，不是 C# 方法名。
+
+能力文档中的 `kimodo_generate_animation(args)`、`scene.context(args)` 等写法是协议命令的伪代码表示，不是可直接索引的 C# 方法。若当前环境没有原生能力工具，必须通过 `exec_editor_script` 创建 C# 脚本，并在脚本中调用 `command_dispatcher.Invoke`。
 
 ```pseudo
 # Shared states / 公共状态
@@ -64,7 +93,7 @@ ASSERT WORKFLOW_READY == YES before animation work
 | pose | 创建、编辑和复用 External Pose | `tools/pose.md` |
 | constraints | 点约束格式、Pose 使用规则、同帧冲突和效应器预检 | `tools/constraints.md` |
 
-命令目录只在调用边界使用；不要把完整参数结构复制到工具文档中。
+命令目录只在调用边界使用；不要把完整参数结构复制到工具文档中。能力工具负责流程和证据，`Command/help.json` 与实时 `kimodo_help` 负责命令名、参数和返回结构。
 
 ## Orchestration loop / 总编排 Loop
 
@@ -113,6 +142,7 @@ output. The loop stops when consecutive non-improvement exceeds the configured
 ## Shared execution rules / 公共执行规则
 
 - 只使用运行时返回的安全角色名、动画名和 `{track,index}` 引用；生成结果的 `path` 是资产元数据，不是场景 Clip handle。
+- 不得把伪代码中的能力名称、C# Handler 名称或 Editor pipeline 类型当作 CLI 命令名；命令名必须来自实时 schema。
 - 所有命令都以当前活动场景中用户打开/选中的 `Animator` 所属角色为权威来源；不要从保存的 prefab 路径猜测替代场景对象。
 - 只要生成请求点名动作（例如 walk/run），生成前必须检查当前场景中是否已有语义匹配的角色/动画；修复、改进、替换、续作或变体请求绝不能跳过这一步。找到的动画先作为上下文证据分析，只有请求明确要求参考、复用或约束时才传入生成约束。
 - 视觉结论必须建立在实际打开的返回图像上；静态证据不足时不得报告视觉通过。

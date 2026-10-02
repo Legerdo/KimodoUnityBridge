@@ -7,6 +7,38 @@ description: Shared execution contract for all Kimodo capability tools.
 
 所有工具都遵守同一套输入、证据、状态和报告规则。工具只实现自身能力，不重复定义安装流程。
 
+## Command execution / 命令执行
+
+能力文档中的命令写法是协议层伪代码。实际 CLI 或 `exec_editor_script` 调用必须经过 `KimodoUnityBridge.Command.command_dispatcher`：
+
+```csharp
+using Newtonsoft.Json.Linq;
+using KimodoUnityBridge.Command;
+
+string schema = command_dispatcher.GetCommandDefinitionsJson();
+string help = command_dispatcher.Invoke(
+    "kimodo_help",
+    new JObject { ["command"] = "kimodo_generate_animation" }.ToString());
+string response = command_dispatcher.Invoke(
+    "kimodo_generate_animation",
+    argumentsJson);
+```
+
+命令发现和调用规则：
+
+- 先读实时 schema 或 `kimodo_help`，再选择命令和参数。
+- 只使用 schema 的协议命令名；不要搜索 `GenerateAnimationAsset` 等内部方法名。
+- `command_kimodo` 是可选的包内便利 facade，不是命令目录，也不是 CLI 发现入口。
+- 公开 Bridge API 只覆盖后端生成；需要完整 Editor 资产流程时仍使用对应的协议命令，除非包内已有明确公开 facade。
+- 找不到原生能力工具时，报告工具缺失并改用 `exec_editor_script` + `command_dispatcher.Invoke`；不得猜测不存在的独立 CLI 方法。
+
+最小错误诊断：
+
+1. `unknown_command`：命令名不在实时 schema 中，重新读取 `GetCommandDefinitionsJson()`。
+2. `invalid_argument`：命令已路由成功，按 `kimodo_help(command=...)` 修正 JSON。
+3. 没有 `request_id`：不要开始轮询；先报告命令未接受或返回结构不符合协议。
+4. 任务已有 `request_id` 但未终态：固定间隔调用 `kimodo_get_generation`，不要重复提交同一请求。
+
 ## Input and scene context
 
 ### Parameter tiers / 参数分层
