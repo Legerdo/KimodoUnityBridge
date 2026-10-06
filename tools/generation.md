@@ -26,7 +26,7 @@ Command `window_frames` and `source.frame` use **60 FPS**, unlike the Timeline U
 The complete point-constraint contract is defined in [`constraints.md`](constraints.md).
 The sections below summarize the generation-specific behavior.
 
-`constraints[].type: "root_effect"` expresses a root position and one or more end-effector targets at the same frame. It carries optional `pose`, required `root2d.position/heading`, and required `effect` targets. Each effect target contains world-space position and optional rotation. Use `effector_validate` before generation.
+`constraints[].type` accepts `fullbody`, `root2d`, or `root_effect`. The command parser normalizes each public type to the internal `mix` representation. `root_effect` carries optional `pose`, required `root2d.position/heading`, and required `effect` targets. Omitted channels remain from the support pose; generation returns non-blocking diagnostics.
 
 The three point types are a discriminated union and are never nested. See `constraints.md`
 for the complete shape and validation rules.
@@ -38,6 +38,9 @@ This lets a pickup contact frame express "the character is here and the hand is 
 The optional Reference Pose model, per-type schema, no-merge collision rules, and rejection
 conditions are defined in [`constraints.md`](constraints.md).
 需要指定支撑姿态时，在目标时间调用 `pose_get`，检查后把 Pose 引用放入 Root2D 约束。
+### Generation warning check
+
+每次生成接受后都会返回非阻断的 `check`。检查由 Editor 层共享服务执行，因此 Timeline、命令和其他 generator 使用同一套规则：`root_trajectory` 检查 Root2D 的 XZ/heading 与 FullBody 的 root（含可用 Y）连续性，`constraint_overlap` 检查同帧 root 描述冲突，`effectors` 检查 RootEffect 以及 FullBody 中有效的手脚目标。速度超过 7 m/s、加速度超过 5 m/s² 或约束之间出现跳变时，状态为 `warning`，任务仍会继续。`blocking` 仅用于协议级阻断，warning 不会设置为 true。
 
 Command In/Out rejects insufficient source ranges, too many samples for distinct model frames, overlapping inside windows, same-frame explicit constraints, cross-character sources, loop generation, ARDY, and requests exceeding the model frame limit including context. These checks do not silently shorten or downgrade the request. Acceptance and `kimodo_get_generation` return `inout_sampling`: source-local and Timeline sample times, output/runtime model frames, padding counts, and the exclusive crop range. The output retains the requested duration. This metadata verifies sampling and transport, not visual seam quality. Loop is enabled only by the explicit `loop` argument; prompt wording is never parsed as a loop flag.
 
@@ -562,13 +565,13 @@ ASSERT failed_canceled_or_fallback_results_are_reported_as_returned()
 ## Root path and path-angle constraints / Root 路径统一采样
 
 `root_path` 与 `path.start_angle/path.end_angle` 使用同一条
-稀疏 Root2D 约束管线。两者的区别仅在路径采样对象：
+稀疏 mix root 约束管线。两者的区别仅在路径采样对象：
 
 ```pseudo
 sample_frames = union(
     clip_start_frame,
     clip_end_frame,
-    frames_already_containing_root2d_or_fullbody_constraints
+    frames_already_containing_mix_constraints
 )
 
 if ROOT_PATH:
@@ -581,7 +584,7 @@ if PATH_ANGLE_OVERRIDE:
         path.end_angle
     )
 
-emit_one_sparse_root2d_constraint(path_samples, sample_frames)
+emit_one_sparse_mix_root_constraint(path_samples, sample_frames)
 ```
 
 路径约束默认只在起点、终点和当前 Clip 已有约束帧采样；固定 heading
@@ -591,7 +594,7 @@ emit_one_sparse_root2d_constraint(path_samples, sample_frames)
 的 Clip 采样器），然后与 `root_path` 走同一套采样和稀疏约束导出逻辑；不能仅凭
 prompt 推断轨迹数据。
 
-`Root2D` 只覆盖根节点的 XZ 和平面 heading；原动画/FullBody Pose 中的根 Y、高低、
+mix root 只覆盖根节点的 XZ 和平面 heading；原动画/支撑 Pose 中的根 Y、高低、
 Pitch 与 Roll 均是运动语义，必须保留，不能由路径约束静默归零或替换。
 
 if evidence_is_static_only():

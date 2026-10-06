@@ -35,11 +35,9 @@ namespace KimodoUnityBridge.Command
                 [PoseSetCommand] = PoseSet,
                 [PoseSetRootTransformCommand] = PoseSetRootTransform,
                 [PoseSetMuscleCommand] = PoseSetMuscle,
-                [EffectorValidateCommand] = EffectorValidate,
                 [GetGenerationCommand] = GetGeneration,
                 [CancelGenerationCommand] = CancelGeneration,
                 [SessionClearCommand] = ClearSession,
-                [SceneContextGetCommand] = SceneContextGet
             };
 
             var registrations = new List<CommandRegistration>();
@@ -296,9 +294,11 @@ namespace KimodoUnityBridge.Command
                         ["items"] = new JObject { ["type"] = "number" }
                     }
                 },
-                ["required"] = new JArray("position")
+                ["anyOf"] = new JArray(
+                    new JObject { ["required"] = new JArray("position") },
+                    new JObject { ["required"] = new JArray("rotation") })
             };
-            JObject effect = new JObject
+            JObject effectors = new JObject
             {
                 ["type"] = "object",
                 ["additionalProperties"] = false,
@@ -315,44 +315,56 @@ namespace KimodoUnityBridge.Command
                     new JObject { ["required"] = new JArray("left_foot") },
                     new JObject { ["required"] = new JArray("right_foot") })
             };
-            JObject root2D = new JObject
+            JObject root = new JObject
             {
                 ["type"] = "object",
                 ["additionalProperties"] = false,
                 ["properties"] = new JObject
                 {
-                    ["position"] = vector2.DeepClone(),
-                    ["heading"] = vector2.DeepClone()
+                    ["position"] = new JObject { ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3, ["items"] = new JObject { ["type"] = "number" } },
+                    ["rotation"] = new JObject { ["type"] = "array", ["minItems"] = 4, ["maxItems"] = 4, ["items"] = new JObject { ["type"] = "number" } }
                 },
-                ["required"] = new JArray("position", "heading")
+                ["minProperties"] = 1
             };
-            JObject PointProperties(bool includePose, bool includeRoot2D, bool includeEffect, string type)
+            JObject muscles = new JObject
+            {
+                ["type"] = "object",
+                ["additionalProperties"] = new JObject { ["type"] = "number" },
+                ["minProperties"] = 1
+            };
+            JObject PointProperties(string type, bool includeRoot2D, bool includeEffectors)
             {
                 var properties = new JObject
                 {
                     ["frame"] = new JObject { ["type"] = "integer", ["minimum"] = 0 },
-                    ["type"] = new JObject { ["const"] = type }
+                    ["type"] = new JObject { ["const"] = type },
+                    ["pose"] = poseReference.DeepClone()
                 };
-                if (includePose) properties["pose"] = poseReference.DeepClone();
-                if (includeRoot2D) properties["root2d"] = root2D.DeepClone();
-                if (includeEffect) properties["effect"] = effect.DeepClone();
+                if (includeRoot2D) properties["root2d"] = new JObject
+                {
+                    ["type"] = "object",
+                    ["additionalProperties"] = false,
+                    ["properties"] = new JObject { ["position"] = vector2.DeepClone(), ["heading"] = vector2.DeepClone() },
+                    ["required"] = new JArray("position", "heading")
+                };
+                if (includeEffectors) properties["effect"] = effectors.DeepClone();
                 return properties;
             }
 
-            JObject PointItem(bool includePose, bool includeRoot2D, bool includeEffect, string type, params string[] required)
+            JObject PointItem(string type, bool includeRoot2D, bool includeEffectors, params string[] required)
             {
                 return new JObject
                 {
                     ["type"] = "object",
                     ["additionalProperties"] = false,
-                    ["properties"] = PointProperties(includePose, includeRoot2D, includeEffect, type),
+                    ["properties"] = PointProperties(type, includeRoot2D, includeEffectors),
                     ["required"] = new JArray(required)
                 };
             }
 
-            JObject fullBodyItem = PointItem(true, false, false, "fullbody", "frame", "type", "pose");
-            JObject root2DItem = PointItem(true, true, false, "root2d", "frame", "type", "root2d");
-            JObject rootEffectItem = PointItem(true, true, true, "root_effect", "frame", "type", "root2d", "effect");
+            JObject fullBodyItem = PointItem("fullbody", false, false, "frame", "type", "pose");
+            JObject rootItem = PointItem("root2d", true, false, "frame", "type", "root2d");
+            JObject rootEffectItem = PointItem("root_effect", true, true, "frame", "type", "root2d", "effect");
             var rootPathItem = new JObject
             {
                 ["type"] = "object",
@@ -385,7 +397,7 @@ namespace KimodoUnityBridge.Command
             {
                 ["type"] = "array",
                 ["description"] = description,
-                ["items"] = new JObject { ["oneOf"] = new JArray(fullBodyItem, root2DItem, rootEffectItem, rootPathItem, InOutConstraintSchema()) }
+                ["items"] = new JObject { ["oneOf"] = new JArray(fullBodyItem, rootItem, rootEffectItem, rootPathItem, InOutConstraintSchema()) }
             }, false);
         }
 
@@ -472,70 +484,6 @@ namespace KimodoUnityBridge.Command
         private static PropertyDefinition RequiredPoseReference(string name)
         {
             return new PropertyDefinition(name, PoseReferenceSchema(), true);
-        }
-
-        private static JObject EffectorValidateSchema()
-        {
-            JObject target = new JObject
-            {
-                ["type"] = "object",
-                ["additionalProperties"] = false,
-                ["properties"] = new JObject
-                {
-                    ["position"] = new JObject
-                    {
-                        ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3,
-                        ["items"] = new JObject { ["type"] = "number" },
-                        ["description"] = "World-space target position."
-                    },
-                    ["rotation"] = new JObject
-                    {
-                        ["type"] = "array", ["minItems"] = 4, ["maxItems"] = 4,
-                        ["items"] = new JObject { ["type"] = "number" },
-                        ["description"] = "Optional world-space target rotation quaternion."
-                    }
-                },
-                ["required"] = new JArray("position")
-            };
-            JObject root2D = new JObject
-            {
-                ["type"] = "object",
-                ["additionalProperties"] = false,
-                ["properties"] = new JObject
-                {
-                    ["position"] = new JObject
-                    {
-                        ["type"] = "array", ["minItems"] = 2, ["maxItems"] = 2,
-                        ["items"] = new JObject { ["type"] = "number" }
-                    },
-                    ["heading"] = new JObject
-                    {
-                        ["type"] = "array", ["minItems"] = 2, ["maxItems"] = 2,
-                        ["items"] = new JObject { ["type"] = "number" }
-                    }
-                },
-                ["oneOf"] = new JArray(
-                    new JObject { ["required"] = new JArray("position", "heading") },
-                    new JObject { ["maxProperties"] = 0 })
-            };
-            JObject options = new JObject
-            {
-                ["type"] = "object",
-                ["additionalProperties"] = false,
-                ["properties"] = new JObject
-                {
-                    ["position_tolerance"] = new JObject { ["type"] = "number", ["minimum"] = 0, ["default"] = 0.03 },
-                    ["rotation_tolerance_degrees"] = new JObject { ["type"] = "number", ["minimum"] = 0, ["default"] = 15.0 },
-                    ["project_if_unreachable"] = new JObject { ["type"] = "boolean", ["default"] = false }
-                }
-            };
-            return Properties(
-                Required("character", "string", "Safe character name in the current scene context."),
-                RequiredEnum("effector", "left_hand", "right_hand", "left_foot", "right_foot"),
-                new PropertyDefinition("pose", PoseReferenceSchema(), false),
-                new PropertyDefinition("target", target, true),
-                new PropertyDefinition("root2d", root2D, false),
-                new PropertyDefinition("options", options, false));
         }
 
         private static JObject PoseSetSchema()

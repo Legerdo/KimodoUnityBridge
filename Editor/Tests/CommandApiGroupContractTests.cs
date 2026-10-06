@@ -75,8 +75,7 @@ namespace KimodoUnityBridge.Command.Tests
                 "kimodo_help",
                 "kimodo_install_server",
                 "session.clear",
-                "scene.context",
-                "effector_validate"
+                "animation_analyze"
             };
 
             foreach (string name in names)
@@ -88,7 +87,6 @@ namespace KimodoUnityBridge.Command.Tests
                     Assert.That(example["arguments"], Is.TypeOf<JObject>(), name);
             }
 
-            Assert.That(Tool(document, "scene.context")["inputSchema"]["required"], Is.Null.Or.Empty);
             Assert.That(Tool(document, "session.clear")["inputSchema"]["required"], Is.Null.Or.Empty);
         }
 

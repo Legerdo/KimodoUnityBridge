@@ -29,7 +29,7 @@ namespace KimodoUnityBridge.Command
                         @"{'character':'<character>','prompt':'Reach for the apple and pick it up','duration_frames':120,'loop':false,'constraints':[{'inout':{'in':{'source':{'clip':'<previous clip>'},'window_frames':30,'sample_count':5},'out':{'source':{'clip':'<next clip>'},'window_frames':12,'sample_count':3}}}]}"),
                     Example("Keep sampled opening and closing windows inside the returned Clip.",
                         @"{'character':'<character>','prompt':'Bend down then stand up','duration_frames':120,'loop':false,'constraints':[{'inout':{'mode':'inside','in':{'source':{'clip':'<reference clip>','frame':0},'window_frames':12,'sample_count':3},'out':{'source':{'clip':'<reference clip>'},'window_frames':12,'sample_count':3}}}]}"),
-                    Example("Use one root_effect sample with root and effect coordinates; effector validation runs before generation.",
+                    Example("Use one root_effect sample; the command normalizes it to the internal mix representation and returns non-blocking diagnostics.",
                         @"{'character':'<character>','prompt':'Reach to the apple','duration_frames':180,'loop':false,'constraints':[{'frame':90,'type':'root_effect','pose':{'track':'<pose track>','index':0},'root2d':{'position':[2.4,5.0],'heading':[0,1]},'effect':{'right_hand':{'position':[2.55,0.95,5.35]}}}]}"));
                 case PoseGetCommand: return new JArray(
                     Example("Capture a pose at an absolute Timeline-global time in seconds.",
@@ -44,14 +44,11 @@ namespace KimodoUnityBridge.Command
                     @"{'pose':{'track':'<returned pose track>','index':0},'root':{'position':[0,1,0]}}");
                 case PoseSetMuscleCommand: return Examples("Edit the Spine Front-Back muscle of a returned Pose slot.",
                     @"{'pose':{'track':'<returned pose track>','index':0},'muscles':{'Spine Front-Back':0.1}}");
-                case EffectorValidateCommand: return Examples("Validate a right-hand target with the current Avatar and reference Pose before using it in RootEffect.",
-                    @"{'character':'<character>','effector':'right_hand','pose':{'track':'<pose track>','index':1},'target':{'position':[0.25,1.08,0.42]},'options':{'position_tolerance':0.03,'rotation_tolerance_degrees':15}}");
                 case GetGenerationCommand: return Examples("Poll using the exact request_id returned by generation or installation.",
                     @"{'request_id':'11111111-1111-1111-1111-111111111111'}");
                 case CancelGenerationCommand: return Examples("Cancel using the exact active generation request_id.",
                     @"{'request_id':'11111111-1111-1111-1111-111111111111','reason':'User requested cancellation'}");
                 case SessionClearCommand: return Examples("Clear the current runtime session while retaining persisted assets.", @"{}");
-                case SceneContextGetCommand: return Examples("Inspect the active scene and the real PlayableDirector before selecting character, pose, or clip handles.", @"{}");
                 default: throw new InvalidOperationException($"Command '{command}' is missing a help example.");
             }
         }

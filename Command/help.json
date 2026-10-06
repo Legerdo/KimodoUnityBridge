@@ -182,7 +182,7 @@
         "properties": {
           "source_character": {
             "type": "string",
-            "description": "Safe source character name in the resolved scene context."
+            "description": "Source scene character name or object_ref. Ghost character paths are rejected."
           },
           "animation": {
             "type": "string",
@@ -190,7 +190,7 @@
           },
           "target_character": {
             "type": "string",
-            "description": "Safe target character name in the resolved scene context."
+            "description": "Target scene character name or object_ref. Ghost character paths are rejected."
           },
           "output": {
             "type": "object",
@@ -237,13 +237,13 @@
     },
     {
       "name": "kimodo_generate_animation",
-      "description": "Start asynchronous generation for a character in the current scene context. The accepted request is recorded in the generation result and must be polled by request_id.",
+      "description": "Start asynchronous generation for a character in the current scene context. The accepted response includes non-blocking generation checks and must be polled by request_id.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "character": {
             "type": "string",
-            "description": "Safe character name in the current scene context."
+            "description": "Scene character name or object_ref. Ghost character paths are rejected; use the source scene character."
           },
           "prompt": {
             "type": "string",
@@ -371,7 +371,7 @@
           },
           "constraints": {
             "type": "array",
-            "description": "Typed point, root_path, and inout boundary constraints. Point items use exactly one of fullbody, root2d, or root_effect; command frames use 60 FPS.",
+            "description": "Typed fullbody, root2d, root_effect, root_path, and inout constraints. Point types are normalized to the internal mix representation.",
             "items": {
               "oneOf": [
                 {
@@ -387,7 +387,7 @@
                     },
                     "pose": {
                       "type": "object",
-                      "description": "External Pose slot in the current scene context.",
+                      "description": "External Pose slot in current scene context.",
                       "additionalProperties": false,
                       "properties": {
                         "track": {
@@ -423,7 +423,7 @@
                     },
                     "pose": {
                       "type": "object",
-                      "description": "External Pose slot in the current scene context.",
+                      "description": "External Pose slot in current scene context.",
                       "additionalProperties": false,
                       "properties": {
                         "track": {
@@ -485,7 +485,7 @@
                     },
                     "pose": {
                       "type": "object",
-                      "description": "External Pose slot in the current scene context.",
+                      "description": "External Pose slot in current scene context.",
                       "additionalProperties": false,
                       "properties": {
                         "track": {
@@ -537,23 +537,32 @@
                           "properties": {
                             "position": {
                               "type": "array",
-                              "minItems": 3,
-                              "maxItems": 3,
                               "items": {
                                 "type": "number"
-                              }
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
                             },
                             "rotation": {
                               "type": "array",
-                              "minItems": 4,
-                              "maxItems": 4,
                               "items": {
                                 "type": "number"
-                              }
+                              },
+                              "minItems": 4,
+                              "maxItems": 4
                             }
                           },
-                          "required": [
-                            "position"
+                          "anyOf": [
+                            {
+                              "required": [
+                                "position"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "rotation"
+                              ]
+                            }
                           ]
                         },
                         "right_hand": {
@@ -562,23 +571,32 @@
                           "properties": {
                             "position": {
                               "type": "array",
-                              "minItems": 3,
-                              "maxItems": 3,
                               "items": {
                                 "type": "number"
-                              }
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
                             },
                             "rotation": {
                               "type": "array",
-                              "minItems": 4,
-                              "maxItems": 4,
                               "items": {
                                 "type": "number"
-                              }
+                              },
+                              "minItems": 4,
+                              "maxItems": 4
                             }
                           },
-                          "required": [
-                            "position"
+                          "anyOf": [
+                            {
+                              "required": [
+                                "position"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "rotation"
+                              ]
+                            }
                           ]
                         },
                         "left_foot": {
@@ -587,23 +605,32 @@
                           "properties": {
                             "position": {
                               "type": "array",
-                              "minItems": 3,
-                              "maxItems": 3,
                               "items": {
                                 "type": "number"
-                              }
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
                             },
                             "rotation": {
                               "type": "array",
-                              "minItems": 4,
-                              "maxItems": 4,
                               "items": {
                                 "type": "number"
-                              }
+                              },
+                              "minItems": 4,
+                              "maxItems": 4
                             }
                           },
-                          "required": [
-                            "position"
+                          "anyOf": [
+                            {
+                              "required": [
+                                "position"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "rotation"
+                              ]
+                            }
                           ]
                         },
                         "right_foot": {
@@ -612,48 +639,36 @@
                           "properties": {
                             "position": {
                               "type": "array",
-                              "minItems": 3,
-                              "maxItems": 3,
                               "items": {
                                 "type": "number"
-                              }
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
                             },
                             "rotation": {
                               "type": "array",
-                              "minItems": 4,
-                              "maxItems": 4,
                               "items": {
                                 "type": "number"
-                              }
+                              },
+                              "minItems": 4,
+                              "maxItems": 4
                             }
                           },
-                          "required": [
-                            "position"
+                          "anyOf": [
+                            {
+                              "required": [
+                                "position"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "rotation"
+                              ]
+                            }
                           ]
                         }
                       },
-                      "anyOf": [
-                        {
-                          "required": [
-                            "left_hand"
-                          ]
-                        },
-                        {
-                          "required": [
-                            "right_hand"
-                          ]
-                        },
-                        {
-                          "required": [
-                            "left_foot"
-                          ]
-                        },
-                        {
-                          "required": [
-                            "right_foot"
-                          ]
-                        }
-                      ]
+                      "minProperties": 1
                     }
                   },
                   "required": [
@@ -931,7 +946,7 @@
           }
         },
         {
-          "description": "Use one root_effect sample with root and effect coordinates; effector validation runs before generation.",
+          "description": "Use one root_effect sample; the command normalizes it to the internal mix representation and returns non-blocking checks.",
           "arguments": {
             "character": "<character>",
             "prompt": "Reach to the apple",
@@ -1454,156 +1469,6 @@
       ]
     },
     {
-      "name": "effector_validate",
-      "description": "Validate an end-effector target against the current Avatar and reference pose by running the Kimodo Humanoid IK pipeline.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "character": {
-            "type": "string",
-            "description": "Safe character name in the current scene context."
-          },
-          "effector": {
-            "type": "string",
-            "enum": [
-              "left_hand",
-              "right_hand",
-              "left_foot",
-              "right_foot"
-            ]
-          },
-          "pose": {
-            "type": "object",
-            "description": "External Pose slot in the current scene context.",
-            "additionalProperties": false,
-            "properties": {
-              "track": {
-                "type": "string"
-              },
-              "index": {
-                "type": "integer",
-                "minimum": 0
-              }
-            },
-            "required": [
-              "track",
-              "index"
-            ]
-          },
-          "target": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "position": {
-                "type": "array",
-                "minItems": 3,
-                "maxItems": 3,
-                "items": {
-                  "type": "number"
-                },
-                "description": "World-space target position."
-              },
-              "rotation": {
-                "type": "array",
-                "minItems": 4,
-                "maxItems": 4,
-                "items": {
-                  "type": "number"
-                },
-                "description": "Optional world-space target rotation quaternion."
-              }
-            },
-            "required": [
-              "position"
-            ]
-          },
-          "root2d": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "position": {
-                "type": "array",
-                "minItems": 2,
-                "maxItems": 2,
-                "items": {
-                  "type": "number"
-                }
-              },
-              "heading": {
-                "type": "array",
-                "minItems": 2,
-                "maxItems": 2,
-                "items": {
-                  "type": "number"
-                }
-              }
-            },
-            "oneOf": [
-              {
-                "required": [
-                  "position",
-                  "heading"
-                ]
-              },
-              {
-                "maxProperties": 0
-              }
-            ]
-          },
-          "options": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "position_tolerance": {
-                "type": "number",
-                "minimum": 0,
-                "default": 0.03
-              },
-              "rotation_tolerance_degrees": {
-                "type": "number",
-                "minimum": 0,
-                "default": 15.0
-              },
-              "project_if_unreachable": {
-                "type": "boolean",
-                "default": false
-              }
-            }
-          }
-        },
-        "required": [
-          "character",
-          "effector",
-          "target"
-        ],
-        "additionalProperties": false
-      },
-      "examples": [
-        {
-          "description": "Validate a right-hand target with the current Avatar and reference Pose before using it in RootEffect.",
-          "arguments": {
-            "character": "<character>",
-            "effector": "right_hand",
-            "pose": {
-              "track": "<pose track>",
-              "index": 1
-            },
-            "target": {
-              "position": [
-                0.25,
-                1.08,
-                0.42
-              ]
-            },
-            "options": {
-              "position_tolerance": 0.03,
-              "rotation_tolerance_degrees": 15
-            }
-          }
-        }
-      ]
-    },
-    {
       "name": "kimodo_get_generation",
       "description": "Get status, progress, remaining seconds, and message for an install or generation request. Generated animation metadata and its project-relative asset path are included only after a generation completes.",
       "inputSchema": {
@@ -1660,28 +1525,7 @@
     },
     {
       "name": "session.clear",
-      "description": "Clear a current runtime Timeline session. Persisted Timeline and animation assets are retained; the automatic context is recreated on the next scene-context command.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Optional session name; defaults to the current session."
-          }
-        },
-        "required": [],
-        "additionalProperties": false
-      },
-      "examples": [
-        {
-          "description": "Clear the current runtime session while retaining persisted assets.",
-          "arguments": {}
-        }
-      ]
-    },
-    {
-      "name": "scene.context",
-      "description": "Inspect the active Unity scene, its resolved PlayableDirector, characters, Animators, Avatars, and loaded animation context without changing it.",
+      "description": "Clear a current runtime Timeline session. Persisted Timeline and animation assets are retained; the automatic session is recreated lazily by the next command.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -1690,7 +1534,7 @@
       },
       "examples": [
         {
-          "description": "Inspect the active scene and the real PlayableDirector before selecting character, pose, or clip handles.",
+          "description": "Clear the current runtime session while retaining persisted assets.",
           "arguments": {}
         }
       ]

@@ -53,7 +53,8 @@ namespace KimodoBridge
         /// <summary>
         /// Selects the protocol constraints for one canonical sample.
         /// Mix preserves the authored root and all enabled effectors in the
-        /// same sample; fullbody remains the higher-level override.
+        /// same canonical sample; exporters may project each active channel
+        /// family into the model protocol without changing command semantics.
         /// </summary>
         internal static KimodoConstraintInternal[] GetConstraintInternal(
             KimodoMarkerSampleResult sample,
@@ -72,9 +73,9 @@ namespace KimodoBridge
                 if (KimodoConstraintMask.IsActive(sample, "muscle"))
                 {
                     result.Add(new KimodoFullBodyConstraintInternal(sample, modelType, exportContext));
-                    return result.ToArray();
                 }
-                if (KimodoConstraintMask.IsActive(sample, "rootposition"))
+                if (KimodoConstraintMask.IsActive(sample, "rootposition") ||
+                    KimodoConstraintMask.IsActive(sample, "rootheading"))
                 {
                     result.Add(new KimodoRoot2DConstraintInternal(sample, modelType, exportContext));
                 }
@@ -84,7 +85,8 @@ namespace KimodoBridge
 
             if (string.Equals(mode, "root2d", StringComparison.OrdinalIgnoreCase))
             {
-                if (KimodoConstraintMask.IsActive(sample, "rootposition"))
+                if (KimodoConstraintMask.IsActive(sample, "rootposition") ||
+                    KimodoConstraintMask.IsActive(sample, "rootheading"))
                 {
                     result.Add(new KimodoRoot2DConstraintInternal(sample, modelType, exportContext));
                 }

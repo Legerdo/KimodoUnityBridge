@@ -25,7 +25,7 @@ namespace KimodoUnityBridge.Command
             TimelineCharacterRecord character = ResolveSessionCharacterByReference(
                 session,
                 RequiredStringValue(source, "character"),
-                addIfMissing: false);
+                addIfMissing: true);
             bool hasTimelineTime = source["timeline_time_seconds"] != null;
             bool hasSceneTime = source["scene_time_seconds"] != null;
             bool hasClipTime = source["clip"] != null || source["clip_time_seconds"] != null;
@@ -899,11 +899,10 @@ namespace KimodoUnityBridge.Command
                 rotation = sample.rootOverride.q;
                 return;
             }
-            if (sample.sampleData == null || !sample.sampleData.IsValid)
-            {
-                throw new InvalidOperationException("SampleResult has no valid sampleData payload.");
-            }
-            sample.sampleData.GetRoot(out position, out rotation);
+            // Muscle Root TQ is an internal Humanoid transport channel. It is
+            // not an implicit fallback for the command-level root field.
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
         }
 
         private static Vector3 ReadVector3(JArray value, string name)

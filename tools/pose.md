@@ -60,7 +60,7 @@ asks to use them.
 
 约束如何使用 `pose_get` 返回的 `{track,index}`，见 [`constraints.md`](constraints.md)。
 `root2d` 与 `root_effect` 的 Pose 可省略；`fullbody` 需要显式 Pose。写入末端目标前，
-使用 `effector_validate` 检查其可达性。
+提交生成前由统一的非阻断 generate check 检查其可达性。
 
 ```json
 { "source": { "character": "<character>", "timeline_time_seconds": 1.5 } }
