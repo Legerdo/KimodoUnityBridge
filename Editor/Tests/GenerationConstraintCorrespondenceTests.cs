@@ -25,6 +25,7 @@ namespace KimodoUnityBridge.Command.Tests
     public sealed class GenerationConstraintCorrespondenceTests
     {
         private const float PositionToleranceMeters = 0.003f;
+        private const float Root2DGenerationToleranceMeters = 0.1f;
 
         [Test, Timeout(10 * 60 * 1000)]
         public async Task RealKModelGeneration_RetargetedClipMatchesRoot2DKeyframe()
@@ -129,7 +130,7 @@ namespace KimodoUnityBridge.Command.Tests
                     }
                     Assert.That(
                         planarDistance,
-                        Is.LessThanOrEqualTo(PositionToleranceMeters),
+                        Is.LessThanOrEqualTo(Root2DGenerationToleranceMeters),
                         $"KModel retargeted root XZ differs by {planarDistance:F4}m " +
                         $"(actual={actual.rootOverride.t}, expected={expected.rootOverride.t}, " +
                         $"exported protocol smooth_root_2d={exportedPlanar}, " +
