@@ -191,6 +191,7 @@ namespace KimodoUnityBridge.Command.Tests
                 KimodoMarkerSampleResult sample = fixture.Capture(sampleMode, sampleTime);
                 if (string.Equals(sampleMode, "root-effect", StringComparison.OrdinalIgnoreCase))
                 {
+                    sample.rootOverride.t = new Vector3(1f, 1f, 1f);
                     sample.enableMask = new KimodoConstraintMask
                     {
                         rootPosition = true,
