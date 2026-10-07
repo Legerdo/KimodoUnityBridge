@@ -150,6 +150,159 @@ namespace KimodoUnityBridge.Command.Tests
             }
         }
 
+        [Test, Timeout(10 * 60 * 1000)]
+        public async Task RealKModelGeneration_RetargetedClipMatchesFullBodyKeyframe()
+        {
+            await AssertRealKModelGenerationRootKeyframe(
+                "RealKModelGenerationFullBody",
+                "fullbody",
+                "fullbody",
+                30.0 / 30.0,
+                1702,
+                planarOnly: false);
+        }
+
+        [Test, Timeout(10 * 60 * 1000)]
+        public async Task RealKModelGeneration_RetargetedClipMatchesRootEffectKeyframe()
+        {
+            await AssertRealKModelGenerationRootKeyframe(
+                "RealKModelGenerationRootEffect",
+                "root-effect",
+                "right-hand",
+                30.0 / 30.0,
+                1703,
+                planarOnly: false);
+        }
+
+        private async Task AssertRealKModelGenerationRootKeyframe(
+            string fixtureName,
+            string sampleMode,
+            string exportedConstraintType,
+            double sampleTime,
+            int seed,
+            bool planarOnly)
+        {
+            using (var fixture = new GenerationFixture(fixtureName))
+            {
+                const int generationTimeoutMinutes = 10;
+                using var timeout = new CancellationTokenSource(
+                    TimeSpan.FromMinutes(generationTimeoutMinutes));
+                KimodoMarkerSampleResult sample = fixture.Capture(sampleMode, sampleTime);
+                if (string.Equals(sampleMode, "root-effect", StringComparison.OrdinalIgnoreCase))
+                {
+                    sample.enableMask = new KimodoConstraintMask
+                    {
+                        rootPosition = true,
+                        rootHeading = true,
+                        rightHand = true
+                    };
+                    sample.validMask = sample.enableMask.Clone();
+                }
+
+                KimodoEditorGenerateRequest request = fixture.BuildRequest(sample);
+                request.Prompt = "a person standing still";
+                request.DiffusionSteps = 100;
+                request.EffectiveSeed = seed;
+                request.Token = timeout.Token;
+
+                JObject modelStatus;
+                try
+                {
+                    modelStatus = await KimodoBridgeService.Shared.ListModelConfigurationsAsync(
+                        KimodoMotionModelProfiles.DefaultModelName,
+                        KimodoTextEncoderModeProtocol.HighPerformance,
+                        request.ModelsRoot,
+                        null,
+                        timeout.Token);
+                }
+                catch (Exception exception)
+                {
+                    if (timeout.IsCancellationRequested)
+                    {
+                        Assert.Fail($"KModel availability probe timed out after {generationTimeoutMinutes} minutes.");
+                    }
+                    Assert.Fail($"KModel runtime is unavailable: {exception.Message}");
+                    return;
+                }
+
+                if (!ModelStatusContainsUsableModel(modelStatus, KimodoMotionModelProfiles.DefaultModelName))
+                {
+                    Assert.Fail("The configured QuickServer does not report a usable default Kimodo model.");
+                }
+
+                KimodoEditorGenerationResult result = null;
+                try
+                {
+                    result = await KimodoEditorGeneratePipeline.ExecuteAsync(request);
+                    Assert.That(result, Is.Not.Null);
+                    Assert.That(result.GeneratedClip, Is.Not.Null);
+
+                    JArray constraints = JArray.Parse(request.Constraints.json);
+                    JObject exported = constraints
+                        .OfType<JObject>()
+                        .Single(item => string.Equals(
+                            item.Value<string>("type"),
+                            exportedConstraintType,
+                            StringComparison.OrdinalIgnoreCase));
+                    int constrainedFrame = exported["frame_indices"]?.Values<int>().Single() ??
+                        throw new AssertionException($"Generated {exportedConstraintType} constraint has no frame index.");
+                    double constrainedTime = constrainedFrame / KimodoMotionModelProfiles.DefaultFrameRate;
+
+                    Assert.That(
+                        KimodoRetargetSamplingUtility.SampleBoneClipToBoneSample(
+                            result.GeneratedClip,
+                            fixture.Skeleton,
+                            constrainedTime,
+                            KimodoRetargetClipSamplingUtility.ResolveClipSamplingMode(result.GeneratedClip),
+                            out BoneSample actualBone,
+                            out string sampleError),
+                        Is.True,
+                        sampleError);
+                    Assert.That(
+                        KimodoRetargetSamplingUtility.TryApplyBoneSampleToRetargetSkeleton(
+                            actualBone,
+                            fixture.Skeleton,
+                            out sampleError),
+                        Is.True,
+                        sampleError);
+
+                    var actual = new KimodoMarkerSampleResult
+                    {
+                        rootOverride = KimodoRigidTransform.Identity,
+                        effectors = new KimodoConstraintEffectors(),
+                        enableMask = new KimodoConstraintMask(),
+                        validMask = new KimodoConstraintMask()
+                    };
+                    KimodoRetargetMarkerSamplingUtility.CaptureWorldTargets(fixture.Skeleton, actual);
+                    KimodoMarkerSampleResult expected = request.ConstraintSamples.Single();
+                    float rootDistance = planarOnly
+                        ? Vector2.Distance(
+                            new Vector2(actual.rootOverride.t.x, actual.rootOverride.t.z),
+                            new Vector2(expected.rootOverride.t.x, expected.rootOverride.t.z))
+                        : Vector3.Distance(actual.rootOverride.t, expected.rootOverride.t);
+
+                    Assert.That(
+                        rootDistance,
+                        Is.LessThanOrEqualTo(PositionToleranceMeters),
+                        $"{exportedConstraintType} generated root differs by {rootDistance:F4}m " +
+                        $"(actual={actual.rootOverride.t}, expected={expected.rootOverride.t}, " +
+                        $"frame={constrainedFrame}, time={constrainedTime:F4}s).");
+                }
+                catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+                {
+                    Assert.Fail($"KModel generation timed out after {generationTimeoutMinutes} minutes; the request was cancelled.");
+                }
+                finally
+                {
+                    request.CleanupGeneratedClips();
+                    if (result?.GeneratedClip != null && result.GeneratedClip != request.TargetClip)
+                    {
+                        Object.DestroyImmediate(result.GeneratedClip);
+                    }
+                }
+            }
+        }
+
         private static Vector3 ReadRawRoot(KimodoRawMotionData motion, int frame)
         {
             if (motion == null || !motion.TryReadUnityRootPosition(
