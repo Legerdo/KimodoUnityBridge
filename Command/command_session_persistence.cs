@@ -281,8 +281,8 @@ namespace KimodoUnityBridge.Command
             return new JObject
             {
                 ["sample_data"] = new JArray(sample.sampleData?.data ?? Array.Empty<float>()),
+                ["sample_valid"] = sample.sampleValid,
                 ["enable_mask"] = ConstraintMaskJson(sample.enableMask),
-                ["valid_mask"] = ConstraintMaskJson(sample.validMask),
                 ["effectors"] = new JObject
                 {
                     ["left_hand"] = RigidTransformJson(sample.effectors?.leftHand),
@@ -300,11 +300,6 @@ namespace KimodoUnityBridge.Command
 
         private static JObject ConstraintMaskJson(KimodoConstraintMask mask) => new JObject
         {
-            ["muscle"] = mask?.muscle == true,
-            ["root_tq"] = mask?.rootTQ == true,
-            ["left_foot_tq"] = mask?.leftFootTQ == true,
-            ["right_foot_tq"] = mask?.rightFootTQ == true,
-            ["root_position"] = mask?.rootPosition == true,
             ["root_heading"] = mask?.rootHeading == true,
             ["left_foot"] = mask?.leftFoot == true,
             ["right_foot"] = mask?.rightFoot == true,

@@ -33,8 +33,7 @@ namespace KimodoBridge
             normalized.sampleTime = marker.time;
             normalized.constraintMode = marker.ConstraintMode == KimodoConstraintMode.Root2D
                 ? "root2d"
-                : marker.ConstraintMode == KimodoConstraintMode.Effector ? "effector"
-                : marker.ConstraintMode == KimodoConstraintMode.Mix ? "mix" : "fullbody";
+                : marker.ConstraintMode == KimodoConstraintMode.Effector ? "effector" : "fullbody";
             // constraintMode changes application behavior only. In particular,
             // Root2D keeps the complete sampled rootOverride payload.
             normalized.enabled = marker.constraintEnabled;
@@ -71,21 +70,9 @@ namespace KimodoBridge
         {
             var result = new KimodoMarkerSampleResult
             {
+                sampleValid = true,
                 sampleData = new MuscleSample(),
-                enableMask = new KimodoConstraintMask
-                {
-                    muscle = true,
-                    rootTQ = true,
-                    leftFootTQ = true,
-                    rightFootTQ = true
-                },
-                validMask = new KimodoConstraintMask
-                {
-                    muscle = true,
-                    rootTQ = true,
-                    leftFootTQ = true,
-                    rightFootTQ = true
-                },
+                enableMask = KimodoConstraintMask.ForType("fullbody"),
                 constraintMode = "fullbody",
                 sampleTime = 0d,
             };

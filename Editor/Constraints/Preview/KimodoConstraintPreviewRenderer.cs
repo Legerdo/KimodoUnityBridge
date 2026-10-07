@@ -172,7 +172,7 @@ namespace KimodoBridge.Editor
 
                     bool rootOnly = entry.ConstraintMode == KimodoConstraintMode.Root2D ||
                         string.Equals(
-                            KimodoConstraintInternal.NormalizeMode(entry.SampleData.constraintMode),
+                            KimodoConstraintInternal.ResolveExecutionMode(entry.SampleData),
                             "root2d",
                             System.StringComparison.OrdinalIgnoreCase);
                     if (rootOnly ||
@@ -320,7 +320,7 @@ namespace KimodoBridge.Editor
                 entry.SampleData.effectors == null ||
                 entry.ConstraintMode == KimodoConstraintMode.Root2D ||
                 string.Equals(
-                    KimodoConstraintInternal.NormalizeMode(entry.SampleData.constraintMode),
+                    KimodoConstraintInternal.ResolveExecutionMode(entry.SampleData),
                     "root2d",
                     System.StringComparison.OrdinalIgnoreCase))
             {
@@ -339,46 +339,16 @@ namespace KimodoBridge.Editor
             CarryEffector(entry, HumanBodyBones.RightFoot, effectors.rightFoot,
                 deltaRotation, previousRootPosition, currentRootPosition);
 
-            // FullBody displays all four target handles even though its
-            // default mask only advertises the muscle/root channels. Once the
-            // root is used to carry targets, promote those targets so the
-            // canonical SolveJob feeds all four goals into SolveIK.
-            PromoteCarriedChannel(entry, HumanBodyBones.LeftHand);
-            PromoteCarriedChannel(entry, HumanBodyBones.RightHand);
-            PromoteCarriedChannel(entry, HumanBodyBones.LeftFoot);
-            PromoteCarriedChannel(entry, HumanBodyBones.RightFoot);
-        }
-
-        private static void PromoteCarriedChannel(
-            ConstraintPreviewInstance entry,
-            HumanBodyBones bone)
-        {
-            if (ShouldCarryEffector(entry, bone))
-            {
-                PromoteHandleChannel(entry.SampleData, bone, false);
-            }
         }
 
         private static bool ShouldCarryEffector(ConstraintPreviewInstance entry, HumanBodyBones bone)
         {
-            if (entry?.SampleData == null)
+            if (entry?.SampleData == null || !entry.SampleData.sampleValid)
             {
                 return false;
             }
-            if (entry.ConstraintMode == KimodoConstraintMode.FullBody)
-            {
-                return true;
-            }
-
-            string channel = bone switch
-            {
-                HumanBodyBones.LeftHand => "lefthand",
-                HumanBodyBones.RightHand => "righthand",
-                HumanBodyBones.LeftFoot => "leftfoot",
-                HumanBodyBones.RightFoot => "rightfoot",
-                _ => string.Empty
-            };
-            return KimodoConstraintMask.IsActive(entry.SampleData, channel);
+            return entry.ConstraintMode != KimodoConstraintMode.Root2D &&
+                KimodoConstraintInternal.ResolveExecutionMode(entry.SampleData) != "root2d";
         }
 
         private static void CarryEffector(
@@ -410,19 +380,16 @@ namespace KimodoBridge.Editor
         {
             if (sample == null) return;
             sample.enableMask ??= new KimodoConstraintMask();
-            sample.validMask ??= new KimodoConstraintMask();
+            sample.sampleValid = true;
             switch (bone)
             {
                 case HumanBodyBones.Hips:
-                    sample.enableMask.rootPosition = true;
                     sample.enableMask.rootHeading |= rotationChanged;
-                    sample.validMask.rootPosition = true;
-                    sample.validMask.rootHeading |= rotationChanged;
                     break;
-                case HumanBodyBones.LeftHand: sample.enableMask.leftHand = sample.validMask.leftHand = true; break;
-                case HumanBodyBones.RightHand: sample.enableMask.rightHand = sample.validMask.rightHand = true; break;
-                case HumanBodyBones.LeftFoot: sample.enableMask.leftFoot = sample.validMask.leftFoot = true; break;
-                case HumanBodyBones.RightFoot: sample.enableMask.rightFoot = sample.validMask.rightFoot = true; break;
+                case HumanBodyBones.LeftHand: sample.enableMask.leftHand = true; break;
+                case HumanBodyBones.RightHand: sample.enableMask.rightHand = true; break;
+                case HumanBodyBones.LeftFoot: sample.enableMask.leftFoot = true; break;
+                case HumanBodyBones.RightFoot: sample.enableMask.rightFoot = true; break;
             }
         }
 
@@ -541,7 +508,7 @@ namespace KimodoBridge.Editor
                 CollectHighlightedJointsFromItem(item, context.ModelName, highlightedJoints);
 
                 bool applied = ApplySampleToRig(
-                    KimodoConstraintSampleComposer.ResolveUnifiedSample(item.SampleData),
+                    item.SampleData,
                     context.ModelName,
                     entry,
                     out error);

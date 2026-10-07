@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
+using Newtonsoft.Json.Linq;
 using TimelineInject;
 using UnityEngine;
 
@@ -8,7 +9,102 @@ namespace KimodoBridge.Editor.Tests
 {
     public sealed class KimodoSampleDataTests
     {
+        [Test, Category("BridgeRegression"), Ignore("Legacy Mix execution mapping was removed.")]
+        public void LegacyMix_ResolvesToOneHighestPriorityFamily()
+        {
+            KimodoMarkerSampleResult sample = CreateFullBody(1, 0.5f, true);
+            sample.constraintMode = "mix";
+            sample.enableMask.rootPosition = true;
+            sample.enableMask.rootHeading = true;
+            sample.validMask.rootPosition = true;
+            sample.validMask.rootHeading = true;
+            EnableAllEffectors(sample);
+            CollectionAssert.AreEqual(new[] { "fullbody" }, ResolveTypes(sample));
+
+            sample.enableMask.muscle = false;
+            sample.validMask.muscle = true;
+            CollectionAssert.AreEqual(new[] { "left-hand", "right-hand", "left-foot", "right-foot" }, ResolveTypes(sample));
+
+            sample.enableMask.leftHand = false;
+            sample.enableMask.rightHand = false;
+            sample.enableMask.leftFoot = false;
+            sample.enableMask.rightFoot = false;
+            CollectionAssert.AreEqual(new[] { "root2d" }, ResolveTypes(sample));
+        }
+
         [Test, Category("BridgeRegression")]
+        public void Composer_RejectsMultipleConstraintsAtSameFrame()
+        {
+            KimodoMarkerSampleResult first = CreateFullBody(1, 0.5f, true);
+            KimodoMarkerSampleResult second = CreateFullBody(2, 0.5f, true);
+            Assert.Throws<InvalidOperationException>(() =>
+                KimodoConstraintSampleComposer.ComposeCanonicalSamples(new[] { first, second }, 30.0));
+        }
+
+        [Test, Category("BridgeRegression")]
+        public void SampleValid_BlocksOuterConstraintConstruction()
+        {
+            KimodoMarkerSampleResult invalid = CreateFullBody(1, 0.5f, true);
+            invalid.sampleValid = false;
+            invalid.validMask = KimodoConstraintMask.ForType("fullbody");
+
+            Assert.Throws<InvalidOperationException>(() => KimodoConstraintInternal.GetConstraintInternal(
+                invalid, KimodoConstraintRigType.Soma77, null));
+            Assert.Throws<InvalidOperationException>(() =>
+                KimodoConstraintSampleComposer.ComposeCanonicalSamples(new[] { invalid }, 30.0));
+        }
+
+        [Test, Category("BridgeRegression")]
+        public void SampleValid_TrueDoesNotDependOnLegacyChannelValidity()
+        {
+            KimodoMarkerSampleResult sample = CreateFullBody(1, 0.5f, true);
+            sample.constraintMode = "fullbody";
+            sample.sampleValid = true;
+            sample.enableMask.muscle = true;
+            sample.validMask.muscle = false;
+
+            CollectionAssert.AreEqual(new[] { "fullbody" }, ResolveTypes(sample));
+        }
+
+        [Test, Category("BridgeRegression")]
+        public void CommandConstraintFrames_RejectDuplicatesAndPrioritizeRootPathCollision()
+        {
+            var duplicatePoints = new JArray
+            {
+                new JObject { ["frame"] = 2, ["type"] = "root2d" },
+                new JObject { ["frame"] = 2, ["type"] = "fullbody" }
+            };
+            StringAssert.Contains("undefined", KimodoUnityBridge.Command.command_context
+                .ValidateUniqueConstraintFrames(duplicatePoints, 10));
+
+            var rootPathWinsFrameCheck = new JArray
+            {
+                new JObject { ["frame"] = 0, ["root_path"] = new JObject() },
+                new JObject { ["frame"] = 0, ["type"] = "root2d" }
+            };
+            StringAssert.Contains("root_path has priority", KimodoUnityBridge.Command.command_context
+                .ValidateUniqueConstraintFrames(rootPathWinsFrameCheck, 10));
+
+            var pointBeforeRootPath = new JArray
+            {
+                new JObject { ["frame"] = 0, ["type"] = "root2d" },
+                new JObject { ["frame"] = 0, ["root_path"] = new JObject() }
+            };
+            StringAssert.Contains("root_path has priority", KimodoUnityBridge.Command.command_context
+                .ValidateUniqueConstraintFrames(pointBeforeRootPath, 10));
+
+            var endpointCollision = new JArray
+            {
+                new JObject { ["frame"] = 9, ["type"] = "root2d" },
+                new JObject { ["frame"] = 0, ["root_path"] = new JObject() }
+            };
+            StringAssert.Contains("root_path has priority", KimodoUnityBridge.Command.command_context
+                .ValidateUniqueConstraintFrames(endpointCollision, 10));
+        }
+
+        // Archived legacy expectation: Mix with no declared channels no longer
+        // controls execution through the old mask fallback.
+        [Test, Category("BridgeRegression"), Ignore("Legacy Mix mask fallback; move to archive with the destructive upgrade.")]
         public void MixDefaults_DoNotEnableUndeclaredChannels()
         {
             Assert.That(KimodoConstraintMask.ForType("mix").IsEmpty, Is.True);
@@ -18,7 +114,7 @@ namespace KimodoBridge.Editor.Tests
             Assert.That(ResolveTypes(sample), Is.Empty);
         }
 
-        [Test, Category("BridgeRegression")]
+        [Test, Category("BridgeRegression"), Ignore("Legacy Mix writeback path was removed.")]
         public void MixAutoSampleWriteback_PreservesIntentAndZeroTargets()
         {
             var marker = ScriptableObject.CreateInstance<KimodoConstraintMarker>();
@@ -43,7 +139,8 @@ namespace KimodoBridge.Editor.Tests
             finally { UnityEngine.Object.DestroyImmediate(marker); }
         }
 
-        [TestCase(true), TestCase(false), Category("BridgeRegression")]
+        // Archived legacy expectation: same-frame samples are now rejected at the outer boundary.
+        [TestCase(true), TestCase(false), Category("BridgeRegression"), Ignore("Legacy Mix writeback/composer semantics; move to archive with the destructive upgrade.")]
         public void MixManualWriteback_PreservesExplicitEffectorSwitch(bool enabled)
         {
             var marker = ScriptableObject.CreateInstance<KimodoConstraintMarker>();
@@ -88,7 +185,8 @@ namespace KimodoBridge.Editor.Tests
             Assert.That(Quaternion.Angle(rotation, Quaternion.Euler(0f, 45f, 0f)), Is.LessThan(1e-4f));
         }
 
-        [Test]
+        // Archived legacy expectation: same-frame channel fallback is no longer valid.
+        [Test, Ignore("Legacy same-frame composer fallback; move to archive with the destructive upgrade.")]
         public void Composer_LastCreatedInvalidChannelWinsWithoutFallback()
         {
             KimodoMarkerSampleResult first = CreateFullBody(1, 0.25f, true);
@@ -103,7 +201,8 @@ namespace KimodoBridge.Editor.Tests
             Assert.That(composed[0].sampleData.data[KimodoSampleDataLayout.BodyMuscleOffset], Is.EqualTo(0f));
         }
 
-        [Test]
+        // Archived legacy expectation: per-channel validMask controlled activation.
+        [Test, Ignore("Legacy per-channel validity semantics; sampleValid now gates the complete sample.")]
         public void MissingValidMask_DoesNotFallBackToEnableMask()
         {
             var sample = new KimodoMarkerSampleResult
@@ -189,13 +288,64 @@ namespace KimodoBridge.Editor.Tests
         }
 
         [Test]
+        public void CommandAndUiCanonicalSamplesPreserveConcreteIntent()
+        {
+            var commandSample = CreateFullBody(1, 0.75f, true);
+            commandSample.constraintMode = "effector";
+            commandSample.rootOverride = new KimodoUnityBridge.KimodoRigidTransform
+            {
+                t = new Vector3(1f, 2f, 3f),
+                q = Quaternion.Euler(0f, 35f, 0f)
+            };
+            commandSample.effectors.leftHand.t = new Vector3(2f, 3f, 4f);
+            commandSample.enableMask = new KimodoConstraintMask
+            {
+                rootHeading = true,
+                leftHand = true
+            };
+            commandSample.validMask = new KimodoConstraintMask
+            {
+                rootPosition = true,
+                rootHeading = true,
+                leftHand = true
+            };
+
+            var marker = ScriptableObject.CreateInstance<KimodoConstraintMarker>();
+            try
+            {
+                marker.autoSample = false;
+                marker.ConstraintMode = KimodoConstraintMode.Effector;
+                Assert.That(
+                    KimodoMarkerSamplingEditorUtility.TryWriteConstraintMarkerSample(
+                        marker, commandSample.Clone(), out string error),
+                    Is.True, error);
+
+                KimodoMarkerSampleResult uiSample = marker.SampleData;
+                KimodoMarkerSampleResult commandCanonical =
+                    KimodoConstraintSampleComposer.ResolveUnifiedSample(commandSample);
+
+                Assert.That(uiSample.sampleValid, Is.EqualTo(commandCanonical.sampleValid));
+                Assert.That(uiSample.constraintMode, Is.EqualTo(commandCanonical.constraintMode));
+                Assert.That(uiSample.enableMask.leftHand, Is.EqualTo(commandCanonical.enableMask.leftHand));
+                Assert.That(uiSample.enableMask.rootHeading, Is.EqualTo(commandCanonical.enableMask.rootHeading));
+                Assert.That(uiSample.effectors.leftHand.t, Is.EqualTo(commandCanonical.effectors.leftHand.t));
+                Assert.That(uiSample.rootOverride.t, Is.EqualTo(commandCanonical.rootOverride.t));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(marker);
+            }
+        }
+
+        [Test]
         public void NewConstraintMarker_DefaultsOnlyItsFullBodyIntent()
         {
             KimodoConstraintMarker marker = ScriptableObject.CreateInstance<KimodoConstraintMarker>();
             try
             {
-                Assert.That(marker.SampleData.enableMask.muscle, Is.True);
-                Assert.That(marker.SampleData.enableMask.rootPosition, Is.True);
+                Assert.That(marker.SampleData.sampleValid, Is.True);
+                Assert.That(marker.SampleData.enableMask.muscle, Is.False);
+                Assert.That(marker.SampleData.enableMask.rootPosition, Is.False);
                 Assert.That(marker.SampleData.enableMask.rootHeading, Is.True);
                 Assert.That(marker.SampleData.enableMask.AnyEndEffector, Is.False);
             }
@@ -241,7 +391,8 @@ namespace KimodoBridge.Editor.Tests
             }
         }
 
-        [Test]
+        // Archived legacy expectation: Mix emitted multiple protocol families.
+        [Test, Ignore("Legacy Mix multi-family emission; move to archive with the destructive upgrade.")]
         public void Internal_MixPreservesAllExplicitChannelFamilies()
         {
             KimodoMarkerSampleResult sample = CreateFullBody(1, 0.5f, true);
@@ -264,7 +415,8 @@ namespace KimodoBridge.Editor.Tests
             Assert.That(sample.enableMask.rightFoot, Is.True);
         }
 
-        [Test]
+        // Archived legacy expectation: Mix split root and effectors.
+        [Test, Ignore("Legacy Mix family splitting; move to archive with the destructive upgrade.")]
         public void Internal_MixEmitsRootAndAllExplicitEffectorsInFixedOrder()
         {
             KimodoMarkerSampleResult sample = CreateFullBody(1, 0.5f, true);
@@ -279,7 +431,8 @@ namespace KimodoBridge.Editor.Tests
                 ResolveTypes(sample));
         }
 
-        [Test]
+        // Archived legacy expectation: per-channel validity selected a fallback family.
+        [Test, Ignore("Legacy Mix validity fallback; move to archive with the destructive upgrade.")]
         public void Internal_MixFallsThroughToRoot2DWhenHigherFamiliesAreInvalid()
         {
             KimodoMarkerSampleResult sample = CreateFullBody(1, 0.5f, true);
@@ -291,7 +444,8 @@ namespace KimodoBridge.Editor.Tests
             CollectionAssert.AreEqual(new[] { "root2d" }, ResolveTypes(sample));
         }
 
-        [Test]
+        // Archived legacy expectation: per-channel validMask controlled execution.
+        [Test, Ignore("Legacy per-channel validity semantics; sampleValid now gates the complete sample.")]
         public void Internal_ValidMaskIsNotOverriddenByPayloadHeuristics()
         {
             KimodoMarkerSampleResult sample = CreateFullBody(1, 0.5f, true);
@@ -306,7 +460,8 @@ namespace KimodoBridge.Editor.Tests
             Assert.That(ResolveTypes(sample), Is.Empty);
         }
 
-        [Test]
+        // Archived legacy expectation: same-frame support composition is now blocked.
+        [Test, Ignore("Legacy same-frame Mix composition; move to archive with the destructive upgrade.")]
         public void Composer_KeepsEffectorSupportPoseValidWithoutEnablingFullBody()
         {
             KimodoMarkerSampleResult effector = CreateFullBody(1, 0.75f, true);
@@ -332,7 +487,8 @@ namespace KimodoBridge.Editor.Tests
             CollectionAssert.AreEqual(new[] { "root2d", "left-hand" }, ResolveTypes(composed));
         }
 
-        [Test]
+        // Archived legacy expectation: root position enableMask controlled Root2D activation.
+        [Test, Ignore("Legacy root enableMask gating; root payload now controls Root2D activation.")]
         public void Internal_ModeLimitsFamiliesAndRoot2DRequiresPosition()
         {
             KimodoMarkerSampleResult sample = CreateFullBody(1, 0.5f, true);

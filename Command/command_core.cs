@@ -102,7 +102,7 @@ namespace KimodoUnityBridge.Command
                             OptionalGeneration(),
                             OptionalOutput(),
                             Optional("analysis_option", "object", "Optional analysis object for the phase-track analyzer. Legacy uniform keyframe-count controls are removed; Humanoid output always uses phase_track_version and continuous phase_track intervals."),
-                            OptionalConstraints("constraints", "Typed fullbody, root2d, root_effect, root_path, and inout constraints. All point types are normalized to the internal mix representation; command frames use 60 FPS."))),
+                            OptionalConstraints("constraints", "Typed fullbody, root2d, root_effect, root_path, and inout constraints. Point constraints resolve to one concrete family; duplicate frames are rejected; command frames use 60 FPS."))),
                     CommandDefinition(PoseGetCommand,
                         "Sample one Timeline time, scene time, or Clip-local time into a new External Pose slot. Use exactly one source mode: timeline_time_seconds, scene_time_seconds, or clip with clip_time_seconds. Returns the reusable pose identity {track,index}.",
                         Properties(
@@ -256,7 +256,7 @@ namespace KimodoUnityBridge.Command
                     new JObject
                     {
                         ["type"] = "fullbody/root2d/root_effect",
-                        ["description"] = "Public point types fullbody, root2d, and root_effect are normalized to one internal mix sample.",
+                        ["description"] = "Public point types fullbody, root2d, and root_effect resolve to one concrete constraint family.",
                         ["shape"] = new JObject
                         {
                             ["frame"] = "Relative frame in the generated clip.",
@@ -275,7 +275,7 @@ namespace KimodoUnityBridge.Command
                     new JObject
                     {
                         ["type"] = "root_path",
-                        ["description"] = "A reusable analyzed Root Path compiled to mix root samples during generation.",
+                        ["description"] = "A reusable analyzed Root Path compiled to Root2D samples during generation.",
                         ["shape"] = new JObject
                         {
                             ["frame"] = "Optional first path frame; defaults to 0.",
@@ -285,8 +285,8 @@ namespace KimodoUnityBridge.Command
                 },
                 ["rules"] = new JArray
                 {
-                    "Public point constraints may use fullbody, root2d, or root_effect. They are normalized to mix internally; omitted channels remain from the support Pose and rootTQ/footTQ payloads are never rewritten by command input.",
-                    "Point constraints are independent typed samples. Duplicate point frames and root_path/point frame collisions are rejected.",
+                    "Public point constraints may use fullbody, root2d, or root_effect. They resolve to one concrete family; omitted channels remain from the support Pose and rootTQ/footTQ payloads are never rewritten by command input.",
+                    "Point constraints are independent typed samples. Duplicate frames are undefined and rejected at the command boundary; root_path owns its frame endpoints.",
                     "Use animation_analyze, then reference clips[].root_trajectory.path from root_path.",
                     "An explicit point frame cannot overlap a root_path sample frame; the command rejects the collision.",
                     "At most one standalone inout entry; in/out each require an explicit completed source Clip. Source character defaults to the generation character and must be the same character.",

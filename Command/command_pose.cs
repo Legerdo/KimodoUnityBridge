@@ -179,14 +179,15 @@ namespace KimodoUnityBridge.Command
                         throw new InvalidOperationException($"effector.{property.Name} must contain position or rotation.");
                     switch (property.Name)
                     {
-                        case "left_hand": sample.effectors.leftHand = target; sample.validMask.leftHand = true; break;
-                        case "right_hand": sample.effectors.rightHand = target; sample.validMask.rightHand = true; break;
-                        case "left_foot": sample.effectors.leftFoot = target; sample.validMask.leftFoot = true; break;
-                        case "right_foot": sample.effectors.rightFoot = target; sample.validMask.rightFoot = true; break;
+                        case "left_hand": sample.effectors.leftHand = target; sample.enableMask.leftHand = true; break;
+                        case "right_hand": sample.effectors.rightHand = target; sample.enableMask.rightHand = true; break;
+                        case "left_foot": sample.effectors.leftFoot = target; sample.enableMask.leftFoot = true; break;
+                        case "right_foot": sample.effectors.rightFoot = target; sample.enableMask.rightFoot = true; break;
                         default: throw new InvalidOperationException($"Unsupported end effector '{property.Name}'.");
                     }
                 }
             }
+            sample.sampleValid = true;
             marker.CommitSampleData();
             EditorUtility.SetDirty(marker);
             SaveTimelineSession(session);
@@ -201,8 +202,13 @@ namespace KimodoUnityBridge.Command
         {
             if (sample == null) throw new ArgumentNullException(nameof(sample));
             if (root == null) throw new InvalidOperationException("root must be an object.");
+            bool hadRootOverride = sample.rootOverride != null;
+            if (root["rotation"] is JArray && root["position"] == null && !hadRootOverride)
+            {
+                throw new InvalidOperationException("root.rotation requires an existing or supplied root.position.");
+            }
             sample.rootOverride ??= KimodoRigidTransform.Identity;
-            sample.validMask ??= new KimodoConstraintMask();
+            sample.enableMask ??= new KimodoConstraintMask();
             if (root["position"] is JArray position)
             {
                 sample.rootOverride.t = ReadVector3(position, "root.position");
@@ -217,12 +223,8 @@ namespace KimodoUnityBridge.Command
             }
             bool hasPosition = root["position"] is JArray;
             bool hasRotation = root["rotation"] is JArray;
-            if (hasRotation && !hasPosition && !sample.validMask.rootPosition)
-            {
-                throw new InvalidOperationException("root.rotation requires an existing or supplied root.position.");
-            }
-            sample.validMask.rootPosition |= hasPosition;
-            sample.validMask.rootHeading |= hasRotation && sample.validMask.rootPosition;
+            if (hasRotation) sample.enableMask.rootHeading = true;
+            sample.sampleValid = true;
         }
 
         public static string PoseSetMuscle(string argumentsJson) => Execute(argumentsJson, arguments =>
@@ -246,6 +248,7 @@ namespace KimodoUnityBridge.Command
                 float value = ReadFiniteFloat(property.Value, $"muscles.{property.Name}");
                 sample.sampleData.data[index] = value;
             }
+            sample.sampleValid = true;
             marker.CommitSampleData();
             EditorUtility.SetDirty(marker);
             SaveTimelineSession(session);
@@ -466,19 +469,12 @@ namespace KimodoUnityBridge.Command
             var result = new KimodoMarkerSampleResult
             {
                 sampleData = sample?.Clone() ?? new MuscleSample(),
+                sampleValid = hasSampleData,
                 // A captured sample is a complete evaluated pose, not a user
-                // constraint selection. The preview pipeline gates pose
-                // application on active channels, so a captured sample must
-                // advertise its full-body payload; channel validity stays
-                // owned by validMask and CaptureWorldTargets below.
+                // constraint selection. The preview pipeline applies its
+                // full-body payload; sampleValid gates the whole capture,
+                // while CaptureWorldTargets fills the scene-facing targets.
                 enableMask = hasSampleData ? KimodoConstraintMask.ForType("fullbody") : new KimodoConstraintMask(),
-                validMask = new KimodoConstraintMask
-                {
-                    muscle = hasSampleData,
-                    rootTQ = hasSampleData,
-                    leftFootTQ = hasSampleData,
-                    rightFootTQ = hasSampleData
-                },
                 constraintMode = "constraint",
                 sampleTime = sampleTime,
                 enabled = true
@@ -893,7 +889,7 @@ namespace KimodoUnityBridge.Command
             {
                 throw new ArgumentNullException(nameof(sample));
             }
-            if (sample.validMask?.rootPosition == true && sample.rootOverride != null)
+            if (sample.rootOverride != null)
             {
                 position = sample.rootOverride.t;
                 rotation = sample.rootOverride.q;

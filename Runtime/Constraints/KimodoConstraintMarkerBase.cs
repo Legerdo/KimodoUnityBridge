@@ -109,15 +109,13 @@ public class KimodoConstraintMarker : Marker, IKimodoConstraintPreviewSelectable
         sampleData ??= new KimodoMarkerSampleResult();
         bool initializeDefaults = string.IsNullOrWhiteSpace(sampleData.constraintMode) ||
             string.Equals(sampleData.constraintMode, "constraint", StringComparison.OrdinalIgnoreCase) &&
-            (sampleData.enableMask == null || sampleData.enableMask.IsEmpty) &&
-            (sampleData.validMask == null || sampleData.validMask.IsEmpty);
+            (sampleData.enableMask == null || sampleData.enableMask.IsEmpty);
         sampleData.sampleData ??= new KimodoBridge.MuscleSample();
         if (!KimodoSampleDataLayout.IsValid(sampleData.sampleData))
         {
             sampleData.sampleData = new KimodoBridge.MuscleSample();
         }
         sampleData.enableMask ??= new KimodoConstraintMask();
-        sampleData.validMask ??= new KimodoConstraintMask();
         sampleData.effectors ??= new KimodoConstraintEffectors();
         sampleData.effectors.leftHand ??= KimodoRigidTransform.Identity;
         sampleData.effectors.rightHand ??= KimodoRigidTransform.Identity;
@@ -131,15 +129,11 @@ public class KimodoConstraintMarker : Marker, IKimodoConstraintPreviewSelectable
             sampleData.enableMask = KimodoConstraintMask.ForType(ModeProtocolName(constraintMode));
             if (constraintMode == KimodoConstraintMode.Root2D)
             {
-                sampleData.validMask.rootPosition = true;
-                sampleData.validMask.rootHeading = true;
+                sampleData.enableMask.rootHeading = true;
             }
             else
             {
-                sampleData.validMask.muscle = constraintMode == KimodoConstraintMode.FullBody;
-                sampleData.validMask.rootTQ = true;
-                sampleData.validMask.leftFootTQ = true;
-                sampleData.validMask.rightFootTQ = true;
+                sampleData.sampleValid = true;
             }
         }
     }
@@ -148,7 +142,6 @@ public class KimodoConstraintMarker : Marker, IKimodoConstraintPreviewSelectable
     {
         if (string.Equals(value, "root2d", StringComparison.OrdinalIgnoreCase)) return KimodoConstraintMode.Root2D;
         if (string.Equals(value, "effector", StringComparison.OrdinalIgnoreCase)) return KimodoConstraintMode.Effector;
-        if (string.Equals(value, "mix", StringComparison.OrdinalIgnoreCase)) return KimodoConstraintMode.Mix;
         if (string.Equals(value, "fullbody", StringComparison.OrdinalIgnoreCase)) return KimodoConstraintMode.FullBody;
         return fallback;
     }
@@ -157,7 +150,6 @@ public class KimodoConstraintMarker : Marker, IKimodoConstraintPreviewSelectable
     {
         KimodoConstraintMode.Root2D => "root2d",
         KimodoConstraintMode.Effector => "effector",
-        KimodoConstraintMode.Mix => "mix",
         _ => "fullbody"
     };
 
@@ -165,7 +157,6 @@ public class KimodoConstraintMarker : Marker, IKimodoConstraintPreviewSelectable
     {
         KimodoConstraintMode.Root2D => "Root2D Constraint",
         KimodoConstraintMode.Effector => "Effector Constraint",
-        KimodoConstraintMode.Mix => "Mixed Constraint",
         _ => "FullBody Constraint"
     };
 }

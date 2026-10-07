@@ -128,27 +128,11 @@ namespace KimodoBridge.Editor
 
             try
             {
-                // Root2D keeps the full sampled pose for display, even though
-                // only its planar root is exported. Evaluate that support pose
-                // exactly like FullBody instead of replacing it with bind pose.
-                // Use a copy so preview cannot enable protocol channels.
-                if (KimodoConstraintInternal.NormalizeMode(sample.constraintMode) == "root2d" &&
-                    sample.validMask?.muscle == true &&
-                    KimodoSampleDataLayout.IsValid(sample.sampleData))
-                {
-                    sample = sample.Clone();
-                    sample.constraintMode = "fullbody";
-                    bool rootPosition = sample.enableMask.rootPosition;
-                    bool rootHeading = sample.enableMask.rootHeading;
-                    sample.enableMask = KimodoConstraintMask.ForType("fullbody");
-                    sample.enableMask.rootPosition = rootPosition;
-                    sample.enableMask.rootHeading = rootHeading;
-                }
-
-                return KimodoConstraintPosePipeline.TryApply(
+                return KimodoConstraintPosePipeline.TryApplyCanonical(
                     sample,
                     KimodoMotionModelProfiles.ResolveGenerationFrameRate(modelName),
                     instance.TargetCache,
+                    true,
                     out _,
                     out _,
                     out error);
@@ -160,19 +144,20 @@ namespace KimodoBridge.Editor
             }
         }
 
-        // FullBody samples capture a complete Hips world rotation. Root2D and
-        // Mix samples intentionally supply only a planar heading.
+        // FullBody samples capture a complete Hips world rotation. Root2D
+        // samples intentionally supply only a planar heading.
         internal static Quaternion ResolvePreviewHipsRotation(
             KimodoMarkerSampleResult sample,
             Quaternion evaluatedHipsRotation)
         {
-            if (sample?.validMask?.rootHeading != true || sample.rootOverride == null)
+            if (sample == null || !sample.sampleValid ||
+                sample.enableMask?.rootHeading != true || sample.rootOverride == null)
             {
                 return evaluatedHipsRotation;
             }
 
-            string mode = KimodoConstraintInternal.NormalizeMode(sample.constraintMode);
-            return mode == "root2d" || mode == "mix"
+            string mode = KimodoConstraintInternal.ResolveExecutionMode(sample);
+            return mode == "root2d"
                 ? KimodoMotionMath.ApplyPlanarHeading(evaluatedHipsRotation, sample.rootOverride.q)
                 : sample.rootOverride.q.normalized;
         }

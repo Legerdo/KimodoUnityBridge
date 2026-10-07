@@ -371,7 +371,7 @@
           },
           "constraints": {
             "type": "array",
-            "description": "Typed fullbody, root2d, root_effect, root_path, and inout constraints. Point types are normalized to the internal mix representation.",
+            "description": "Typed fullbody, root2d, root_effect, root_path, and inout constraints. Point constraints resolve to one concrete family; duplicate frames are rejected.",
             "items": {
               "oneOf": [
                 {
@@ -946,7 +946,7 @@
           }
         },
         {
-          "description": "Use one root_effect sample; the command normalizes it to the internal mix representation and returns non-blocking checks.",
+          "description": "Use one root_effect sample; the command resolves it to an Effector constraint with root support and returns non-blocking checks.",
           "arguments": {
             "character": "<character>",
             "prompt": "Reach to the apple",

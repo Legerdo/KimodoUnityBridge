@@ -71,9 +71,7 @@ namespace KimodoBridge.Editor
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             SerializedProperty allowHeading = so.FindProperty("sampleData.enableMask.rootHeading");
-            SerializedProperty positionEnabled = so.FindProperty("sampleData.enableMask.rootPosition");
-            SerializedProperty positionValid = so.FindProperty("sampleData.validMask.rootPosition");
-            SerializedProperty headingValid = so.FindProperty("sampleData.validMask.rootHeading");
+            SerializedProperty sampleValid = so.FindProperty("sampleData.sampleValid");
             SerializedProperty carryEffectorsWithRoot = so.FindProperty("sampleData.carryEffectorsWithRoot");
             SerializedProperty mode = so.FindProperty("constraintMode");
             bool isRoot2D = mode != null &&
@@ -86,10 +84,7 @@ namespace KimodoBridge.Editor
                         showRotationToggle: false,
                         rotationEnabled: allowHeading?.boolValue == true))
                 {
-                    if (positionEnabled != null) positionEnabled.boolValue = true;
-                    if (positionValid != null) positionValid.boolValue = true;
-                    if (allowHeading?.boolValue == true && headingValid != null)
-                        headingValid.boolValue = true;
+                    if (sampleValid != null) sampleValid.boolValue = true;
                 }
                 if (allowHeading != null)
                 {
@@ -99,9 +94,7 @@ namespace KimodoBridge.Editor
                         new GUIContent("Allow Heading", "Export Root2D heading and use it as FullBody yaw overlay."));
                     if (EditorGUI.EndChangeCheck())
                     {
-                        if (positionEnabled != null) positionEnabled.boolValue = true;
-                        if (positionValid != null) positionValid.boolValue = true;
-                        if (headingValid != null) headingValid.boolValue = allowHeading.boolValue;
+                        if (sampleValid != null) sampleValid.boolValue = true;
                     }
                 }
                 if (!isRoot2D && carryEffectorsWithRoot != null)
@@ -144,25 +137,21 @@ namespace KimodoBridge.Editor
                 so,
                 root + ".effectors.leftHand",
                 so.FindProperty(root + ".enableMask.leftHand"),
-                so.FindProperty(root + ".validMask.leftHand"),
                 "Left Hand Effector", autoSample, showEnable);
             DrawEndEffectorPanel(
                 so,
                 root + ".effectors.rightHand",
                 so.FindProperty(root + ".enableMask.rightHand"),
-                so.FindProperty(root + ".validMask.rightHand"),
                 "Right Hand Effector", autoSample, showEnable);
             DrawEndEffectorPanel(
                 so,
                 root + ".effectors.leftFoot",
                 so.FindProperty(root + ".enableMask.leftFoot"),
-                so.FindProperty(root + ".validMask.leftFoot"),
                 "Left Foot Effector", autoSample, showEnable);
             DrawEndEffectorPanel(
                 so,
                 root + ".effectors.rightFoot",
                 so.FindProperty(root + ".enableMask.rightFoot"),
-                so.FindProperty(root + ".validMask.rightFoot"),
                 "Right Foot Effector", autoSample, showEnable);
         }
 
@@ -170,7 +159,6 @@ namespace KimodoBridge.Editor
             SerializedObject so,
             string transformPath,
             SerializedProperty enabled,
-            SerializedProperty valid,
             string label,
             bool autoSample,
             bool showEnable)
@@ -180,8 +168,7 @@ namespace KimodoBridge.Editor
             {
                 EditorGUI.BeginChangeCheck();
                 EditorGUILayout.PropertyField(enabled, new GUIContent(label + " Enable"));
-                if (EditorGUI.EndChangeCheck() && enabled.boolValue && valid != null)
-                    valid.boolValue = true;
+                EditorGUI.EndChangeCheck();
             }
             // Channel enable controls export in Effector mode; it must not
             // hide authored values while a non-AutoSample marker is edited.
@@ -189,7 +176,6 @@ namespace KimodoBridge.Editor
             {
                 if (DrawFullTransform(so.FindProperty(transformPath), label))
                 {
-                    if (valid != null) valid.boolValue = true;
                     if (!showEnable && enabled != null) enabled.boolValue = true;
                 }
             }

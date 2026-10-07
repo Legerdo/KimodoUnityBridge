@@ -168,8 +168,8 @@ namespace KimodoBridge.Editor
                         t = worldPosition,
                         q = worldRotation
                     },
-                    enableMask = new KimodoConstraintMask { rootPosition = true, rootHeading = true },
-                    validMask = new KimodoConstraintMask { rootPosition = true, rootHeading = true }
+                    sampleValid = true,
+                    enableMask = new KimodoConstraintMask { rootHeading = true }
                 };
             }
 
@@ -185,14 +185,9 @@ namespace KimodoBridge.Editor
             sample.sampleTime = 0.0;
             sample.enableMask = new KimodoConstraintMask
             {
-                rootPosition = true,
                 rootHeading = true
             };
-            sample.validMask = new KimodoConstraintMask
-            {
-                rootPosition = true,
-                rootHeading = true
-            };
+            sample.sampleValid = true;
             sample.effectors = new KimodoConstraintEffectors();
             return true;
         }

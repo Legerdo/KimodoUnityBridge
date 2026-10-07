@@ -212,11 +212,8 @@ namespace KimodoBridge.Editor
             }
 
             targetRootRotation.Normalize();
-            sample.enableMask.rootPosition = true;
             sample.enableMask.rootHeading = true;
-            sample.validMask ??= new KimodoConstraintMask();
-            sample.validMask.rootPosition = true;
-            sample.validMask.rootHeading = true;
+            sample.sampleValid = true;
             sample.rootOverride = new KimodoRigidTransform { t = targetRootPosition, q = targetRootRotation };
             sample.constraintMode = "root2d";
             sample.sampleTime = exportedSampleTime;
@@ -946,7 +943,7 @@ namespace KimodoBridge.Editor
             }
             KimodoPlayableClipGenerationSettings.DebugLog(
                 $"[Kimodo][ConstraintExport] marker='{marker.ConstraintType}' time={marker.time:F3} mode={mode} " +
-                $"channels={KimodoConstraintMask.FromSample(sample).muscle}:{KimodoConstraintMask.FromSample(sample).rootPosition}:{KimodoConstraintMask.FromSample(sample).AnyEndEffector} hasHeading={KimodoConstraintMask.IsActive(sample, "rootheading")}");
+                $"sampleValid={sample.sampleValid} hasRoot={sample.rootOverride != null} hasEffector={sample.enableMask?.AnyEndEffector == true} hasHeading={KimodoConstraintMask.IsActive(sample, "rootheading")}");
             return true;
         }
 

@@ -226,11 +226,12 @@ namespace KimodoUnityBridge.Command.Tests
 
                 KimodoEditorGenerateRequest request = fixture.BuildRequest(rootEffect);
                 JArray exported = JArray.Parse(request.Constraints.json);
-                JObject root = Find(exported, "root2d");
                 JObject leftHand = Find(exported, "left-hand");
                 JObject rightHand = Find(exported, "right-hand");
 
-                CollectionAssert.AreEqual(new[] { 32 }, Frames(root));
+                Assert.That(exported.Any(item => string.Equals(
+                    item.Value<string>("type"), "root2d", StringComparison.OrdinalIgnoreCase)), Is.False,
+                    "RootEffect is emitted as one effector family with root support, not a second Root2D constraint.");
                 CollectionAssert.AreEqual(new[] { 32 }, Frames(leftHand));
                 CollectionAssert.AreEqual(new[] { 32 }, Frames(rightHand));
                 Assert.That(request.ConstraintSamples, Has.Count.EqualTo(1));

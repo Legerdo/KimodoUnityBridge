@@ -16,6 +16,63 @@ namespace KimodoBridge
     /// </summary>
     internal static class KimodoConstraintPosePipeline
     {
+        internal static bool TryApplyCanonical(
+            KimodoMarkerSampleResult sample,
+            float frameRate,
+            RetargetSkeleton cache,
+            bool includeRoot2DSupportPose,
+            out BoneSample boneSample,
+            out MuscleSample muscleSample,
+            out string error)
+        {
+            boneSample = null;
+            muscleSample = null;
+            error = string.Empty;
+            if (sample == null)
+            {
+                error = "Constraint pose input is null.";
+                return false;
+            }
+
+            KimodoMarkerSampleResult canonical;
+            try
+            {
+                canonical = KimodoConstraintSampleComposer.ResolveUnifiedSample(sample);
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+
+            if (canonical == null)
+            {
+                error = "Constraint pose input is empty.";
+                return false;
+            }
+
+            if (includeRoot2DSupportPose &&
+                KimodoConstraintInternal.ResolveExecutionMode(canonical) == "root2d" &&
+                KimodoSampleDataLayout.IsValid(canonical.sampleData))
+            {
+                // Root2D preview displays the authored support pose, while
+                // keeping the concrete execution mode and root payload intact.
+                canonical = canonical.Clone();
+                canonical.constraintMode = "fullbody";
+                bool rootHeading = canonical.enableMask?.rootHeading == true;
+                canonical.enableMask = KimodoConstraintMask.ForType("fullbody");
+                canonical.enableMask.rootHeading = rootHeading;
+            }
+
+            return TryApply(
+                canonical,
+                frameRate,
+                cache,
+                out boneSample,
+                out muscleSample,
+                out error);
+        }
+
         internal static bool TryApply(
             KimodoMarkerSampleResult sample,
             float frameRate,
@@ -49,15 +106,17 @@ namespace KimodoBridge
             muscleSample = null;
             error = string.Empty;
 
-            if (sample == null || cache == null)
+            if (sample == null || cache == null || !sample.sampleValid)
             {
-                error = "Constraint pose input is null.";
+                error = sample != null && !sample.sampleValid
+                    ? "Constraint sample is invalid."
+                    : "Constraint pose input is null.";
                 return false;
             }
 
             // Every command constraint is evaluated from its authored support
-            // pose. Mix may omit muscle, root, or effector channels; omitted
-            // channels remain untouched by the solver.
+            // pose. The concrete family decides which authored channels the
+            // solver applies; no Mix execution branch remains here.
             if (!KimodoConstraintIkSolver.TryApply(sample, frameRate, cache, out error))
             {
                 return false;
@@ -82,26 +141,12 @@ namespace KimodoBridge
                 return false;
             }
 
-            string mode = KimodoConstraintInternal.NormalizeMode(sample.constraintMode);
+            string mode = KimodoConstraintInternal.ResolveExecutionMode(sample);
             if (mode == "root2d")
             {
                 return sample.rootOverride != null;
             }
-            if (mode != "mix")
-            {
-                return false;
-            }
-
-            if (KimodoConstraintMask.IsActive(sample, "muscle") ||
-                KimodoConstraintMask.IsActive(sample, "lefthand") ||
-                KimodoConstraintMask.IsActive(sample, "righthand") ||
-                KimodoConstraintMask.IsActive(sample, "leftfoot") ||
-                KimodoConstraintMask.IsActive(sample, "rightfoot"))
-            {
-                return false;
-            }
-
-            return sample.rootOverride != null;
+            return false;
         }
 
     }
@@ -344,7 +389,7 @@ namespace KimodoBridge
             // into an IK solve. Other modes retain their explicit effector
             // channel semantics.
             bool calculateEffectors =
-                KimodoConstraintInternal.NormalizeMode(sample.constraintMode) != "root2d";
+                KimodoConstraintInternal.ResolveExecutionMode(sample) != "root2d";
             job.rotateLeftHand = sample.effectors?.leftHand?.enableRotation == true;
             job.rotateRightHand = sample.effectors?.rightHand?.enableRotation == true;
             job.rotateLeftFoot = sample.effectors?.leftFoot?.enableRotation == true;
@@ -363,8 +408,7 @@ namespace KimodoBridge
             {
                 job.applyRoot = true;
                 job.applyRootPosition = applyRootPosition;
-                job.rootPlanar = KimodoConstraintInternal.NormalizeMode(sample.constraintMode) == "root2d" ||
-                    KimodoConstraintInternal.NormalizeMode(sample.constraintMode) == "mix";
+                job.rootPlanar = KimodoConstraintInternal.ResolveExecutionMode(sample) == "root2d";
                 job.rootHeading = KimodoConstraintMask.IsActive(sample, "rootheading");
                 job.rootPosition = sample.rootOverride.t;
                 job.rootRotation = sample.rootOverride.q.normalized;

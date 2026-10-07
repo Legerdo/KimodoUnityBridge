@@ -1912,8 +1912,11 @@ namespace KimodoUnityBridge.Command
                 result["global_frame"] = globalFrame;
             }
             if (marker.ConstraintType == "constraint" &&
-                !KimodoConstraintMask.FromSample(marker.SampleData).muscle &&
-                !KimodoConstraintMask.FromSample(marker.SampleData).AnyEndEffector)
+                !KimodoConstraintMask.IsActive(marker.SampleData, "muscle") &&
+                !KimodoConstraintMask.IsActive(marker.SampleData, "lefthand") &&
+                !KimodoConstraintMask.IsActive(marker.SampleData, "righthand") &&
+                !KimodoConstraintMask.IsActive(marker.SampleData, "leftfoot") &&
+                !KimodoConstraintMask.IsActive(marker.SampleData, "rightfoot"))
             {
                 GetRootTransform(marker.SampleData, out Vector3 rootPosition, out Quaternion rootRotation);
                 Vector3 forward = rootRotation * Vector3.forward;

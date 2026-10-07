@@ -232,10 +232,10 @@ namespace KimodoBridge.Editor
 
                 if (type == "fullbody" && samplesByFrame.TryGetValue(frame, out KimodoMarkerSampleResult sample))
                 {
-                    AddSampleEffectorCheck(checks, frame, "left_hand", sample.validMask?.leftHand == true, sample.effectors?.leftHand);
-                    AddSampleEffectorCheck(checks, frame, "right_hand", sample.validMask?.rightHand == true, sample.effectors?.rightHand);
-                    AddSampleEffectorCheck(checks, frame, "left_foot", sample.validMask?.leftFoot == true, sample.effectors?.leftFoot);
-                    AddSampleEffectorCheck(checks, frame, "right_foot", sample.validMask?.rightFoot == true, sample.effectors?.rightFoot);
+                    AddSampleEffectorCheck(checks, frame, "left_hand", sample.sampleValid, sample.effectors?.leftHand);
+                    AddSampleEffectorCheck(checks, frame, "right_hand", sample.sampleValid, sample.effectors?.rightHand);
+                    AddSampleEffectorCheck(checks, frame, "left_foot", sample.sampleValid, sample.effectors?.leftFoot);
+                    AddSampleEffectorCheck(checks, frame, "right_foot", sample.sampleValid, sample.effectors?.rightFoot);
                 }
             }
 
@@ -290,7 +290,7 @@ namespace KimodoBridge.Editor
                 if (type == "fullbody" && generatedSamples != null)
                 {
                     KimodoMarkerSampleResult sample = generatedSamples.LastOrDefault(itemSample =>
-                        itemSample != null && itemSample.rootOverride != null && itemSample.validMask?.rootPosition == true &&
+                        itemSample != null && itemSample.sampleValid && itemSample.rootOverride != null &&
                         Mathf.RoundToInt((float)(itemSample.sampleTime * Mathf.Max(1f, frameRate))) == frame);
                     if (sample != null)
                     {
