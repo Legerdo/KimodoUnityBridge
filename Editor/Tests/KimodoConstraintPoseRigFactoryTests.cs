@@ -103,6 +103,65 @@ namespace KimodoBridge.Editor.Tests
             }
         }
 
+        [Test]
+        public void GenerateCommand_Root2DConstraintMatchesCanonicalSampleExport()
+        {
+            const string model = KimodoMotionModelProfiles.DefaultModelName;
+            Assert.That(KimodoRuntimeAvatarSkeletonBuilder.TryLoadAvatarByModelName(
+                model, out var avatar, out var error), Is.True, error);
+            Assert.That(KimodoRetargetAvatarUtility.TryBuildRetargetSkeleton(
+                avatar, "GenerateCommandCorrespondence", out var skeleton, out error), Is.True, error);
+            try
+            {
+                const double sampleTime = 1.25;
+                var commandInput = new JObject
+                {
+                    ["type"] = "root2d",
+                    ["root2d"] = new JObject
+                    {
+                        ["position"] = new JArray(2f, -3f),
+                        ["heading"] = new JArray(0f, 1f)
+                    }
+                };
+                Type context = typeof(command_dispatcher).Assembly
+                    .GetType("KimodoUnityBridge.Command.command_context");
+                MethodInfo buildCanonical = context?.GetMethod(
+                    "BuildCanonicalConstraint",
+                    BindingFlags.Static | BindingFlags.NonPublic);
+                Assert.That(buildCanonical, Is.Not.Null);
+
+                var sample = (KimodoMarkerSampleResult)buildCanonical.Invoke(null, new object[]
+                {
+                    commandInput, skeleton, model, 30f, sampleTime, 0, null, null, new List<string>()
+                });
+                Assert.That(sample, Is.Not.Null);
+                Assert.That(sample.constraintMode, Is.EqualTo("root2d"));
+                Assert.That(sample.sampleValid, Is.True);
+                Assert.That(sample.enableMask.rootHeading, Is.True);
+
+                KimodoConstraintJson exported = KimodoConstraintJsonExporter.BuildConstraint(
+                    sample,
+                    new KimodoConstraintExportContext
+                    {
+                        projectedPoseProjector = KimodoConstraintExportProjector.CreateProfileNative(model)
+                    },
+                    0.0,
+                    null,
+                    30.0);
+                Assert.That(exported, Is.Not.Null);
+                Assert.That(exported.type, Is.EqualTo("root2d"));
+                CollectionAssert.AreEqual(new[] { 37 }, exported.frame_indices);
+                Assert.That(exported.smooth_root_2d, Is.Not.Null);
+                Assert.That(exported.smooth_root_2d, Has.Count.EqualTo(1));
+                Assert.That(exported.smooth_root_2d[0][0], Is.EqualTo(-2f).Within(0.001f));
+                Assert.That(exported.smooth_root_2d[0][1], Is.EqualTo(-3f).Within(0.001f));
+            }
+            finally
+            {
+                skeleton.Dispose();
+            }
+        }
+
         [TestCase(false)]
         [TestCase(true)]
         public void PreviewModeSwitch_PreservesSampledPoseAndLegs(bool staleEffectorMasks)
