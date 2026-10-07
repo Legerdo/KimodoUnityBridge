@@ -406,6 +406,39 @@ namespace KimodoBridge.Editor.Tests
                 Is.LessThan(0.001f));
         }
 
+        [Test]
+        public void CarryEffectorsWithRoot_SamplePathAppliesInspectorRootEdit()
+        {
+            var sample = new KimodoMarkerSampleResult
+            {
+                sampleValid = true,
+                carryEffectorsWithRoot = true,
+                rootOverride = KimodoUnityBridge.KimodoRigidTransform.Identity,
+                effectors = new KimodoConstraintEffectors
+                {
+                    leftHand = new KimodoUnityBridge.KimodoRigidTransform
+                    {
+                        t = Vector3.right,
+                        q = Quaternion.identity
+                    }
+                }
+            };
+            Vector3 nextRoot = Vector3.up;
+            Quaternion nextRotation = Quaternion.Euler(0f, 90f, 0f);
+
+            KimodoConstraintPreviewRenderer.CarryEffectorsWithRoot(
+                sample,
+                KimodoConstraintMode.Effector,
+                Vector3.zero,
+                Quaternion.identity,
+                nextRoot,
+                nextRotation);
+
+            Vector3 expectedPosition = nextRoot + nextRotation * Vector3.right;
+            Assert.That(Vector3.Distance(sample.effectors.leftHand.t, expectedPosition), Is.LessThan(0.001f));
+            Assert.That(Quaternion.Angle(sample.effectors.leftHand.q, nextRotation), Is.LessThan(0.001f));
+        }
+
         [Test, Ignore("Legacy FullBody carry expectation; carry now applies to every valid target payload.")]
         public void CarryEffectorsWithRoot_FullBodyPromotesFootGoalsForSolveIk()
         {

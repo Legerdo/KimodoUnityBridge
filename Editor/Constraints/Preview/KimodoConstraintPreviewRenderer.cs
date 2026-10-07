@@ -315,12 +315,30 @@ namespace KimodoBridge.Editor
             Vector3 currentRootPosition,
             Quaternion currentRootRotation)
         {
-            if (entry?.SampleData?.rootOverride == null ||
-                !entry.SampleData.carryEffectorsWithRoot ||
-                entry.SampleData.effectors == null ||
-                entry.ConstraintMode == KimodoConstraintMode.Root2D ||
+            if (entry == null) return;
+            CarryEffectorsWithRoot(
+                entry.SampleData,
+                entry.ConstraintMode,
+                previousRootPosition,
+                previousRootRotation,
+                currentRootPosition,
+                currentRootRotation);
+        }
+
+        internal static void CarryEffectorsWithRoot(
+            KimodoMarkerSampleResult sample,
+            KimodoConstraintMode constraintMode,
+            Vector3 previousRootPosition,
+            Quaternion previousRootRotation,
+            Vector3 currentRootPosition,
+            Quaternion currentRootRotation)
+        {
+            if (sample?.rootOverride == null ||
+                !sample.carryEffectorsWithRoot ||
+                sample.effectors == null ||
+                constraintMode == KimodoConstraintMode.Root2D ||
                 string.Equals(
-                    KimodoConstraintInternal.ResolveExecutionMode(entry.SampleData),
+                    KimodoConstraintInternal.ResolveExecutionMode(sample),
                     "root2d",
                     System.StringComparison.OrdinalIgnoreCase))
             {
@@ -329,37 +347,41 @@ namespace KimodoBridge.Editor
 
             Quaternion deltaRotation =
                 (currentRootRotation * Quaternion.Inverse(previousRootRotation)).normalized;
-            KimodoConstraintEffectors effectors = entry.SampleData.effectors;
-            CarryEffector(entry, HumanBodyBones.LeftHand, effectors.leftHand,
+            KimodoConstraintEffectors effectors = sample.effectors;
+            CarryEffector(sample, constraintMode, HumanBodyBones.LeftHand, effectors.leftHand,
                 deltaRotation, previousRootPosition, currentRootPosition);
-            CarryEffector(entry, HumanBodyBones.RightHand, effectors.rightHand,
+            CarryEffector(sample, constraintMode, HumanBodyBones.RightHand, effectors.rightHand,
                 deltaRotation, previousRootPosition, currentRootPosition);
-            CarryEffector(entry, HumanBodyBones.LeftFoot, effectors.leftFoot,
+            CarryEffector(sample, constraintMode, HumanBodyBones.LeftFoot, effectors.leftFoot,
                 deltaRotation, previousRootPosition, currentRootPosition);
-            CarryEffector(entry, HumanBodyBones.RightFoot, effectors.rightFoot,
+            CarryEffector(sample, constraintMode, HumanBodyBones.RightFoot, effectors.rightFoot,
                 deltaRotation, previousRootPosition, currentRootPosition);
 
         }
 
-        private static bool ShouldCarryEffector(ConstraintPreviewInstance entry, HumanBodyBones bone)
+        private static bool ShouldCarryEffector(
+            KimodoMarkerSampleResult sample,
+            KimodoConstraintMode constraintMode,
+            HumanBodyBones bone)
         {
-            if (entry?.SampleData == null || !entry.SampleData.sampleValid)
+            if (sample == null || !sample.sampleValid)
             {
                 return false;
             }
-            return entry.ConstraintMode != KimodoConstraintMode.Root2D &&
-                KimodoConstraintInternal.ResolveExecutionMode(entry.SampleData) != "root2d";
+            return constraintMode != KimodoConstraintMode.Root2D &&
+                KimodoConstraintInternal.ResolveExecutionMode(sample) != "root2d";
         }
 
         private static void CarryEffector(
-            ConstraintPreviewInstance entry,
+            KimodoMarkerSampleResult sample,
+            KimodoConstraintMode constraintMode,
             HumanBodyBones bone,
             KimodoRigidTransform value,
             Quaternion deltaRotation,
             Vector3 previousRootPosition,
             Vector3 currentRootPosition)
         {
-            if (!ShouldCarryEffector(entry, bone) || value == null)
+            if (!ShouldCarryEffector(sample, constraintMode, bone) || value == null)
             {
                 return;
             }
