@@ -192,7 +192,7 @@ namespace KimodoUnityBridge.Command
         {
             List<int> allKeyframes = GetAllAnalysisKeyframes(subject);
             List<int> allFootEvents = GetAllFootEventFrames(subject);
-            IReadOnlyList<int?> keyframes = SelectFirstNonOverlappingFrames(subject, allKeyframes, 8);
+            IReadOnlyList<int?> keyframes = SelectUniformlySpacedKeyframes(subject, allKeyframes, 8);
             IReadOnlyList<int?> steps = SelectFirstNonOverlappingFrames(subject, allFootEvents, 8);
             var result = new List<PictureTile>
             {
@@ -245,6 +245,17 @@ namespace KimodoUnityBridge.Command
             IEnumerable<int> candidates,
             int count)
         {
+            List<int> validFrames = GetNonOverlappingFrames(subject, candidates);
+            int targetCount = Math.Max(0, count);
+            return validFrames.Take(targetCount).Select(frame => (int?)frame)
+                .Concat(Enumerable.Repeat<int?>(null, Math.Max(0, targetCount - validFrames.Count)))
+                .ToArray();
+        }
+
+        private static List<int> GetNonOverlappingFrames(
+            SubjectPictureData subject,
+            IEnumerable<int> candidates)
+        {
             int last = Math.Max(0, subject.Pelvis.Length - 1);
             var selected = new List<int>();
             foreach (int frame in (candidates ?? Enumerable.Empty<int>())
@@ -265,17 +276,56 @@ namespace KimodoUnityBridge.Command
                 }
 
                 selected.Add(frame);
-                if (selected.Count >= Math.Max(0, count)) break;
             }
+            return selected;
+        }
 
-            return selected.Cast<int?>()
-                .Concat(Enumerable.Repeat<int?>(null, Math.Max(0, count - selected.Count)))
-                .ToArray();
+        private static IReadOnlyList<int?> SelectUniformlySpacedKeyframes(
+            SubjectPictureData subject,
+            IEnumerable<int> candidates,
+            int count)
+        {
+            int lastFrame = Math.Max(0, subject.Pelvis.Length - 1);
+            int targetCount = Math.Max(0, count);
+            if (targetCount == 0) return Array.Empty<int?>();
+
+            // Keep the existing spatial de-duplication as the validity filter,
+            // but evaluate every candidate before selecting evenly across the
+            // resulting ordered set. Always make both clip endpoints eligible.
+            List<int> validFrames = GetNonOverlappingFrames(
+                subject,
+                (candidates ?? Enumerable.Empty<int>()).Concat(new[] { 0, lastFrame }));
+            if (!validFrames.Contains(0)) validFrames.Insert(0, 0);
+            if (!validFrames.Contains(lastFrame)) validFrames.Add(lastFrame);
+            validFrames = validFrames.Distinct().OrderBy(frame => frame).ToList();
+
+            if (targetCount == 1) return new int?[] { 0 };
+
+            int selectedCount = Math.Min(targetCount, validFrames.Count);
+            var selected = new int?[selectedCount];
+            for (int index = 0; index < selectedCount; index++)
+            {
+                if (index == 0)
+                {
+                    selected[index] = 0;
+                    continue;
+                }
+                if (index == selectedCount - 1)
+                {
+                    selected[index] = lastFrame;
+                    continue;
+                }
+
+                int candidateIndex = Mathf.RoundToInt(
+                    index * (validFrames.Count - 1f) / (selectedCount - 1f));
+                selected[index] = validFrames[Mathf.Clamp(candidateIndex, 0, validFrames.Count - 1)];
+            }
+            return selected.Concat(Enumerable.Repeat<int?>(null, targetCount - selectedCount)).ToArray();
         }
 
         private static IReadOnlyList<int?> NormalizeTestKeyframes(SubjectPictureData subject, int count)
         {
-            return SelectFirstNonOverlappingFrames(subject, GetAllAnalysisKeyframes(subject), count);
+            return SelectUniformlySpacedKeyframes(subject, GetAllAnalysisKeyframes(subject), count);
         }
 
         private static IReadOnlyList<int?> NormalizeTestStepFrames(SubjectPictureData subject, int count)
@@ -1038,7 +1088,7 @@ namespace KimodoUnityBridge.Command
             if (request.Includes("height_time_track")) result.Add(PictureTile.TestOverview(subject, "height_time_track", Vector3.up));
             List<int> allKeyframes = GetAllAnalysisKeyframes(subject);
             List<int> allFootEvents = GetAllFootEventFrames(subject);
-            IReadOnlyList<int?> keyframes = SelectFirstNonOverlappingFrames(subject, allKeyframes, 8);
+            IReadOnlyList<int?> keyframes = SelectUniformlySpacedKeyframes(subject, allKeyframes, 8);
             IReadOnlyList<int?> steps = SelectFirstNonOverlappingFrames(subject, allFootEvents, 8);
             if (request.Includes("3d_ghost"))
             {
