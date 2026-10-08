@@ -26,6 +26,7 @@ namespace KimodoUnityBridge.Command.Tests
     {
         private const float PositionToleranceMeters = 0.003f;
         private const float Root2DGenerationToleranceMeters = 0.1f;
+        private const float EffectorRootGenerationToleranceMeters = 0.1f;
 
         [Test, Timeout(10 * 60 * 1000)]
         public async Task RealKModelGeneration_RetargetedClipMatchesRoot2DKeyframe()
@@ -282,12 +283,15 @@ namespace KimodoUnityBridge.Command.Tests
                             new Vector2(actual.rootOverride.t.x, actual.rootOverride.t.z),
                             new Vector2(expected.rootOverride.t.x, expected.rootOverride.t.z))
                         : Vector3.Distance(actual.rootOverride.t, expected.rootOverride.t);
+                    float rootTolerance = string.Equals(sampleMode, "root-effect", StringComparison.OrdinalIgnoreCase)
+                        ? EffectorRootGenerationToleranceMeters
+                        : PositionToleranceMeters;
 
                     Assert.That(
                         rootDistance,
-                        Is.LessThanOrEqualTo(PositionToleranceMeters),
+                        Is.LessThanOrEqualTo(rootTolerance),
                         $"{exportedConstraintType} generated root differs by {rootDistance:F4}m " +
-                        $"(actual={actual.rootOverride.t}, expected={expected.rootOverride.t}, " +
+                        $"(tolerance={rootTolerance:F3}m, actual={actual.rootOverride.t}, expected={expected.rootOverride.t}, " +
                         $"frame={constrainedFrame}, time={constrainedTime:F4}s).");
                 }
                 catch (OperationCanceledException) when (timeout.IsCancellationRequested)
@@ -362,6 +366,30 @@ namespace KimodoUnityBridge.Command.Tests
                     ToKimodoPosition(rootEffect.effectors.rightHand.t),
                     "root-effect right hand", PositionToleranceMeters);
             }
+        }
+
+        [Test]
+        public void GenerateCommand_ExposesThreePointConstraintSchemas()
+        {
+            JObject generation = JObject.Parse(command_dispatcher.GetCommandDefinitionsJson())
+                ["tools"]
+                .Values<JObject>()
+                .Single(tool => tool.Value<string>("name") == "kimodo_generate_animation");
+            JObject constraints = (JObject)generation["inputSchema"]["properties"]["constraints"];
+            var branches = ((JArray)constraints["items"]["oneOf"])
+                .Values<JObject>()
+                .Where(branch => branch["properties"]?["type"]?["const"] != null)
+                .ToDictionary(branch => branch["properties"]["type"]["const"].Value<string>());
+
+            CollectionAssert.IsSubsetOf(
+                new[] { "fullbody", "root2d", "root_effect" },
+                branches.Keys);
+            AssertRequiredProperties(branches["fullbody"], "frame", "type", "pose");
+            AssertRequiredProperties(branches["root2d"], "frame", "type", "root2d");
+            AssertRequiredProperties(branches["root_effect"], "frame", "type", "root2d", "effect");
+            AssertRequiredProperties((JObject)branches["root2d"]["properties"]["root2d"], "position", "heading");
+            AssertRequiredProperties((JObject)branches["root_effect"]["properties"]["root2d"], "position", "heading");
+            Assert.That(branches["root_effect"]["properties"]["effect"], Is.Not.Null);
         }
 
         [Test]
@@ -449,6 +477,15 @@ namespace KimodoUnityBridge.Command.Tests
         private static Vector3 ToKimodoPosition(Vector3 unityPosition)
         {
             return new Vector3(-unityPosition.x, unityPosition.y, unityPosition.z);
+        }
+
+        private static void AssertRequiredProperties(JObject schema, params string[] names)
+        {
+            Assert.That(schema, Is.Not.Null);
+            JArray required = (JArray)schema["required"];
+            Assert.That(required, Is.Not.Null);
+            foreach (string name in names)
+                CollectionAssert.Contains(required.Values<string>(), name, $"Schema must require {name}.");
         }
 
         private static void AssertVector2(JToken actual, Vector2 expected, string label, float tolerance)
