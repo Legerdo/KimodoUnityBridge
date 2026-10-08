@@ -180,7 +180,7 @@ if request_names_one_or_more_actions():
     if request_semantics_include_fix_or_variant_of_named_actions() and related_clips is empty:
         record_context_evidence("No matching action clip found; this is a new baseline generation.")
     if related_clips is not empty:
-        related_analysis = animation_analyze(related_clips, picture={"output": "composite"}, resolution=512)
+        related_analysis = animation_analyze(related_clips, picture={"output": "composite"}, resolution=1920)
         source_profile = related_analysis.clips[0].motion_profile
         source_keyframes = related_analysis.clips[0].phase_track[*].anchor_frame_60
         if request_is_repair_or_variant_of_related_clip():
@@ -254,7 +254,7 @@ function execute_generate_skill(request):
                 clip: source_clip
             }],
             picture: {"output": "composite"},
-            resolution: 512
+            resolution: 1920
         })
         source_image_path = source_analysis.pictures.image_path
         source_picture_map = source_analysis.pictures.images
@@ -412,7 +412,7 @@ function verify_final_output(final_ref, runtime_evidence):
             clip: final_ref.clip
         }],
         picture: {"output": "composite"},
-        resolution: 512
+        resolution: 1920
     })
 
     final_image_path = final_analysis.pictures.image_path
