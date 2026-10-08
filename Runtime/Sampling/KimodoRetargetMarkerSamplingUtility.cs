@@ -120,6 +120,7 @@ namespace KimodoBridge
             if (valid)
             {
                 target.t = position;
+                target.space = KimodoConstraintSpace.World;
                 target.enableRotation = false;
                 // Hand goals use Unity's axis-corrected goal frame. Feet keep
                 // the legacy bind-relative transport below.
@@ -128,6 +129,7 @@ namespace KimodoBridge
             else
             {
                 target.t = Vector3.zero;
+                target.space = KimodoConstraintSpace.World;
                 target.q = Quaternion.identity;
                 target.enableRotation = false;
             }

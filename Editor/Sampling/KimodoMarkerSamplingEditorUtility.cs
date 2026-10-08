@@ -45,7 +45,7 @@ namespace KimodoBridge.Editor
             // Normalization starts from the marker payload, so copy the edited
             // world-space targets explicitly or a drag is lost on the next
             // render.
-            if (sample.effectors != null)
+            if (!marker.autoSample && sample.effectors != null)
             {
                 normalized.effectors = sample.effectors.Clone();
             }

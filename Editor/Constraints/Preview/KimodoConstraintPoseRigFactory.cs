@@ -132,7 +132,6 @@ namespace KimodoBridge.Editor
                     sample,
                     KimodoMotionModelProfiles.ResolveGenerationFrameRate(modelName),
                     instance.TargetCache,
-                    true,
                     out _,
                     out _,
                     out error);

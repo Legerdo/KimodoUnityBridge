@@ -177,6 +177,7 @@ namespace KimodoUnityBridge.Command
                     }
                     if (value["position"] == null && value["rotation"] == null)
                         throw new InvalidOperationException($"effector.{property.Name} must contain position or rotation.");
+                    target.space = KimodoConstraintSpace.World;
                     switch (property.Name)
                     {
                         case "left_hand": sample.effectors.leftHand = target; sample.enableMask.leftHand = true; break;
@@ -866,10 +867,10 @@ namespace KimodoUnityBridge.Command
             }
             return endEffector switch
             {
-                "left_hand" => sample.effectors.leftHand?.Clone() ?? KimodoRigidTransform.Identity,
-                "right_hand" => sample.effectors.rightHand?.Clone() ?? KimodoRigidTransform.Identity,
-                "left_foot" => sample.effectors.leftFoot?.Clone() ?? KimodoRigidTransform.Identity,
-                "right_foot" => sample.effectors.rightFoot?.Clone() ?? KimodoRigidTransform.Identity,
+                "left_hand" => KimodoConstraintSpaceUtility.ToWorld(sample.effectors.leftHand, sample.rootOverride),
+                "right_hand" => KimodoConstraintSpaceUtility.ToWorld(sample.effectors.rightHand, sample.rootOverride),
+                "left_foot" => KimodoConstraintSpaceUtility.ToWorld(sample.effectors.leftFoot, sample.rootOverride),
+                "right_foot" => KimodoConstraintSpaceUtility.ToWorld(sample.effectors.rightFoot, sample.rootOverride),
                 _ => throw new InvalidOperationException($"Unsupported end effector '{endEffector}'.")
             };
         }

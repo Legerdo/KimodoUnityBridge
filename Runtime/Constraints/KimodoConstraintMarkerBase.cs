@@ -127,6 +127,12 @@ public class KimodoConstraintMarker : Marker, IKimodoConstraintPreviewSelectable
         if (initializeDefaults)
         {
             sampleData.enableMask = KimodoConstraintMask.ForType(ModeProtocolName(constraintMode));
+            // Inspector-authored effectors start in local space. Command
+            // construction assigns World explicitly at its boundary.
+            sampleData.effectors.leftHand.space = KimodoConstraintSpace.Local;
+            sampleData.effectors.rightHand.space = KimodoConstraintSpace.Local;
+            sampleData.effectors.leftFoot.space = KimodoConstraintSpace.Local;
+            sampleData.effectors.rightFoot.space = KimodoConstraintSpace.Local;
             if (constraintMode == KimodoConstraintMode.Root2D)
             {
                 sampleData.enableMask.rootHeading = true;

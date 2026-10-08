@@ -252,9 +252,9 @@ namespace KimodoBridge
         // When unset, input order remains the deterministic fallback.
         public long creationOrder;
 
-        // Explicit targets must use the Transform space of the skeleton passed
-        // to the pose pipeline. Timeline samples store Character world space;
-        // runtime APIs convert world goals once to neutral model space.
+        // Each effector declares local or world space. The pose pipeline
+        // normalizes local values against rootOverride exactly once; command
+        // inputs are authored as world-space values.
         [UnityEngine.Serialization.FormerlySerializedAs("worldIkTargets")]
         public KimodoConstraintEffectors effectors = new KimodoConstraintEffectors();
         // Complete hips override in the same explicit-target space. For a
@@ -262,10 +262,9 @@ namespace KimodoBridge
         // sampled root Y, pitch and roll remain motion channels.
         public KimodoRigidTransform rootOverride = KimodoRigidTransform.Identity;
 
-        // Preview/editor option. It is intentionally not a bridge protocol
-        // field: dragging the root handle carries enabled effector targets
-        // by the same rigid transform delta.
-        [UnityEngine.Serialization.FormerlySerializedAs("rootOverrideAfterEffectors")]
+        // Retained as a non-serialized source-compatibility shim for code that
+        // still constructs old samples. It has no runtime or editor behavior.
+        [System.NonSerialized, Obsolete("Carry with root was removed; root edits never modify effectors.")]
         public bool carryEffectorsWithRoot;
 
         // One mode is the only persisted constraint semantic. Wire-family
@@ -283,7 +282,6 @@ namespace KimodoBridge
             creationOrder = creationOrder,
             effectors = effectors?.Clone() ?? new KimodoConstraintEffectors(),
             rootOverride = rootOverride?.Clone() ?? KimodoRigidTransform.Identity,
-            carryEffectorsWithRoot = carryEffectorsWithRoot,
             constraintMode = this.constraintMode,
             sampleTime = sampleTime
         };

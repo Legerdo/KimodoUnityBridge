@@ -251,7 +251,7 @@ namespace KimodoUnityBridge.Command
             // pose. Solving each effector independently on the same skeleton would
             // make later targets depend on earlier solver mutations.
             if (!KimodoConstraintPosePipeline.TryApplyCanonical(
-                    result, frameRate, targetCache, false, out _, out _, out string validationError))
+                    result, frameRate, targetCache, out _, out _, out string validationError))
             {
                 poseWarnings?.Add(
                     $"constraints[{constraintIndex}].root_effect preflight warning: {validationError}");
@@ -494,6 +494,7 @@ namespace KimodoUnityBridge.Command
             target.t = targetPosition;
             target.q = hasRotation ? targetRotation : Quaternion.identity;
             target.enableRotation = hasRotation;
+            target.space = KimodoConstraintSpace.World;
             switch (type)
             {
                 case "left-hand": result.effectors.leftHand = target; break;
@@ -715,6 +716,10 @@ namespace KimodoUnityBridge.Command
                     rootRotation,
                     Quaternion.LookRotation(new Vector3(heading.x, 0f, heading.y), Vector3.up));
             }
+            // Command Root2D is first normalized into the canonical root
+            // payload; its protocol height is then fixed at Y=1. This is a
+            // command-boundary convention and must not alter UI-authored data.
+            rootPosition.y = 1f;
             // A Root2D marker still needs the complete support pose for the
             // editor preview. The Root2D mode controls export/solve channels;
             // it must not discard the sampled muscles, feet, or root height.
@@ -735,7 +740,7 @@ namespace KimodoUnityBridge.Command
             }
             if (solveSupport && targetCache != null &&
                 !KimodoConstraintPosePipeline.TryApplyCanonical(
-                    result, frameRate, targetCache, false, out _, out _, out string solveError))
+                    result, frameRate, targetCache, out _, out _, out string solveError))
             {
                 throw new InvalidOperationException(
                     $"Root2D constraint solve failed at constraints[{constraintIndex}]: {solveError}");
@@ -878,7 +883,6 @@ namespace KimodoUnityBridge.Command
             ConfigureConstraintIntent(solveInput, constraintType, sampleTime);
             if (!KimodoConstraintPosePipeline.TryApplyCanonical(
                     solveInput, frameRate, modelSkeleton,
-                    false,
                     out BoneSample boneSample, out MuscleSample targetMuscleSample, out string retargetError))
             {
                 throw new InvalidOperationException($"Retarget pose constraint failed: {retargetError}");
@@ -938,10 +942,10 @@ namespace KimodoUnityBridge.Command
             if (sample?.effectors == null) return null;
             return type switch
             {
-                "left-hand" => sample.effectors.leftHand,
-                "right-hand" => sample.effectors.rightHand,
-                "left-foot" => sample.effectors.leftFoot,
-                "right-foot" => sample.effectors.rightFoot,
+                "left-hand" => KimodoConstraintSpaceUtility.ToWorld(sample.effectors.leftHand, sample.rootOverride),
+                "right-hand" => KimodoConstraintSpaceUtility.ToWorld(sample.effectors.rightHand, sample.rootOverride),
+                "left-foot" => KimodoConstraintSpaceUtility.ToWorld(sample.effectors.leftFoot, sample.rootOverride),
+                "right-foot" => KimodoConstraintSpaceUtility.ToWorld(sample.effectors.rightFoot, sample.rootOverride),
                 _ => null
             };
         }

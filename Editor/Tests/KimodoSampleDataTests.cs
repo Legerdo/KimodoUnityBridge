@@ -4,6 +4,7 @@ using NUnit.Framework;
 using Newtonsoft.Json.Linq;
 using TimelineInject;
 using UnityEngine;
+using KimodoUnityBridge;
 
 namespace KimodoBridge.Editor.Tests
 {
@@ -258,6 +259,59 @@ namespace KimodoBridge.Editor.Tests
         }
 
         [Test]
+        public void AutoSample_KeepsNewEffectorTargetsInLocalSpace()
+        {
+            KimodoConstraintMarker marker = ScriptableObject.CreateInstance<KimodoConstraintMarker>();
+            try
+            {
+                marker.autoSample = true;
+                marker.ConstraintMode = KimodoConstraintMode.Effector;
+                KimodoRigidTransform authoredRoot = marker.SampleData.rootOverride;
+                authoredRoot.position = new Vector3(2f, 1f, -3f);
+                authoredRoot.rotation = Quaternion.Euler(0f, 40f, 0f);
+                marker.SampleData.rootOverride = authoredRoot;
+
+                var sampled = new KimodoMarkerSampleResult
+                {
+                    sampleValid = true,
+                    constraintMode = "effector",
+                    rootOverride = new KimodoRigidTransform
+                    {
+                        position = authoredRoot.position,
+                        rotation = authoredRoot.rotation
+                    },
+                    effectors = new KimodoConstraintEffectors
+                    {
+                        leftHand = new KimodoRigidTransform
+                        {
+                            position = new Vector3(3f, 2f, -1f),
+                            rotation = Quaternion.Euler(10f, 20f, 30f),
+                            space = KimodoConstraintSpace.World
+                        }
+                    }
+                };
+                Vector3 sampledWorldPosition = sampled.effectors.leftHand.position;
+                Quaternion sampledWorldRotation = sampled.effectors.leftHand.rotation;
+
+                Assert.That(KimodoMarkerSamplingEditorUtility.TryWriteConstraintMarkerSample(
+                    marker, sampled, out string error), Is.True, error);
+
+                KimodoRigidTransform stored = marker.SampleData.effectors.leftHand;
+                Assert.That(stored.space, Is.EqualTo(KimodoConstraintSpace.Local));
+                Assert.That(Vector3.Distance(
+                    KimodoConstraintSpaceUtility.ToWorldPosition(stored.position, stored.space,
+                        marker.SampleData.rootOverride), sampledWorldPosition), Is.LessThan(0.001f));
+                Assert.That(Quaternion.Angle(
+                    KimodoConstraintSpaceUtility.ToWorldRotation(stored.rotation, stored.space,
+                        marker.SampleData.rootOverride), sampledWorldRotation), Is.LessThan(0.001f));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(marker);
+            }
+        }
+
+        [Test, Ignore("Archived legacy carry serialization behavior; carry option was removed.")]
         public void AutoSample_PreservesCarryEffectorsWithRootIntent()
         {
             KimodoConstraintMarker marker = ScriptableObject.CreateInstance<KimodoConstraintMarker>();
@@ -285,6 +339,52 @@ namespace KimodoBridge.Editor.Tests
             {
                 UnityEngine.Object.DestroyImmediate(marker);
             }
+        }
+
+        [Test]
+        public void EffectorSpace_LocalWorldRoundTripPreservesPose()
+        {
+            KimodoRigidTransform root = new KimodoRigidTransform
+            {
+                position = new Vector3(3f, 1f, -2f),
+                rotation = Quaternion.Euler(0f, 45f, 0f)
+            };
+            KimodoRigidTransform value = new KimodoRigidTransform
+            {
+                position = new Vector3(1f, 2f, 3f),
+                rotation = Quaternion.Euler(10f, 20f, 30f),
+                enableRotation = true,
+                space = KimodoConstraintSpace.Local
+            };
+            Vector3 originalPosition = value.position;
+            Quaternion originalRotation = value.rotation;
+            KimodoConstraintSpaceUtility.ConvertSpace(value, root, KimodoConstraintSpace.World);
+            Vector3 worldPosition = value.position;
+            Quaternion worldRotation = value.rotation;
+            KimodoConstraintSpaceUtility.ConvertSpace(value, root, KimodoConstraintSpace.Local);
+            Assert.That(Vector3.Distance(value.position, originalPosition), Is.LessThan(0.001f));
+            Assert.That(Quaternion.Angle(value.rotation, originalRotation), Is.LessThan(0.001f));
+            Assert.That(Vector3.Distance(KimodoConstraintSpaceUtility.ToWorldPosition(value.position, value.space, root), worldPosition), Is.LessThan(0.001f));
+            Assert.That(Quaternion.Angle(KimodoConstraintSpaceUtility.ToWorldRotation(value.rotation, value.space, root), worldRotation), Is.LessThan(0.001f));
+        }
+
+        [Test]
+        public void RootEditDoesNotModifyEffectorPayload()
+        {
+            KimodoMarkerSampleResult sample = new KimodoMarkerSampleResult
+            {
+                rootOverride = new KimodoRigidTransform { position = Vector3.zero, rotation = Quaternion.identity },
+                effectors = new KimodoConstraintEffectors
+                {
+                    leftHand = new KimodoRigidTransform { position = new Vector3(1f, 2f, 3f), rotation = Quaternion.Euler(1f, 2f, 3f) }
+                }
+            };
+            Vector3 position = sample.effectors.leftHand.position;
+            Quaternion rotation = sample.effectors.leftHand.rotation;
+            sample.rootOverride.position = new Vector3(4f, 0f, 5f);
+            sample.rootOverride.rotation = Quaternion.Euler(0f, 90f, 0f);
+            Assert.That(sample.effectors.leftHand.position, Is.EqualTo(position));
+            Assert.That(Quaternion.Angle(sample.effectors.leftHand.rotation, rotation), Is.LessThan(0.001f));
         }
 
         [Test]
@@ -348,6 +448,10 @@ namespace KimodoBridge.Editor.Tests
                 Assert.That(marker.SampleData.enableMask.rootPosition, Is.False);
                 Assert.That(marker.SampleData.enableMask.rootHeading, Is.True);
                 Assert.That(marker.SampleData.enableMask.AnyEndEffector, Is.False);
+                Assert.That(marker.SampleData.effectors.leftHand.space, Is.EqualTo(KimodoConstraintSpace.Local));
+                Assert.That(marker.SampleData.effectors.rightHand.space, Is.EqualTo(KimodoConstraintSpace.Local));
+                Assert.That(marker.SampleData.effectors.leftFoot.space, Is.EqualTo(KimodoConstraintSpace.Local));
+                Assert.That(marker.SampleData.effectors.rightFoot.space, Is.EqualTo(KimodoConstraintSpace.Local));
             }
             finally
             {

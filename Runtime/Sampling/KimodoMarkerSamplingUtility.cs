@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using KimodoUnityBridge;
 using TimelineInject;
 using UnityEngine;
 using UnityEngine.Timeline;
@@ -25,10 +26,7 @@ namespace KimodoBridge
             if (useSampledValues)
             {
                 normalized.enableMask = authored?.enableMask?.Clone() ?? new KimodoConstraintMask();
-                // carryEffectorsWithRoot is editor-authored intent, not a
-                // sampled Timeline value. Preserve the checkbox while
-                // replacing the pose payload with the sampled frame.
-                normalized.carryEffectorsWithRoot = authored?.carryEffectorsWithRoot == true;
+                PreserveAuthoredEffectorSpaces(authored, normalized);
             }
             normalized.sampleTime = marker.time;
             normalized.constraintMode = marker.ConstraintMode == KimodoConstraintMode.Root2D
@@ -44,6 +42,34 @@ namespace KimodoBridge
             }
             normalized.enableMask ??= new KimodoConstraintMask();
             return normalized;
+        }
+
+        private static void PreserveAuthoredEffectorSpaces(
+            KimodoMarkerSampleResult authored,
+            KimodoMarkerSampleResult normalized)
+        {
+            if (authored?.effectors == null || normalized?.effectors == null) return;
+            KimodoRigidTransform[] source =
+            {
+                normalized.effectors.leftHand,
+                normalized.effectors.rightHand,
+                normalized.effectors.leftFoot,
+                normalized.effectors.rightFoot
+            };
+            KimodoRigidTransform[] authoredValues =
+            {
+                authored.effectors.leftHand,
+                authored.effectors.rightHand,
+                authored.effectors.leftFoot,
+                authored.effectors.rightFoot
+            };
+            for (int i = 0; i < source.Length; i++)
+            {
+                if (source[i] == null || authoredValues[i] == null) continue;
+                KimodoConstraintSpace target = authoredValues[i].space;
+                source[i].space = KimodoConstraintSpace.World;
+                KimodoConstraintSpaceUtility.ConvertSpace(source[i], normalized.rootOverride, target);
+            }
         }
 
         public static bool TryNormalizeConstraintMarkerSample(

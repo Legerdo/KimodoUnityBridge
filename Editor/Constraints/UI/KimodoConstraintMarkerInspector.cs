@@ -47,29 +47,11 @@ namespace KimodoBridge.Editor
                 KimodoConstraintMarkerEditorUtility.DrawEditButton(serializedObject, marker);
             }
             EditorGUILayout.Space(4f);
-            KimodoRigidTransform previousRoot = marker.SampleData?.rootOverride?.Clone();
             KimodoConstraintEditorState.DrawConstraintPayload(serializedObject, marker);
 
             bool changed = serializedObject.ApplyModifiedProperties();
             if (changed)
             {
-                KimodoRigidTransform currentRoot = marker.SampleData?.rootOverride;
-                if (previousRoot != null &&
-                    currentRoot != null &&
-                    marker.SampleData.carryEffectorsWithRoot &&
-                    (previousRoot.position != currentRoot.position ||
-                     Quaternion.Angle(previousRoot.rotation, currentRoot.rotation) > 1e-4f))
-                {
-                    Undo.RecordObject(marker, "Carry Effectors With Root");
-                    KimodoConstraintPreviewRenderer.CarryEffectorsWithRoot(
-                        marker.SampleData,
-                        marker.ConstraintMode,
-                        previousRoot.position,
-                        previousRoot.rotation,
-                        currentRoot.position,
-                        currentRoot.rotation);
-                    EditorUtility.SetDirty(marker);
-                }
                 KimodoConstraintMarkerEditorUtility.NotifyInspectorChanged(marker);
                 KimodoConstraintSelectionPreviewTool.SchedulePreviewUpdate();
             }

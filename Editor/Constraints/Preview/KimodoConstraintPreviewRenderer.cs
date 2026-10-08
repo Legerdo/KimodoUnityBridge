@@ -201,7 +201,25 @@ namespace KimodoBridge.Editor
             bool enabled)
         {
             if (!enabled || value == null) return;
-            DrawSampleHandle(entry, bone, value, TargetColor(bone), bone.ToString(), isRoot: false);
+            KimodoRigidTransform display = KimodoConstraintSpaceUtility.ToWorld(value, entry.SampleData?.rootOverride);
+            DrawSampleHandle(entry, bone, display, TargetColor(bone), bone.ToString(), isRoot: false,
+                onChanged: edited =>
+                {
+                    Vector3 worldPosition = edited.position;
+                    Quaternion worldRotation = edited.rotation;
+                    KimodoConstraintSpace targetSpace = value.space;
+                    KimodoRigidTransform world = new KimodoRigidTransform
+                    {
+                        position = worldPosition,
+                        rotation = worldRotation,
+                        enableRotation = value.enableRotation,
+                        space = KimodoConstraintSpace.World
+                    };
+                    KimodoConstraintSpaceUtility.ConvertSpace(world, entry.SampleData?.rootOverride, targetSpace);
+                    value.position = world.position;
+                    value.rotation = world.rotation;
+                    value.space = targetSpace;
+                });
         }
 
         private static void DrawSampleHandle(
@@ -210,7 +228,8 @@ namespace KimodoBridge.Editor
             KimodoRigidTransform value,
             Color color,
             string label,
-            bool isRoot)
+            bool isRoot,
+            Action<KimodoRigidTransform> onChanged = null)
         {
             Vector3 position = value.position;
             // Effector rotation is stored in the bind-pose-normalized rig
@@ -263,11 +282,8 @@ namespace KimodoBridge.Editor
                 }
                 if (EditorGUI.EndChangeCheck())
                 {
-                    if (isRoot)
-                    {
-                        CarryEffectorsWithRoot(entry, position, rotation, moved, rotation);
-                    }
                     value.position = moved;
+                    onChanged?.Invoke(value);
                     PromoteHandleChannel(entry.SampleData, bone, rotationChanged: false);
                     entry.OnSampleChanged?.Invoke(entry.SampleData.Clone());
                 }
@@ -289,17 +305,9 @@ namespace KimodoBridge.Editor
                 if (EditorGUI.EndChangeCheck())
                 {
                     bool rotationChanged = Quaternion.Angle(previousRotation, rotation) > 1e-4f;
-                    if (isRoot)
-                    {
-                        CarryEffectorsWithRoot(
-                            entry,
-                            value.position,
-                            previousRotation,
-                            position,
-                            rotation);
-                    }
                     value.position = position;
                     value.rotation = rotation.normalized;
+                    onChanged?.Invoke(value);
                     PromoteHandleChannel(entry.SampleData, bone, rotationChanged);
                     entry.OnSampleChanged?.Invoke(entry.SampleData.Clone());
                 }
@@ -316,13 +324,7 @@ namespace KimodoBridge.Editor
             Quaternion currentRootRotation)
         {
             if (entry == null) return;
-            CarryEffectorsWithRoot(
-                entry.SampleData,
-                entry.ConstraintMode,
-                previousRootPosition,
-                previousRootRotation,
-                currentRootPosition,
-                currentRootRotation);
+            // Kept as a source-compatible no-op for archived editor callers.
         }
 
         internal static void CarryEffectorsWithRoot(
@@ -333,66 +335,7 @@ namespace KimodoBridge.Editor
             Vector3 currentRootPosition,
             Quaternion currentRootRotation)
         {
-            if (sample?.rootOverride == null ||
-                !sample.carryEffectorsWithRoot ||
-                sample.effectors == null ||
-                constraintMode == KimodoConstraintMode.Root2D ||
-                string.Equals(
-                    KimodoConstraintInternal.ResolveExecutionMode(sample),
-                    "root2d",
-                    System.StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            Quaternion deltaRotation =
-                (currentRootRotation * Quaternion.Inverse(previousRootRotation)).normalized;
-            KimodoConstraintEffectors effectors = sample.effectors;
-            CarryEffector(sample, constraintMode, HumanBodyBones.LeftHand, effectors.leftHand,
-                deltaRotation, previousRootPosition, currentRootPosition);
-            CarryEffector(sample, constraintMode, HumanBodyBones.RightHand, effectors.rightHand,
-                deltaRotation, previousRootPosition, currentRootPosition);
-            CarryEffector(sample, constraintMode, HumanBodyBones.LeftFoot, effectors.leftFoot,
-                deltaRotation, previousRootPosition, currentRootPosition);
-            CarryEffector(sample, constraintMode, HumanBodyBones.RightFoot, effectors.rightFoot,
-                deltaRotation, previousRootPosition, currentRootPosition);
-
-        }
-
-        private static bool ShouldCarryEffector(
-            KimodoMarkerSampleResult sample,
-            KimodoConstraintMode constraintMode,
-            HumanBodyBones bone)
-        {
-            if (sample == null || !sample.sampleValid)
-            {
-                return false;
-            }
-            return constraintMode != KimodoConstraintMode.Root2D &&
-                KimodoConstraintInternal.ResolveExecutionMode(sample) != "root2d";
-        }
-
-        private static void CarryEffector(
-            KimodoMarkerSampleResult sample,
-            KimodoConstraintMode constraintMode,
-            HumanBodyBones bone,
-            KimodoRigidTransform value,
-            Quaternion deltaRotation,
-            Vector3 previousRootPosition,
-            Vector3 currentRootPosition)
-        {
-            if (!ShouldCarryEffector(sample, constraintMode, bone) || value == null)
-            {
-                return;
-            }
-
-            value.position = currentRootPosition +
-                deltaRotation * (value.position - previousRootPosition);
-            // Effector rotations are bind-pose-normalized orientation values
-            // (worldRotation * inverse(bindRotation)). A world-space root
-            // delta therefore propagates directly on the left; expanding to
-            // an absolute rotation and packing it again only adds noise.
-            value.rotation = (deltaRotation * value.rotation).normalized;
+            // Carry-with-root was removed. Root edits only update rootOverride.
         }
 
         private static void PromoteHandleChannel(

@@ -50,6 +50,63 @@ namespace KimodoBridge.Editor.Tests
         }
 
         [Test]
+        public void PosePipeline_RootTranslationCarriesNativeFootIkWhenFootEffectorsAreDisabled()
+        {
+            const string model = KimodoMotionModelProfiles.DefaultModelName;
+            Assert.That(KimodoRuntimeAvatarSkeletonBuilder.TryLoadAvatarByModelName(
+                model, out var avatar, out var error), Is.True, error);
+            Assert.That(KimodoRetargetAvatarUtility.TryBuildRetargetSkeleton(
+                avatar, "RootCarriesNativeFootIk", out var baseline, out error), Is.True, error);
+            Assert.That(KimodoRetargetAvatarUtility.TryBuildRetargetSkeleton(
+                avatar, "RootCarriesNativeFootIkMoved", out var moved, out error), Is.True, error);
+            try
+            {
+                Assert.That(KimodoRetargetMarkerSamplingUtility.TryBuildMarkerSampleResultFromBoneSample(
+                    KimodoRetargetSamplingUtility.CaptureBoneSample(baseline),
+                    baseline,
+                    model,
+                    "fullbody",
+                    0,
+                    out KimodoMarkerSampleResult sample,
+                    out error), Is.True, error);
+                sample.enableMask = KimodoConstraintMask.ForType("fullbody");
+                sample.enableMask.leftFoot = false;
+                sample.enableMask.rightFoot = false;
+                sample.enableMask.rootHeading = false;
+                Assert.That(baseline.GetBonePose(HumanBodyBones.Hips,
+                    out Vector3 originalHips, out Quaternion originalHeading), Is.True);
+                sample.rootOverride.position = originalHips;
+                sample.rootOverride.rotation = originalHeading;
+
+                Assert.That(KimodoConstraintPosePipeline.TryApply(
+                    sample, 30f, baseline, out _, out _, out error), Is.True, error);
+                KimodoMarkerSampleResult movedSample = sample.Clone();
+                movedSample.rootOverride.position += Vector3.right;
+                Assert.That(KimodoConstraintPosePipeline.TryApply(
+                    movedSample, 30f, moved,
+                    out _, out _, out error), Is.True, error);
+
+                Assert.That(baseline.GetBonePose(HumanBodyBones.LeftFoot,
+                    out Vector3 baselineLeftFoot, out _), Is.True);
+                Assert.That(moved.GetBonePose(HumanBodyBones.LeftFoot,
+                    out Vector3 movedLeftFoot, out _), Is.True);
+                Assert.That(baseline.GetBonePose(HumanBodyBones.RightFoot,
+                    out Vector3 baselineRightFoot, out _), Is.True);
+                Assert.That(moved.GetBonePose(HumanBodyBones.RightFoot,
+                    out Vector3 movedRightFoot, out _), Is.True);
+                Assert.That(Vector3.Distance(movedLeftFoot - baselineLeftFoot, Vector3.right),
+                    Is.LessThan(0.02f));
+                Assert.That(Vector3.Distance(movedRightFoot - baselineRightFoot, Vector3.right),
+                    Is.LessThan(0.02f));
+            }
+            finally
+            {
+                baseline.Dispose();
+                moved.Dispose();
+            }
+        }
+
+        [Test]
         public void Root2DCommandSupport_UsesCanonicalPoseSolveOnce()
         {
             const string model = KimodoMotionModelProfiles.DefaultModelName;
@@ -91,6 +148,7 @@ namespace KimodoBridge.Editor.Tests
                 Assert.That(sample.sampleValid, Is.True);
                 Assert.That(sample.enableMask.rootHeading, Is.True);
                 Assert.That(sample.enableMask.rootPosition, Is.False);
+                Assert.That(sample.rootOverride.t.y, Is.EqualTo(1f).Within(0.001f));
                 Assert.That(skeleton.GetBonePose(
                     HumanBodyBones.Hips, out Vector3 solvedRoot, out Quaternion solvedHeading), Is.True);
                 Assert.That(solvedRoot.x, Is.EqualTo(2f).Within(0.001f));
@@ -351,7 +409,7 @@ namespace KimodoBridge.Editor.Tests
                 Is.LessThan(0.01f));
         }
 
-        [Test]
+        [Test, Ignore("Archived legacy carry behavior; root edits no longer modify effectors.")]
         public void CarryEffectorsWithRoot_AppliesTheRootRigidTransformDelta()
         {
             var sample = new KimodoMarkerSampleResult
@@ -406,7 +464,7 @@ namespace KimodoBridge.Editor.Tests
                 Is.LessThan(0.001f));
         }
 
-        [Test]
+        [Test, Ignore("Archived legacy carry behavior; root edits no longer modify effectors.")]
         public void CarryEffectorsWithRoot_SamplePathAppliesInspectorRootEdit()
         {
             var sample = new KimodoMarkerSampleResult
@@ -489,7 +547,7 @@ namespace KimodoBridge.Editor.Tests
             Assert.That(KimodoConstraintMask.IsActive(sample, "rightfoot"), Is.True);
         }
 
-        [Test]
+        [Test, Ignore("Archived legacy carry behavior; root edits no longer modify effectors.")]
         public void CarryEffectorsWithRoot_Root2DIgnoresEffectors()
         {
             var sample = new KimodoMarkerSampleResult
@@ -536,7 +594,7 @@ namespace KimodoBridge.Editor.Tests
             Assert.That(sample.enableMask.leftHand, Is.True);
         }
 
-        [Test]
+        [Test, Ignore("Archived legacy carry behavior; carry option was removed.")]
         public void CarryEffectorsWithRoot_DisabledLeavesTargetsUnchanged()
         {
             var sample = new KimodoMarkerSampleResult
@@ -575,7 +633,7 @@ namespace KimodoBridge.Editor.Tests
                 Is.LessThan(0.001f));
         }
 
-        [Test]
+        [Test, Ignore("Archived legacy carry behavior; carry option was removed.")]
         public void CarryEffectorsWithRoot_TransformsDisabledValidTargetsWithoutEnablingThem()
         {
             var sample = new KimodoMarkerSampleResult
@@ -609,6 +667,61 @@ namespace KimodoBridge.Editor.Tests
             Assert.That(Vector3.Distance(sample.effectors.leftHand.t, expected),
                 Is.LessThan(0.001f));
             Assert.That(sample.enableMask.leftHand, Is.False);
+        }
+
+        [Test]
+        public void PosePipeline_CarryFlagDoesNotAlterRuntimeSolve()
+        {
+            const string model = KimodoMotionModelProfiles.DefaultModelName;
+            Assert.That(KimodoRuntimeAvatarSkeletonBuilder.TryLoadAvatarByModelName(
+                model, out var avatar, out var error), Is.True, error);
+            Assert.That(KimodoRetargetAvatarUtility.TryBuildRetargetSkeleton(
+                avatar, "CarryRuntimeBaseline", out var baseline, out error), Is.True, error);
+            Assert.That(KimodoRetargetAvatarUtility.TryBuildRetargetSkeleton(
+                avatar, "CarryRuntimeFlagged", out var flagged, out error), Is.True, error);
+            try
+            {
+                Assert.That(KimodoRetargetMarkerSamplingUtility.TryBuildMarkerSampleResultFromBoneSample(
+                    KimodoRetargetSamplingUtility.CaptureBoneSample(baseline),
+                    baseline,
+                    model,
+                    "fullbody",
+                    0,
+                    out var baselineSample,
+                    out error), Is.True, error);
+                baselineSample.constraintMode = "fullbody";
+                baselineSample.enableMask = KimodoConstraintMask.ForType("fullbody");
+                baselineSample.rootOverride.t += new Vector3(0.25f, 0.1f, -0.4f);
+                baselineSample.rootOverride.q = Quaternion.Euler(0f, 20f, 0f) * baselineSample.rootOverride.q;
+
+                KimodoMarkerSampleResult flaggedSample = baselineSample.Clone();
+                flaggedSample.carryEffectorsWithRoot = true;
+
+                Assert.That(KimodoConstraintPosePipeline.TryApply(
+                    baselineSample, 30f, baseline, out _, out _, out error), Is.True, error);
+                Assert.That(KimodoConstraintPosePipeline.TryApply(
+                    flaggedSample, 30f, flagged, out _, out _, out error), Is.True, error);
+
+                BoneSample baselinePose = KimodoRetargetSamplingUtility.CaptureBoneSample(baseline);
+                BoneSample flaggedPose = KimodoRetargetSamplingUtility.CaptureBoneSample(flagged);
+                Assert.That(flaggedPose.boneNames, Is.EqualTo(baselinePose.boneNames));
+                for (int i = 0; i < baselinePose.boneNames.Length; i++)
+                {
+                    Assert.That(
+                        Vector3.Distance(flaggedPose.localPositions[i], baselinePose.localPositions[i]),
+                        Is.LessThan(0.001f),
+                        baselinePose.boneNames[i]);
+                    Assert.That(
+                        Quaternion.Angle(flaggedPose.localRotations[i], baselinePose.localRotations[i]),
+                        Is.LessThan(0.1f),
+                        baselinePose.boneNames[i]);
+                }
+            }
+            finally
+            {
+                baseline.Dispose();
+                flagged.Dispose();
+            }
         }
 
         [Test]
