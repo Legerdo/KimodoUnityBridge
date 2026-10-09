@@ -116,6 +116,8 @@ namespace KimodoBridge.Editor.Tests
                 avatar, "Root2DCommandSupport", out var skeleton, out error), Is.True, error);
             try
             {
+                Assert.That(skeleton.GetBonePose(
+                    HumanBodyBones.Hips, out Vector3 supportRoot, out _), Is.True);
                 var arguments = new JObject
                 {
                     ["root2d"] = new JObject
@@ -148,7 +150,8 @@ namespace KimodoBridge.Editor.Tests
                 Assert.That(sample.sampleValid, Is.True);
                 Assert.That(sample.enableMask.rootHeading, Is.True);
                 Assert.That(sample.enableMask.rootPosition, Is.False);
-                Assert.That(sample.rootOverride.t.y, Is.EqualTo(1f).Within(0.001f));
+                Assert.That(sample.rootOverride.t.y, Is.EqualTo(supportRoot.y).Within(0.001f),
+                    "Root2D must preserve the support pose's vertical root position.");
                 Assert.That(skeleton.GetBonePose(
                     HumanBodyBones.Hips, out Vector3 solvedRoot, out Quaternion solvedHeading), Is.True);
                 Assert.That(solvedRoot.x, Is.EqualTo(2f).Within(0.001f));
@@ -172,9 +175,10 @@ namespace KimodoBridge.Editor.Tests
             try
             {
                 const double sampleTime = 1.25;
+                Assert.That(skeleton.GetBonePose(
+                    HumanBodyBones.Hips, out Vector3 supportRoot, out _), Is.True);
                 var commandInput = new JObject
                 {
-                    ["type"] = "root2d",
                     ["root2d"] = new JObject
                     {
                         ["position"] = new JArray(2f, -3f),
@@ -196,6 +200,7 @@ namespace KimodoBridge.Editor.Tests
                 Assert.That(sample.constraintMode, Is.EqualTo("root2d"));
                 Assert.That(sample.sampleValid, Is.True);
                 Assert.That(sample.enableMask.rootHeading, Is.True);
+                Assert.That(sample.rootOverride.t.y, Is.EqualTo(supportRoot.y).Within(0.001f));
 
                 KimodoConstraintJson exported = KimodoConstraintJsonExporter.BuildConstraint(
                     sample,

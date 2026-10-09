@@ -371,7 +371,7 @@
           },
           "constraints": {
             "type": "array",
-            "description": "Typed fullbody, root2d, root_effect, root_path, and inout constraints. Point constraints resolve to one concrete family; duplicate frames are rejected.",
+            "description": "Point constraints are selected by optional pose, root2d, and effect data; multiple fields at one frame compose by channel. root_path and inout remain separate constraint forms; duplicate frames are rejected; command frames use 60 FPS.",
             "items": {
               "oneOf": [
                 {
@@ -381,107 +381,6 @@
                     "frame": {
                       "type": "integer",
                       "minimum": 0
-                    },
-                    "type": {
-                      "const": "fullbody"
-                    },
-                    "pose": {
-                      "type": "object",
-                      "description": "External Pose slot in current scene context.",
-                      "additionalProperties": false,
-                      "properties": {
-                        "track": {
-                          "type": "string"
-                        },
-                        "index": {
-                          "type": "integer",
-                          "minimum": 0
-                        }
-                      },
-                      "required": [
-                        "track",
-                        "index"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "frame",
-                    "type",
-                    "pose"
-                  ]
-                },
-                {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "frame": {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    "type": {
-                      "const": "root2d"
-                    },
-                    "pose": {
-                      "type": "object",
-                      "description": "External Pose slot in current scene context.",
-                      "additionalProperties": false,
-                      "properties": {
-                        "track": {
-                          "type": "string"
-                        },
-                        "index": {
-                          "type": "integer",
-                          "minimum": 0
-                        }
-                      },
-                      "required": [
-                        "track",
-                        "index"
-                      ]
-                    },
-                    "root2d": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "position": {
-                          "type": "array",
-                          "items": {
-                            "type": "number"
-                          },
-                          "minItems": 2,
-                          "maxItems": 2
-                        },
-                        "heading": {
-                          "type": "array",
-                          "items": {
-                            "type": "number"
-                          },
-                          "minItems": 2,
-                          "maxItems": 2
-                        }
-                      },
-                      "required": [
-                        "position",
-                        "heading"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "frame",
-                    "type",
-                    "root2d"
-                  ]
-                },
-                {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "frame": {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    "type": {
-                      "const": "root_effect"
                     },
                     "pose": {
                       "type": "object",
@@ -672,10 +571,24 @@
                     }
                   },
                   "required": [
-                    "frame",
-                    "type",
-                    "root2d",
-                    "effect"
+                    "frame"
+                  ],
+                  "anyOf": [
+                    {
+                      "required": [
+                        "pose"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "root2d"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "effect"
+                      ]
+                    }
                   ]
                 },
                 {
@@ -946,7 +859,30 @@
           }
         },
         {
-          "description": "Use one root_effect sample; the command resolves it to an Effector constraint with root support and returns non-blocking checks.",
+          "description": "Set one Root2D point. The selected data fields determine the constraint family; no type tag is needed.",
+          "arguments": {
+            "character": "<character>",
+            "prompt": "Walk to the target",
+            "duration_frames": 120,
+            "constraints": [
+              {
+                "frame": 60,
+                "root2d": {
+                  "position": [
+                    2.4,
+                    5.0
+                  ],
+                  "heading": [
+                    0,
+                    1
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "description": "Mix a FullBody pose, Root2D root override, and hand target at one frame. Root2D overlays the pose root channels and effect overlays the named hand target.",
           "arguments": {
             "character": "<character>",
             "prompt": "Reach to the apple",
@@ -955,7 +891,6 @@
             "constraints": [
               {
                 "frame": 90,
-                "type": "root_effect",
                 "pose": {
                   "track": "<pose track>",
                   "index": 0

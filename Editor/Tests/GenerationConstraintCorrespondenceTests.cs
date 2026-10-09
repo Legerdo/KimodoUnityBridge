@@ -369,27 +369,26 @@ namespace KimodoUnityBridge.Command.Tests
         }
 
         [Test]
-        public void GenerateCommand_ExposesThreePointConstraintSchemas()
+        public void GenerateCommand_ExposesComposablePointConstraintSchema()
         {
             JObject generation = JObject.Parse(command_dispatcher.GetCommandDefinitionsJson())
                 ["tools"]
                 .Values<JObject>()
                 .Single(tool => tool.Value<string>("name") == "kimodo_generate_animation");
             JObject constraints = (JObject)generation["inputSchema"]["properties"]["constraints"];
-            var branches = ((JArray)constraints["items"]["oneOf"])
+            JObject point = ((JArray)constraints["items"]["oneOf"])
                 .Values<JObject>()
-                .Where(branch => branch["properties"]?["type"]?["const"] != null)
-                .ToDictionary(branch => branch["properties"]["type"]["const"].Value<string>());
+                .Single(branch => branch["properties"]?["root2d"] != null && branch["properties"]?["pose"] != null);
 
-            CollectionAssert.IsSubsetOf(
-                new[] { "fullbody", "root2d", "root_effect" },
-                branches.Keys);
-            AssertRequiredProperties(branches["fullbody"], "frame", "type", "pose");
-            AssertRequiredProperties(branches["root2d"], "frame", "type", "root2d");
-            AssertRequiredProperties(branches["root_effect"], "frame", "type", "root2d", "effect");
-            AssertRequiredProperties((JObject)branches["root2d"]["properties"]["root2d"], "position", "heading");
-            AssertRequiredProperties((JObject)branches["root_effect"]["properties"]["root2d"], "position", "heading");
-            Assert.That(branches["root_effect"]["properties"]["effect"], Is.Not.Null);
+            AssertRequiredProperties(point, "frame");
+            Assert.That(point["properties"]["type"], Is.Null);
+            Assert.That(point["properties"]["pose"], Is.Not.Null);
+            Assert.That(point["properties"]["root2d"], Is.Not.Null);
+            Assert.That(point["properties"]["effect"], Is.Not.Null);
+            AssertRequiredProperties((JObject)point["properties"]["root2d"], "position", "heading");
+            CollectionAssert.AreEquivalent(
+                new[] { "pose", "root2d", "effect" },
+                ((JArray)point["anyOf"]).SelectMany(requirement => ((JArray)requirement["required"]).Values<string>()));
         }
 
         [Test]

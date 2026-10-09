@@ -102,7 +102,7 @@ namespace KimodoUnityBridge.Command
                             OptionalGeneration(),
                             OptionalOutput(),
                             Optional("analysis_option", "object", "Optional analysis object for the phase-track analyzer. Legacy uniform keyframe-count controls are removed; Humanoid output always uses phase_track_version and continuous phase_track intervals."),
-                            OptionalConstraints("constraints", "Typed fullbody, root2d, root_effect, root_path, and inout constraints. Point constraints resolve to one concrete family; duplicate frames are rejected; command frames use 60 FPS."))),
+                            OptionalConstraints("constraints", "Point constraints are selected by optional pose, root2d, and effect data; multiple fields at one frame compose by channel. root_path and inout remain separate constraint forms; duplicate frames are rejected; command frames use 60 FPS."))),
                     CommandDefinition(PoseGetCommand,
                         "Sample one Timeline time, scene time, or Clip-local time into a new External Pose slot. Use exactly one source mode: timeline_time_seconds, scene_time_seconds, or clip with clip_time_seconds. Returns the reusable pose identity {track,index}.",
                         Properties(
@@ -255,14 +255,14 @@ namespace KimodoUnityBridge.Command
                 {
                     new JObject
                     {
-                        ["type"] = "fullbody/root2d/root_effect",
-                        ["description"] = "Public point types fullbody, root2d, and root_effect resolve to one concrete constraint family.",
+                        ["type"] = "point",
+                        ["description"] = "Optional pose, root2d, and effect data select and compose constraint channels at one frame.",
                         ["shape"] = new JObject
                         {
                             ["frame"] = "Relative frame in the generated clip.",
-                            ["pose"] = "Optional External Pose reference: {track,index}.",
-                            ["root2d"] = "Root position [x,z] and heading [x,z].",
-                            ["effect"] = "One or more hand/foot targets with position and optional rotation."
+                            ["pose"] = "Optional FullBody External Pose reference: {track,index}.",
+                            ["root2d"] = "Optional root position [x,z] and heading [x,z]; overlays the pose root channels.",
+                            ["effect"] = "Optional hand/foot targets with position and optional rotation."
                         }
                     },
                     new JObject
@@ -285,8 +285,8 @@ namespace KimodoUnityBridge.Command
                 },
                 ["rules"] = new JArray
                 {
-                    "Public point constraints may use fullbody, root2d, or root_effect. They resolve to one concrete family; omitted channels remain from the support Pose and rootTQ/footTQ payloads are never rewritten by command input.",
-                    "Point constraints are independent typed samples. Duplicate frames are undefined and rejected at the command boundary; root_path owns its frame endpoints.",
+                    "Point constraint family is inferred from the presence of pose, root2d, and effect data. Any non-empty combination composes by channel; Root2D overlays planar root channels and effect data overlays the named end effectors.",
+                    "A point constraint must contain at least one of pose, root2d, or effect. Put mixed data in one point object; separate point objects at a duplicate frame are rejected.",
                     "Use animation_analyze, then reference clips[].root_trajectory.path from root_path.",
                     "An explicit point frame cannot overlap a root_path sample frame; the command rejects the collision.",
                     "At most one standalone inout entry; in/out each require an explicit completed source Clip. Source character defaults to the generation character and must be the same character.",

@@ -91,13 +91,12 @@ namespace KimodoUnityBridge.Command.Tests
                         new JObject
                         {
                             ["frame"] = 0,
-                            ["type"] = "fullbody",
                             ["pose"] = poseRef.DeepClone()
                         },
                         new JObject
                         {
                             ["frame"] = MidFrame,
-                            ["type"] = "root2d",
+                            ["pose"] = poseRef.DeepClone(),
                             ["root2d"] = new JObject
                             {
                                 ["position"] = new JArray(5.0, 0.0),
@@ -107,7 +106,7 @@ namespace KimodoUnityBridge.Command.Tests
                         new JObject
                         {
                             ["frame"] = EndFrame,
-                            ["type"] = "root_effect",
+                            ["pose"] = poseRef.DeepClone(),
                             ["root2d"] = new JObject
                             {
                                 ["position"] = new JArray(10.0, 0.0),
@@ -144,12 +143,13 @@ namespace KimodoUnityBridge.Command.Tests
                 Assert.That(start.rootOverride.t.x, Is.EqualTo(defaultRoot[0].Value<float>()).Within(0.001f));
                 Assert.That(start.rootOverride.t.y, Is.EqualTo(defaultRoot[1].Value<float>()).Within(0.001f));
                 Assert.That(start.rootOverride.t.z, Is.EqualTo(defaultRoot[2].Value<float>()).Within(0.001f));
-                Assert.That(middle.constraintMode, Is.EqualTo("root2d"));
+                Assert.That(middle.constraintMode, Is.EqualTo("mix"));
                 Assert.That(middle.rootOverride.t.x, Is.EqualTo(5f).Within(0.001f));
-                Assert.That(middle.rootOverride.t.y, Is.EqualTo(1f).Within(0.001f),
-                    "Root2D command boundary supplies protocol root height Y=1.");
-                Assert.That(end.constraintMode, Is.EqualTo("effector"));
+                Assert.That(middle.rootOverride.t.y, Is.EqualTo(defaultRoot[1].Value<float>()).Within(0.001f),
+                    "Root2D overlays planar channels while retaining the FullBody pose height.");
+                Assert.That(end.constraintMode, Is.EqualTo("mix"));
                 Assert.That(end.rootOverride.t.x, Is.EqualTo(10f).Within(0.001f));
+                Assert.That(end.rootOverride.t.y, Is.EqualTo(defaultRoot[1].Value<float>()).Within(0.001f));
                 Assert.That(end.effectors.rightHand.t, Is.EqualTo(new Vector3(10f, 1f, 1f)));
 
                 // Verify the command-side export before waiting on the backend.

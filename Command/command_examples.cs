@@ -29,8 +29,10 @@ namespace KimodoUnityBridge.Command
                         @"{'character':'<character>','prompt':'Reach for the apple and pick it up','duration_frames':120,'loop':false,'constraints':[{'inout':{'in':{'source':{'clip':'<previous clip>'},'window_frames':30,'sample_count':5},'out':{'source':{'clip':'<next clip>'},'window_frames':12,'sample_count':3}}}]}"),
                     Example("Keep sampled opening and closing windows inside the returned Clip.",
                         @"{'character':'<character>','prompt':'Bend down then stand up','duration_frames':120,'loop':false,'constraints':[{'inout':{'mode':'inside','in':{'source':{'clip':'<reference clip>','frame':0},'window_frames':12,'sample_count':3},'out':{'source':{'clip':'<reference clip>'},'window_frames':12,'sample_count':3}}}]}"),
-                    Example("Use one root_effect sample; the command resolves it to an Effector constraint with root support and returns non-blocking diagnostics.",
-                        @"{'character':'<character>','prompt':'Reach to the apple','duration_frames':180,'loop':false,'constraints':[{'frame':90,'type':'root_effect','pose':{'track':'<pose track>','index':0},'root2d':{'position':[2.4,5.0],'heading':[0,1]},'effect':{'right_hand':{'position':[2.55,0.95,5.35]}}}]}"));
+                    Example("Set one Root2D point. The selected data fields determine the constraint family; no type tag is needed.",
+                        @"{'character':'<character>','prompt':'Walk to the target','duration_frames':120,'constraints':[{'frame':60,'root2d':{'position':[2.4,5.0],'heading':[0,1]}}]}"),
+                    Example("Mix a FullBody pose, Root2D root override, and hand target at one frame. Root2D overlays the pose root channels and effect overlays the named hand target.",
+                        @"{'character':'<character>','prompt':'Reach to the apple','duration_frames':180,'loop':false,'constraints':[{'frame':90,'pose':{'track':'<pose track>','index':0},'root2d':{'position':[2.4,5.0],'heading':[0,1]},'effect':{'right_hand':{'position':[2.55,0.95,5.35]}}}]}");
                 case PoseGetCommand: return new JArray(
                     Example("Capture a pose at an absolute Timeline-global time in seconds.",
                         @"{'source':{'character':'<character>','timeline_time_seconds':1.5},'full_data':true}"),
