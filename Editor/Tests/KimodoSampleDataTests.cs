@@ -34,12 +34,82 @@ namespace KimodoBridge.Editor.Tests
         }
 
         [Test, Category("BridgeRegression")]
-        public void Composer_RejectsMultipleConstraintsAtSameFrame()
+        public void Composer_MergesDifferentChannelsAtSameFrame()
         {
-            KimodoMarkerSampleResult first = CreateFullBody(1, 0.5f, true);
-            KimodoMarkerSampleResult second = CreateFullBody(2, 0.5f, true);
-            Assert.Throws<InvalidOperationException>(() =>
-                KimodoConstraintSampleComposer.ComposeCanonicalSamples(new[] { first, second }, 30.0));
+            KimodoMarkerSampleResult fullBody = CreateFullBody(1, 0.5f, true);
+            KimodoMarkerSampleResult root2d = CreateFullBody(2, 0.5f, true);
+            fullBody.constraintMode = "fullbody";
+            root2d.constraintMode = "root2d";
+            root2d.enableMask = KimodoConstraintMask.ForType("root2d");
+            root2d.rootOverride = new KimodoRigidTransform();
+            root2d.rootOverride.t = new UnityEngine.Vector3(4f, 0f, 5f);
+            root2d.validMask = KimodoConstraintMask.ForType("root2d");
+            var composed = KimodoConstraintSampleComposer.ComposeCanonicalSamples(
+                new[] { fullBody, root2d }, 30.0);
+            Assert.That(composed, Has.Count.EqualTo(1));
+            Assert.That(composed[0].constraintMode, Is.EqualTo("mix"));
+            Assert.That(composed[0].enableMask.muscle, Is.True);
+            Assert.That(composed[0].enableMask.rootPosition, Is.True);
+        }
+
+        [Test, Category("BridgeRegression")]
+        public void Exporter_EmitsTypedRowsForSameFrameRoot2DAndFullBody()
+        {
+            KimodoMarkerSampleResult fullBody = CreateFullBody(1, 0.5f, true);
+            fullBody.constraintMode = "fullbody";
+            fullBody.sampleTime = 1.0 / 30.0;
+
+            KimodoMarkerSampleResult root2d = CreateFullBody(2, 0.5f, true);
+            root2d.constraintMode = "root2d";
+            root2d.enableMask = KimodoConstraintMask.ForType("root2d");
+            root2d.rootOverride = new KimodoRigidTransform
+            {
+                t = new Vector3(4f, 7f, 5f),
+                q = Quaternion.Euler(0f, 90f, 0f)
+            };
+            root2d.sampleTime = fullBody.sampleTime;
+
+            string json = KimodoConstraintJsonExporter.ToConstraintsJson(
+                new[] { fullBody, root2d },
+                new KimodoConstraintExportContext
+                {
+                    projectedPoseProjector = sample =>
+                    {
+                        KimodoConstraintProjectedPose projected = CreateProjectedTestPose(sample);
+                        projected.jointRotations[0] = Quaternion.Euler(10f, 90f, 5f);
+                        projected.localJointAngles[0] =
+                            KimodoConstraintRotationUtility.QuaternionToAxisAngleVector(
+                                projected.jointRotations[0]);
+                        // Model the solved FullBody pose retaining its own
+                        // root height while the Root2D request carries a
+                        // deliberately different Y value.
+                        projected.profileRootPosition = new Vector3(
+                            sample.rootOverride.t.x, 0.25f, sample.rootOverride.t.z);
+                        return projected;
+                    }
+                },
+                exportFps: 30.0);
+            string serialized = new KimodoConstraintPayload { json = json }.Serialize(
+                KimodoMotionModelProfiles.DefaultModelName,
+                new List<byte[]>());
+            JArray rows = JArray.Parse(serialized);
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0]["type"].Value<string>(), Is.EqualTo("fullbody"));
+            Assert.That(rows[0]["root_positions"][0][0].Value<float>(), Is.EqualTo(-4f));
+            Assert.That(rows[0]["root_positions"][0][1].Value<float>(), Is.EqualTo(0.25f));
+            Assert.That(rows[0]["root_positions"][0][2].Value<float>(), Is.EqualTo(5f));
+            Assert.That(rows[0]["smooth_root_2d"][0][0].Value<float>(), Is.EqualTo(-4f));
+            Assert.That(rows[0]["smooth_root_2d"][0][1].Value<float>(), Is.EqualTo(5f));
+            Vector3 protocolRoot = new Vector3(
+                rows[0]["local_joints_rot"][0][0][0].Value<float>(),
+                rows[0]["local_joints_rot"][0][0][1].Value<float>(),
+                rows[0]["local_joints_rot"][0][0][2].Value<float>());
+            Quaternion kimodoRoot = KimodoConstraintRotationUtility.AxisAngleVectorToQuaternion(protocolRoot);
+            Quaternion unityRoot = new Quaternion(
+                kimodoRoot.x, -kimodoRoot.y, -kimodoRoot.z, kimodoRoot.w);
+            Assert.That(
+                Mathf.Abs(Mathf.DeltaAngle(90f, KimodoMotionMath.ResolvePlanarYawDegrees(unityRoot))),
+                Is.LessThan(1e-2f));
         }
 
         [Test, Category("BridgeRegression")]

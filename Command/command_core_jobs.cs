@@ -34,9 +34,19 @@ namespace KimodoUnityBridge.Command
                     throw;
                 GameObject source = matches[0];
                 Animator sourceAnimator = source.GetComponentInChildren<Animator>(true);
-                if (!AddCharacterTrack(session, source, sourceAnimator, true, out string error, requireAvatar: true))
-                    throw new InvalidOperationException(error);
-                sessionCharacter = ResolveSessionCharacterByReference(session, name, addIfMissing: false);
+                source = ResolveCharacterIdentityRoot(source, sourceAnimator);
+                string sourceId = GetObjectReference(source);
+                sessionCharacter = session.Characters.FirstOrDefault(character =>
+                    string.Equals(character.CharacterRef, sourceId, StringComparison.Ordinal));
+                if (sessionCharacter == null)
+                {
+                    if (!AddCharacterTrack(session, source, sourceAnimator, true, out string error, requireAvatar: true))
+                        throw new InvalidOperationException(error);
+                    sessionCharacter = session.Characters.FirstOrDefault(character =>
+                        string.Equals(character.CharacterRef, sourceId, StringComparison.Ordinal));
+                }
+                if (sessionCharacter == null)
+                    throw new InvalidOperationException($"Character '{name}' could not be resolved to a cached scene identity.");
             }
             GameObject root = sessionCharacter.Root;
             Animator animator = sessionCharacter.Animator;

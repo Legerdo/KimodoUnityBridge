@@ -35,8 +35,8 @@ This lets a pickup contact frame express "the character is here and the hand is 
 
 ### Root2D point constraints and support Pose
 
-The optional Reference Pose model, per-type schema, no-merge collision rules, and rejection
-conditions are defined in [`constraints.md`](constraints.md).
+The optional Reference Pose model, per-type schema, command-boundary duplicate checks, and
+runtime/raw composition rules are defined in [`constraints.md`](constraints.md).
 需要指定支撑姿态时，在目标时间调用 `pose_get`，检查后把 Pose 引用放入 Root2D 约束。
 ### Generation warning check
 

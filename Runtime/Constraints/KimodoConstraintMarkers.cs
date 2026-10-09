@@ -272,6 +272,14 @@ namespace KimodoBridge
         public string constraintMode = "constraint";
         public double sampleTime;
 
+        // Runtime-only provenance for same-frame Editor pass composition. A
+        // support MuscleSample may be retained for projection by a Root2D or
+        // Effector pass; these flags prevent it from being mistaken for a
+        // FullBody execution family when the composed sample is exported.
+        [NonSerialized] internal bool composedFullBody;
+        [NonSerialized] internal bool composedRoot2D;
+        [NonSerialized] internal bool composedEffector;
+
         public KimodoMarkerSampleResult Clone() => new KimodoMarkerSampleResult
         {
             sampleData = sampleData?.Clone() ?? new KimodoBridge.MuscleSample(),
@@ -283,7 +291,10 @@ namespace KimodoBridge
             effectors = effectors?.Clone() ?? new KimodoConstraintEffectors(),
             rootOverride = rootOverride?.Clone() ?? KimodoRigidTransform.Identity,
             constraintMode = this.constraintMode,
-            sampleTime = sampleTime
+            sampleTime = sampleTime,
+            composedFullBody = composedFullBody,
+            composedRoot2D = composedRoot2D,
+            composedEffector = composedEffector
         };
     }
 

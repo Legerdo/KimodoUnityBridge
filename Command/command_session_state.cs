@@ -356,6 +356,11 @@ namespace KimodoUnityBridge.Command
                     .Reverse().Select(item => item.name));
         }
 
+        private static GameObject ResolveCharacterIdentityRoot(GameObject root, Animator animator)
+        {
+            return animator != null ? animator.transform.root.gameObject : root;
+        }
+
         private static bool AddCharacterTrack(
             TimelineSessionRecord session,
             GameObject root,
@@ -370,6 +375,8 @@ namespace KimodoUnityBridge.Command
                 error = "Scene context and character root are required.";
                 return false;
             }
+            root = ResolveCharacterIdentityRoot(root, animator);
+            animator = root != null ? root.GetComponentInChildren<Animator>(true) : null;
             if (animator == null && !HasRenderableMesh(root))
             {
                 error = "character_requires_humanoid_or_mesh: the scene object has neither a valid Animator nor a renderable Mesh.";
@@ -968,11 +975,13 @@ namespace KimodoUnityBridge.Command
                 return null;
             }
             string reference = root != null ? GetObjectReference(root) : string.Empty;
-            // Session clones carry a null GlobalObjectId, so the persisted
-            // CharacterRef (the source scene object) can never match the clone's
-            // reference. Fall back to the live object reference before giving up.
+            // Session clones carry a null GlobalObjectId. Match the cached
+            // record through its source id and context-local character name.
             TimelineCharacterRecord match = !string.IsNullOrWhiteSpace(reference)
-                ? session.Characters.FirstOrDefault(character => character.CharacterRef == reference)
+                ? session.Characters.FirstOrDefault(character =>
+                        string.Equals(character.CharacterRef, reference, StringComparison.Ordinal) &&
+                        string.Equals(character.Name, name, StringComparison.OrdinalIgnoreCase))
+                    ?? session.Characters.FirstOrDefault(character => character.CharacterRef == reference)
                     ?? session.Characters.FirstOrDefault(character => character.Root == root)
                 : session.Characters.FirstOrDefault(character =>
                     !string.IsNullOrWhiteSpace(name) &&
@@ -1748,14 +1757,20 @@ namespace KimodoUnityBridge.Command
                 }
                 GameObject root = resolved as GameObject ?? (resolved as Animator)?.gameObject;
                 Animator animator = root != null ? root.GetComponentInChildren<Animator>(true) : null;
+                root = ResolveCharacterIdentityRoot(root, animator);
+                string sourceId = root != null ? GetObjectReference(root) : string.Empty;
+                match = session.Characters.FirstOrDefault(character =>
+                    string.Equals(character.CharacterRef, sourceId, StringComparison.Ordinal));
                 string error = string.Empty;
-                bool added = root != null && root.scene.IsValid() && !EditorUtility.IsPersistent(root) &&
+                bool added = match != null || root != null && root.scene.IsValid() && !EditorUtility.IsPersistent(root) &&
                     AddCharacterTrack(session, root, animator, true, out error, requireAvatar: false);
                 if (added)
                 {
-                    match = session.Characters.FirstOrDefault(character =>
-                        character.CharacterRef == reference || character.Root != null && character.Root.transform.IsChildOf(session.SessionRoot.transform) &&
-                        string.Equals(character.Name, root.name, StringComparison.OrdinalIgnoreCase));
+                    match ??= session.Characters.FirstOrDefault(character =>
+                        string.Equals(character.CharacterRef, sourceId, StringComparison.Ordinal))
+                        ?? session.Characters.FirstOrDefault(character =>
+                            character.Root != null && character.Root.transform.IsChildOf(session.SessionRoot.transform) &&
+                            string.Equals(character.Name, root.name, StringComparison.OrdinalIgnoreCase));
                 }
                 else if (root != null)
                 {

@@ -452,7 +452,8 @@ namespace KimodoBridge
             {
                 job.applyRoot = true;
                 job.applyRootPosition = applyRootPosition;
-                job.rootPlanar = KimodoConstraintInternal.ResolveExecutionMode(sample) == "root2d";
+                job.rootPlanar = sample.composedRoot2D ||
+                    KimodoConstraintInternal.ResolveExecutionMode(sample) == "root2d";
                 job.rootHeading = KimodoConstraintMask.IsActive(sample, "rootheading");
                 job.rootPosition = sample.rootOverride.t;
                 job.rootRotation = sample.rootOverride.q.normalized;

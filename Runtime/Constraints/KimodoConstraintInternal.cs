@@ -84,6 +84,29 @@ namespace KimodoBridge
                     result.Add(new KimodoFullBodyConstraintInternal(sample, modelType, exportContext));
                 }
             }
+            else if (string.Equals(mode, "mix", StringComparison.OrdinalIgnoreCase))
+            {
+                // "mix" is a transient canonical-sample mode produced by
+                // Editor pass composition. It is never a public command
+                // family: emit typed rows here, then let the raw protocol
+                // normalizer fold same-frame Root2D into the root-context row.
+                bool hasFamilies = sample.composedFullBody || sample.composedRoot2D || sample.composedEffector;
+                bool hasFullBody = sample.composedFullBody ||
+                    (!hasFamilies && sample.sampleData?.IsValid == true &&
+                     (sample.enableMask?.muscle == true || sample.enableMask?.rootTQ == true ||
+                      sample.enableMask?.leftFootTQ == true || sample.enableMask?.rightFootTQ == true));
+                bool hasRoot2D = sample.composedRoot2D ||
+                    (!hasFamilies && sample.rootOverride != null &&
+                     (sample.enableMask?.rootPosition == true || sample.enableMask?.rootHeading == true));
+                bool hasEffector = sample.composedEffector || !hasFamilies;
+
+                if (hasFullBody && sample.sampleData?.IsValid == true)
+                    result.Add(new KimodoFullBodyConstraintInternal(sample, modelType, exportContext));
+                if (hasRoot2D && sample.rootOverride != null)
+                    result.Add(new KimodoRoot2DConstraintInternal(sample, modelType, exportContext));
+                if (hasEffector)
+                    AddEffectors(result, sample, modelType, exportContext);
+            }
             else
             {
                 if (string.Equals(mode, "left-hand", StringComparison.OrdinalIgnoreCase) ||
@@ -104,8 +127,6 @@ namespace KimodoBridge
         internal static string ResolveExecutionMode(KimodoMarkerSampleResult sample)
         {
             string mode = NormalizeMode(sample?.constraintMode);
-            if (string.Equals(mode, "mix", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Mix constraints are no longer supported; use fullbody, effector, or root2d.");
             return mode;
         }
 
