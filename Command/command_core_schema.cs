@@ -222,7 +222,7 @@ namespace KimodoUnityBridge.Command
             return new PropertyDefinition("clips", new JObject
             {
                 ["type"] = "array",
-                ["description"] = "Exactly one immutable animation clip reference. Comparison callers analyze each candidate separately.",
+                ["description"] = "Exactly one animation clip reference. Use a loaded Clip name or an Assets/Packages path; an external asset is appended to the character's Kimodo Timeline before analysis and is never modified.",
                 ["minItems"] = 1,
                 ["maxItems"] = 1,
                 ["items"] = new JObject
@@ -423,6 +423,7 @@ namespace KimodoUnityBridge.Command
                 {
                     ["character"] = new JObject { ["type"] = "string" },
                     ["clip"] = new JObject { ["type"] = "string" },
+                    ["mode"] = new JObject { ["type"] = "string", ["enum"] = new JArray("scene_pose", "skeleton_rest_pose"), ["description"] = "Sample the original scene Animator's currently evaluated pose, or the Avatar's stored skeleton rest pose." },
                     ["timeline_time_seconds"] = new JObject
                     {
                         ["type"] = "number",
@@ -449,7 +450,8 @@ namespace KimodoUnityBridge.Command
                         ["not"] = new JObject { ["anyOf"] = new JArray(
                             new JObject { ["required"] = new JArray("clip") },
                             new JObject { ["required"] = new JArray("clip_time_seconds") },
-                            new JObject { ["required"] = new JArray("scene_time_seconds") }) }
+                            new JObject { ["required"] = new JArray("scene_time_seconds") },
+                            new JObject { ["required"] = new JArray("mode") }) }
                     },
                     new JObject
                     {
@@ -457,14 +459,36 @@ namespace KimodoUnityBridge.Command
                         ["not"] = new JObject { ["anyOf"] = new JArray(
                             new JObject { ["required"] = new JArray("timeline_time_seconds") },
                             new JObject { ["required"] = new JArray("clip") },
-                            new JObject { ["required"] = new JArray("clip_time_seconds") }) }
+                            new JObject { ["required"] = new JArray("clip_time_seconds") },
+                            new JObject { ["required"] = new JArray("mode") }) }
                     },
                     new JObject
                     {
                         ["required"] = new JArray("character", "clip", "clip_time_seconds"),
                         ["not"] = new JObject { ["anyOf"] = new JArray(
                             new JObject { ["required"] = new JArray("timeline_time_seconds") },
-                            new JObject { ["required"] = new JArray("scene_time_seconds") }) }
+                            new JObject { ["required"] = new JArray("scene_time_seconds") },
+                            new JObject { ["required"] = new JArray("mode") }) }
+                    },
+                    new JObject
+                    {
+                        ["required"] = new JArray("character", "mode"),
+                        ["properties"] = new JObject { ["mode"] = new JObject { ["enum"] = new JArray("scene_pose") } },
+                        ["not"] = new JObject { ["anyOf"] = new JArray(
+                            new JObject { ["required"] = new JArray("timeline_time_seconds") },
+                            new JObject { ["required"] = new JArray("scene_time_seconds") },
+                            new JObject { ["required"] = new JArray("clip") },
+                            new JObject { ["required"] = new JArray("clip_time_seconds") }) }
+                    },
+                    new JObject
+                    {
+                        ["required"] = new JArray("character", "mode"),
+                        ["properties"] = new JObject { ["mode"] = new JObject { ["enum"] = new JArray("skeleton_rest_pose") } },
+                        ["not"] = new JObject { ["anyOf"] = new JArray(
+                            new JObject { ["required"] = new JArray("timeline_time_seconds") },
+                            new JObject { ["required"] = new JArray("scene_time_seconds") },
+                            new JObject { ["required"] = new JArray("clip") },
+                            new JObject { ["required"] = new JArray("clip_time_seconds") }) }
                     })
             };
             return new PropertyDefinition(name, schema, true);

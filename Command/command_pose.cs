@@ -26,13 +26,16 @@ namespace KimodoUnityBridge.Command
                 session,
                 RequiredStringValue(source, "character"),
                 addIfMissing: true);
+            string sourceMode = source.Value<string>("mode") ?? string.Empty;
+            bool hasScenePose = string.Equals(sourceMode, "scene_pose", StringComparison.OrdinalIgnoreCase);
+            bool hasRestPose = string.Equals(sourceMode, "skeleton_rest_pose", StringComparison.OrdinalIgnoreCase);
             bool hasTimelineTime = source["timeline_time_seconds"] != null;
             bool hasSceneTime = source["scene_time_seconds"] != null;
             bool hasClipTime = source["clip"] != null || source["clip_time_seconds"] != null;
-            if (new[] { hasTimelineTime, hasSceneTime, hasClipTime }.Count(value => value) != 1)
+            if (new[] { hasTimelineTime, hasSceneTime, hasClipTime, hasScenePose, hasRestPose }.Count(value => value) != 1)
             {
                 throw new InvalidOperationException(
-                    "source must use exactly one mode: timeline_time_seconds, scene_time_seconds, or clip with clip_time_seconds.");
+                    "source must use exactly one mode: timeline_time_seconds, scene_time_seconds, clip with clip_time_seconds, mode='scene_pose', or mode='skeleton_rest_pose'.");
             }
 
             TimelineAnimationRecord animation = null;
@@ -66,6 +69,7 @@ namespace KimodoUnityBridge.Command
                 timelineTime = animation.TimelineStartSeconds + clipTime;
             }
 
+            if (hasScenePose || hasRestPose) timelineTime = session.Director != null ? session.Director.time : 0.0;
             int timelineFrame = (int)Math.Round(timelineTime * SessionFrameRate, MidpointRounding.AwayFromZero);
             int absoluteFrame = timelineFrame;
             ThrowIfGenerationRangeLocked(
@@ -75,7 +79,11 @@ namespace KimodoUnityBridge.Command
                 absoluteFrame + 1,
                 PoseGetCommand);
             bool fullData = arguments.Value<bool?>("full_data") ?? false;
-            KimodoMarkerSampleResult sourceSample = CaptureSampleResult(session, character, timelineTime);
+            KimodoMarkerSampleResult sourceSample = hasScenePose
+                ? CaptureOriginalScenePose(character, restPose: false)
+                : hasRestPose
+                    ? CaptureOriginalScenePose(character, restPose: true)
+                    : CaptureSampleResult(session, character, timelineTime);
             int index = AllocatePoseIndex(character.PoseCacheTrack);
             KimodoConstraintMarker marker = StoreExternalPose(character, index, sourceSample);
             SaveTimelineSession(session);
@@ -99,11 +107,49 @@ namespace KimodoUnityBridge.Command
             {
                 resultSource["scene_time_seconds"] = timelineTime;
             }
+            else if (hasScenePose) resultSource["mode"] = "scene_pose";
+            else if (hasRestPose) resultSource["mode"] = "skeleton_rest_pose";
             result["data"] = fullData
                 ? BuildPoseJson(marker.SampleData)
                 : BuildCompactPose(marker.SampleData);
             return Ok(result);
         });
+
+        private static KimodoMarkerSampleResult CaptureOriginalScenePose(TimelineCharacterRecord character, bool restPose)
+        {
+            GameObject sourceRoot = ResolveSourceCharacterRoot(character);
+            Animator sourceAnimator = sourceRoot != null ? sourceRoot.GetComponentInChildren<Animator>(true) : null;
+            Avatar avatar = sourceAnimator != null && KimodoRetargetCoreUtility.IsValidHumanoid(sourceAnimator.avatar)
+                ? sourceAnimator.avatar : character.Avatar;
+            if (sourceAnimator == null || !KimodoRetargetCoreUtility.IsValidHumanoid(avatar))
+                throw new InvalidOperationException($"Character '{character.Name}' requires a scene Humanoid Animator and valid Avatar for this pose source.");
+
+            RetargetSkeleton cache = null;
+            try
+            {
+                if (!KimodoRetargetAvatarUtility.TryBuildRetargetSkeleton(avatar, "KimodoPoseGetSceneSource", out cache, out string error))
+                    throw new InvalidOperationException($"Pose sampling failed: {error}");
+                if (!restPose)
+                {
+                    cache.root.transform.SetPositionAndRotation(sourceRoot.transform.position, sourceRoot.transform.rotation);
+                    foreach (HumanBodyBones bone in System.Enum.GetValues(typeof(HumanBodyBones)).Cast<HumanBodyBones>())
+                    {
+                        if (bone == HumanBodyBones.LastBone || bone == HumanBodyBones.Invalid) continue;
+                        Transform sourceBone = sourceAnimator.GetBoneTransform(bone);
+                        if (sourceBone != null && cache.animator.GetBoneTransform(bone) is Transform targetBone)
+                        {
+                            targetBone.localPosition = sourceBone.localPosition;
+                            targetBone.localRotation = sourceBone.localRotation;
+                            targetBone.localScale = sourceBone.localScale;
+                        }
+                    }
+                }
+                if (!KimodoRetargetSamplingUtility.TryCaptureMuscleSample(cache, out MuscleSample sample, out string captureError))
+                    throw new InvalidOperationException($"Pose sampling failed: {captureError}");
+                return BuildCapturedSampleResult(sample, cache, 0.0);
+            }
+            finally { cache?.Dispose(); }
+        }
 
         public static string PoseSetRootTransform(string argumentsJson) => Execute(argumentsJson, arguments =>
         {

@@ -19,7 +19,7 @@ namespace KimodoUnityBridge.Command
 {
     internal static partial class command_context
     {
-        private const string AnalysisContractVersion = "3-command-60-phase-track-v2";
+        private const string AnalysisContractVersion = "4-command-60-timeline-keyframes-v1";
         internal const int SessionCaptureLayer = 17;
         internal const int ClipSafeZoneFrames = 4;
         internal const double ClipSafeZoneSeconds = ClipSafeZoneFrames / 60.0;
@@ -1030,7 +1030,13 @@ namespace KimodoUnityBridge.Command
                     }
 
                     string clipName = RequiredStringValue(requested, "clip");
-                    TimelineAnimationRecord animation = ResolveAnimation(new JObject { ["animation"] = clipName }, character);
+                    TimelineAnimationRecord animation = character.Animations.FirstOrDefault(item =>
+                        string.Equals(item.Name, clipName, StringComparison.OrdinalIgnoreCase));
+                    if (animation == null)
+                    {
+                        AnimationClip externalClip = ResolveAnimationClip(clipName);
+                        animation = AppendAnimationClip(session, character, externalClip, "analysis_source", null);
+                    }
                     int startFrame = Mathf.RoundToInt((float)(animation.TimelineStartSeconds * SessionFrameRate));
                     int endFrame = startFrame + Math.Max(1, Mathf.RoundToInt((float)(animation.TimelineDurationSeconds * SessionFrameRate)));
                     ThrowIfGenerationRangeLocked(session, character, startFrame, endFrame, AnimationAnalyzeCommand);
@@ -1056,16 +1062,15 @@ namespace KimodoUnityBridge.Command
                             analysis = BuildMeshAnalysis(animation);
                             analysisMotionBytes = null;
                         }
-                        NormalizeAnalysisContract(
-                            analysis,
-                            startFrame,
-                            endFrame);
                         if (!IsHumanoidCharacter(character)) analysis["source"] = "mesh_only_pose_sampling";
                         string id = CacheAnalysisResult(
                             session, character, startFrame / SessionFrameRate, endFrame / SessionFrameRate,
                             new JArray(), analysis, analysisMotionBytes, animation, inputSignature);
                         record = GetCachedAnalysis(session, id);
                     }
+                    // Normalize on cache hits as well so persisted results never
+                    // reintroduce the deprecated absolute-seconds keyframe field.
+                    NormalizeAnalysisContract(record.Analysis, startFrame, endFrame);
                     if (IsHumanoidCharacter(character))
                     {
                         EnsureAnalysisRootTrajectory(session, character, record, startFrame, endFrame);
@@ -1109,6 +1114,8 @@ namespace KimodoUnityBridge.Command
             {
                 ["character"] = subject.Character.Name,
                 ["clip"] = subject.Animation.Name,
+                ["start_frame"] = subject.StartFrame,
+                ["end_frame_exclusive"] = subject.EndFrameExclusive,
                 ["analysis_schema_version"] = AnalysisContractVersion,
                 ["analysis_mode"] = humanoid ? "humanoid" : "mesh",
                 ["phase_track_version"] = humanoid
@@ -1404,17 +1411,25 @@ namespace KimodoUnityBridge.Command
                 // QuickServer analysis is always relative to the requested
                 // segment.  Convert that local frame to the Session frame once;
                 // do not infer absolute-vs-local from its numeric value.
-                int reportedFrame = keyframe.Value<int?>("frame")
-                    ?? Mathf.RoundToInt((float)((keyframe.Value<double?>("time") ?? 0.0) * SessionFrameRate));
-                int frame = Mathf.Clamp(startFrame + reportedFrame, startFrame, endFrame - 1);
+                int frame;
+                if (keyframe.Value<int?>("timeline_frame_60") is int timelineFrame)
+                {
+                    frame = Mathf.Clamp(timelineFrame, startFrame, endFrame - 1);
+                }
+                else
+                {
+                    int reportedFrame = keyframe.Value<int?>("frame")
+                        ?? Mathf.RoundToInt((float)((keyframe.Value<double?>("time") ?? 0.0) * SessionFrameRate));
+                    frame = Mathf.Clamp(startFrame + reportedFrame, startFrame, endFrame - 1);
+                }
                 JObject annotation = (JObject)keyframe.DeepClone();
                 annotation.Remove("time");
                 annotation.Remove("session_time");
-                annotation["frame"] = frame - startFrame;
-                annotation["local_frame_60"] = frame - startFrame;
+                annotation.Remove("time_seconds");
+                annotation.Remove("frame");
+                annotation.Remove("local_frame_60");
+                annotation.Remove("local_time_seconds");
                 annotation["timeline_frame_60"] = frame;
-                annotation["local_time_seconds"] = (frame - startFrame) / SessionFrameRate;
-                annotation["time_seconds"] = frame / SessionFrameRate;
                 keyframes.Add(annotation);
             }
             JArray contacts = analysis["foot_contacts"] as JArray

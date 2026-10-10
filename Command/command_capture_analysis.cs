@@ -217,7 +217,10 @@ namespace KimodoUnityBridge.Command
             int last = Math.Max(0, subject.Pelvis.Length - 1);
             return (subject.Subject.Record.Analysis?["keyframes"] as JArray ?? new JArray())
                 .OfType<JObject>()
-                .Select(item => Mathf.Clamp(item.Value<int?>("frame") ?? 0, 0, last))
+                .Select(item => Mathf.Clamp(
+                    (item.Value<int?>("timeline_frame_60") ?? subject.Subject.StartFrame) - subject.Subject.StartFrame,
+                    0,
+                    last))
                 .Distinct()
                 .OrderBy(frame => frame)
                 .ToList();
@@ -1114,7 +1117,10 @@ namespace KimodoUnityBridge.Command
             int lastFrame = Math.Max(0, subject.Pelvis.Length - 1);
             return (subject.Subject.Record.Analysis?["keyframes"] as JArray ?? new JArray())
                 .OfType<JObject>()
-                .Select(item => Mathf.Clamp(item.Value<int?>("frame") ?? 0, 0, lastFrame))
+                .Select(item => Mathf.Clamp(
+                    (item.Value<int?>("timeline_frame_60") ?? subject.Subject.StartFrame) - subject.Subject.StartFrame,
+                    0,
+                    lastFrame))
                 .Distinct()
                 .OrderBy(frame => frame)
                 .ToList();
@@ -1167,11 +1173,7 @@ namespace KimodoUnityBridge.Command
             }
             analysis["keyframes"] = new JArray(phases.OfType<JObject>().Select(item => new JObject
             {
-                ["frame"] = item.Value<int>("anchor_frame"),
-                ["local_frame_60"] = item.Value<int>("anchor_frame"),
                 ["timeline_frame_60"] = subject.Subject.StartFrame + item.Value<int>("anchor_frame"),
-                ["local_time_seconds"] = item.Value<int>("anchor_frame") / SessionFrameRate,
-                ["time_seconds"] = (subject.Subject.StartFrame + item.Value<int>("anchor_frame")) / SessionFrameRate,
                 ["phase_index"] = item.Value<int>("phase_index"),
                 ["kind"] = item.Value<string>("kind")
             }));

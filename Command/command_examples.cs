@@ -39,7 +39,11 @@ namespace KimodoUnityBridge.Command
                     Example("Capture the current scene Timeline pose when no source Clip exists.",
                         @"{'source':{'character':'<character>','scene_time_seconds':1.5},'full_data':true}"),
                     Example("Capture a pose at a time relative to a target Clip's Timeline range.",
-                        @"{'source':{'character':'<character>','clip':'<clip>','clip_time_seconds':0.5},'full_data':true}"));
+                        @"{'source':{'character':'<character>','clip':'<clip>','clip_time_seconds':0.5},'full_data':true}"),
+                    Example("Capture the original scene Animator's currently evaluated pose, independent of the Timeline Ghost.",
+                        @"{'source':{'character':'<character>','mode':'scene_pose'},'full_data':true}"),
+                    Example("Capture the Humanoid Avatar's stored skeleton rest pose.",
+                        @"{'source':{'character':'<character>','mode':'skeleton_rest_pose'},'full_data':true}"));
                 case PoseSetCommand: return Examples("Edit the root of the Pose slot returned by pose_get; position is in Character world space.",
                     @"{'pose':{'track':'<returned pose track>','index':0},'root':{'position':[0,1,0],'rotation':[0,0,0,1]}}");
                 case PoseSetRootTransformCommand: return Examples("Set a returned Pose slot's root position.",

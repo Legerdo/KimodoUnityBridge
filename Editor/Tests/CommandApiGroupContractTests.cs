@@ -29,6 +29,9 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(poseReference["properties"], Is.Not.Null);
             Assert.That(poseReference["required"], Is.Not.Null);
             CollectionAssert.Contains(((JArray)poseReference["required"]).Values<string>(), "character");
+            CollectionAssert.AreEquivalent(new[] { "scene_pose", "skeleton_rest_pose" },
+                ((JArray)poseReference["properties"]?["mode"]?["enum"]).Values<string>());
+            Assert.That(poseReference["oneOf"]?.Values<JObject>().Count(), Is.EqualTo(5));
 
             AssertPosePropertyUsesTrackIndex(poseSet["inputSchema"]["properties"]["pose"]);
             AssertPosePropertyUsesTrackIndex(transformCapture["inputSchema"]["properties"]["pose"]);
@@ -58,6 +61,7 @@ namespace KimodoUnityBridge.Command.Tests
             AssertRequiredProperty(cancel, "request_id");
             Assert.That(get["inputSchema"]?["properties"]?["include_request_json"]?.Value<string>("type"), Is.EqualTo("boolean"));
             Assert.That(analyze["inputSchema"]?["properties"]?["clips"], Is.Not.Null);
+            Assert.That(analyze["description"]?.Value<string>(), Does.Contain("start_frame"));
             Assert.That(retarget["inputSchema"]?["properties"]?["source_character"], Is.Not.Null);
             Assert.That(retarget["inputSchema"]?["properties"]?["animation"], Is.Not.Null);
 

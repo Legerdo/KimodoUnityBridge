@@ -50,13 +50,13 @@
     },
     {
       "name": "animation_analyze",
-      "description": "Analyze one immutable animation clip at the fixed command time base of 60 FPS and render unified graph-space picture evidence. Select standard tile types explicitly and choose composite, individual tiles, or both outputs. Results include root_trajectory, endpoint_pose_comparison, motion_profile, foot_contacts, phase_track, keyframes with timeline_frame_60, and evidence paths. Completed Clips are never modified. The clip input contains only character and clip.",
+      "description": "Analyze one animation clip at 60 FPS and render graph-space evidence. Results include Timeline start_frame and keyframes using absolute timeline_frame_60. Loaded clips are reused; external Assets/ or Packages/ clip references are appended to the character's Kimodo Timeline. Source clips are never modified.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "clips": {
             "type": "array",
-            "description": "Exactly one immutable animation clip reference. Comparison callers analyze each candidate separately.",
+            "description": "Exactly one animation clip reference. Use a loaded Clip name or an Assets/Packages path; an external asset is appended to the character's Kimodo Timeline before analysis and is never modified.",
             "minItems": 1,
             "maxItems": 1,
             "items": {
@@ -922,7 +922,7 @@
     },
     {
       "name": "pose_get",
-      "description": "Sample one Timeline time, scene time, or Clip-local time into a new External Pose slot. Use exactly one source mode: timeline_time_seconds, scene_time_seconds, or clip with clip_time_seconds. Returns the reusable pose identity {track,index}.",
+      "description": "Sample a Timeline time, scene time, Clip-local time, the original scene Animator pose, or the Avatar skeleton rest pose into an External Pose slot. Returns the reusable pose identity {track,index}.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -949,6 +949,14 @@
                 "type": "number",
                 "minimum": 0,
                 "description": "Time in seconds relative to the selected Clip's Timeline range."
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "scene_pose",
+                  "skeleton_rest_pose"
+                ],
+                "description": "Sample the original scene Animator's currently evaluated pose, or the Avatar's stored skeleton rest pose."
               }
             },
             "required": [
@@ -976,6 +984,11 @@
                       "required": [
                         "scene_time_seconds"
                       ]
+                    },
+                    {
+                      "required": [
+                        "mode"
+                      ]
                     }
                   ]
                 }
@@ -1001,6 +1014,11 @@
                       "required": [
                         "clip_time_seconds"
                       ]
+                    },
+                    {
+                      "required": [
+                        "mode"
+                      ]
                     }
                   ]
                 }
@@ -1021,6 +1039,85 @@
                     {
                       "required": [
                         "scene_time_seconds"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "mode"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "character",
+                  "mode"
+                ],
+                "properties": {
+                  "mode": {
+                    "enum": [
+                      "scene_pose"
+                    ]
+                  }
+                },
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "timeline_time_seconds"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "scene_time_seconds"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "clip"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "clip_time_seconds"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "character",
+                  "mode"
+                ],
+                "properties": {
+                  "mode": {
+                    "enum": [
+                      "skeleton_rest_pose"
+                    ]
+                  }
+                },
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "timeline_time_seconds"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "scene_time_seconds"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "clip"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "clip_time_seconds"
                       ]
                     }
                   ]
@@ -1066,6 +1163,26 @@
               "character": "<character>",
               "clip": "<clip>",
               "clip_time_seconds": 0.5
+            },
+            "full_data": true
+          }
+        },
+        {
+          "description": "Capture the original scene Animator's currently evaluated pose, independent of the Timeline Ghost.",
+          "arguments": {
+            "source": {
+              "character": "<character>",
+              "mode": "scene_pose"
+            },
+            "full_data": true
+          }
+        },
+        {
+          "description": "Capture the Humanoid Avatar's stored skeleton rest pose.",
+          "arguments": {
+            "source": {
+              "character": "<character>",
+              "mode": "skeleton_rest_pose"
             },
             "full_data": true
           }
