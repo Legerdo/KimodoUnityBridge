@@ -56,6 +56,7 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(generate["description"]?.Value<string>(), Does.Contain("request_id"));
             AssertRequiredProperty(get, "request_id");
             AssertRequiredProperty(cancel, "request_id");
+            Assert.That(get["inputSchema"]?["properties"]?["include_request_json"]?.Value<string>("type"), Is.EqualTo("boolean"));
             Assert.That(analyze["inputSchema"]?["properties"]?["clips"], Is.Not.Null);
             Assert.That(retarget["inputSchema"]?["properties"]?["source_character"], Is.Not.Null);
             Assert.That(retarget["inputSchema"]?["properties"]?["animation"], Is.Not.Null);

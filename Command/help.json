@@ -1412,6 +1412,10 @@
           "request_id": {
             "type": "string",
             "description": "Request id returned by kimodo_install_server or kimodo_generate_animation."
+          },
+          "include_request_json": {
+            "type": "boolean",
+            "description": "Include the exact JSON payload sent to QuickServer; defaults to false."
           }
         },
         "required": [
