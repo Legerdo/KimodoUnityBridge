@@ -124,7 +124,8 @@ namespace KimodoUnityBridge.Command
                     CommandDefinition(GetGenerationCommand,
                         "Get status, progress, remaining seconds, and message for an install or generation request. Generated animation metadata and its project-relative asset path are included only after a generation completes.",
                         Properties(
-                            Required("request_id", "string", "Request id returned by kimodo_install_server or kimodo_generate_animation."))),
+                            Required("request_id", "string", "Request id returned by kimodo_install_server or kimodo_generate_animation."),
+                            Optional("include_request_json", "boolean", "Include the exact JSON payload sent to QuickServer; defaults to false."))),
                     CommandDefinition(CancelGenerationCommand,
                         "Cancel an active animation generation request. Installation requests cannot be canceled.",
                         Properties(
@@ -379,6 +380,7 @@ namespace KimodoUnityBridge.Command
             return Execute(argumentsJson, arguments =>
             {
                 string requestValue = RequiredStringValue(arguments, "request_id");
+                bool includeRequestJson = arguments.Value<bool?>("include_request_json") == true;
                 if (requestValue.StartsWith("install:", StringComparison.OrdinalIgnoreCase))
                 {
                     lock (JobsLock)
@@ -399,10 +401,10 @@ namespace KimodoUnityBridge.Command
                 {
                     JObject persisted = LoadPersistedGenerationJob(session, requestId);
                     persisted["target_alive"] = false;
-                    return Ok(persisted);
+                    return Ok(includeRequestJson ? persisted : WithoutBackendRequestJson(persisted));
                 }
                 EnsureGenerationBelongsToSession(record, session);
-                JObject status = BuildStatus(record);
+                JObject status = BuildStatus(record, includeRequestJson);
                 try
                 {
                     JObject serverStatus = KimodoBridgeService.Shared
@@ -436,6 +438,17 @@ namespace KimodoUnityBridge.Command
                 status["target_alive"] = record.Target != null;
                 return Ok(status);
             });
+        }
+
+        private static JObject WithoutBackendRequestJson(JObject status)
+        {
+            var filtered = new JObject();
+            foreach (JProperty property in status.Properties())
+            {
+                if (!string.Equals(property.Name, "backend_request_json", StringComparison.Ordinal))
+                    filtered[property.Name] = property.Value.DeepClone();
+            }
+            return filtered;
         }
 
         public static string CancelGeneration(string argumentsJson)
@@ -614,7 +627,10 @@ namespace KimodoUnityBridge.Command
                     async (generationSession, token) =>
                     {
                         string previousTaskId = KimodoBridgeService.GenerationTaskIdContext.Value;
+                        Action<string> previousRequestPayload = KimodoBridgeService.GenerationRequestPayloadContext.Value;
                         KimodoBridgeService.GenerationTaskIdContext.Value = generationSession.RequestId.ToString("N");
+                        KimodoBridgeService.GenerationRequestPayloadContext.Value = payload =>
+                            generationSession.BackendRequestJson = payload;
                         try
                         {
                             return await ExecutePlayableClipGenerationAsync(
@@ -628,6 +644,7 @@ namespace KimodoUnityBridge.Command
                         finally
                         {
                             KimodoBridgeService.GenerationTaskIdContext.Value = previousTaskId;
+                            KimodoBridgeService.GenerationRequestPayloadContext.Value = previousRequestPayload;
                             // Temporary sampling context is owned by the command runtime.
                         }
                     },

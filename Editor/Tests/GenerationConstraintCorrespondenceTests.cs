@@ -75,12 +75,20 @@ namespace KimodoUnityBridge.Command.Tests
                     result = await KimodoEditorGeneratePipeline.ExecuteAsync(request);
                     Assert.That(result, Is.Not.Null);
                     Assert.That(result.GeneratedClip, Is.Not.Null);
+                    Assert.That(result.ConstraintLoss, Is.Not.Null);
 
                     JObject exportedRoot2D = JArray.Parse(request.Constraints.json)
                         .OfType<JObject>()
                         .Single(item => string.Equals(item.Value<string>("type"), "root2d", StringComparison.OrdinalIgnoreCase));
                     int constrainedFrame = exportedRoot2D["frame_indices"]?.Values<int>().Single() ??
                         throw new AssertionException("Generated root2d constraint has no frame index.");
+                    int outputConstraintFrame = constrainedFrame - request.RuntimeTrimStartFrame;
+                    Assert.That(result.ConstraintLoss.Value<int>("compared_count"), Is.GreaterThan(0));
+                    Assert.That(
+                        result.ConstraintLoss["frames"].Values<JObject>().Any(item =>
+                            item.Value<int>("frame") == outputConstraintFrame),
+                        Is.True,
+                        "The returned constraint-loss details should include the generated frame that corresponds to the Root2D constraint.");
                     double constrainedTime = constrainedFrame / KimodoMotionModelProfiles.DefaultFrameRate;
                     Assert.That(
                         KimodoRetargetSamplingUtility.SampleBoneClipToBoneSample(

@@ -32,7 +32,7 @@ namespace KimodoUnityBridge.Command
                     Example("Set one Root2D point. The selected data fields determine the constraint family; no type tag is needed.",
                         @"{'character':'<character>','prompt':'Walk to the target','duration_frames':120,'constraints':[{'frame':60,'root2d':{'position':[2.4,5.0],'heading':[0,1]}}]}"),
                     Example("Mix a FullBody pose, Root2D root override, and hand target at one frame. Root2D overlays the pose root channels and effect overlays the named hand target.",
-                        @"{'character':'<character>','prompt':'Reach to the apple','duration_frames':180,'loop':false,'constraints':[{'frame':90,'pose':{'track':'<pose track>','index':0},'root2d':{'position':[2.4,5.0],'heading':[0,1]},'effect':{'right_hand':{'position':[2.55,0.95,5.35]}}}]}");
+                        @"{'character':'<character>','prompt':'Reach to the apple','duration_frames':180,'loop':false,'constraints':[{'frame':90,'pose':{'track':'<pose track>','index':0},'root2d':{'position':[2.4,5.0],'heading':[0,1]},'effect':{'right_hand':{'position':[2.55,0.95,5.35]}}}]}"));
                 case PoseGetCommand: return new JArray(
                     Example("Capture a pose at an absolute Timeline-global time in seconds.",
                         @"{'source':{'character':'<character>','timeline_time_seconds':1.5},'full_data':true}"),

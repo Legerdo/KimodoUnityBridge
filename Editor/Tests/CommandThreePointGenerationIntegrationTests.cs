@@ -169,6 +169,13 @@ namespace KimodoUnityBridge.Command.Tests
 
                 Assert.That(status, Is.Not.Null);
                 Assert.That(status.Value<string>("status"), Is.EqualTo("completed"), status.ToString());
+                JObject constraintLoss = status["constraint_loss"] as JObject;
+                Assert.That(constraintLoss, Is.Not.Null, status.ToString());
+                Assert.That(constraintLoss.Value<int>("compared_count"), Is.GreaterThan(0), constraintLoss.ToString());
+                Assert.That(constraintLoss["frames"].Values<JObject>().Any(frame =>
+                    frame.Value<string>("constraint_type") == "mix" && frame["effectors"]?["right_hand"] != null),
+                    Is.True,
+                    "Returned constraint loss should include the generated frame with the mixed Root2D and right-hand constraint.");
                 AssertGenerationResolvesCachedCharacterByNameAndId(character);
                 string path = status.Value<string>("path");
                 Assert.That(path, Is.Not.Null.And.Not.Empty, status.ToString());

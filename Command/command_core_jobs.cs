@@ -160,7 +160,7 @@ namespace KimodoUnityBridge.Command
             }
         }
 
-        private static JObject BuildStatus(JobRecord record)
+        private static JObject BuildStatus(JobRecord record, bool includeBackendRequestJson = false)
         {
             KimodoEditorGenerationJobSession session = record.Session;
             var result = new JObject
@@ -181,10 +181,23 @@ namespace KimodoUnityBridge.Command
                     ? (JToken)session.ProgressRate.Value
                     : JValue.CreateNull()
             };
+            if (includeBackendRequestJson && !string.IsNullOrWhiteSpace(session.BackendRequestJson))
+            {
+                try
+                {
+                    result["backend_request_json"] = JToken.Parse(session.BackendRequestJson);
+                }
+                catch
+                {
+                    result["backend_request_json"] = session.BackendRequestJson;
+                }
+            }
             if (session.Payload is KimodoEditorGenerationResult generated)
             {
                 result["seed"] = generated.Seed;
                 result["prompt"] = generated.Prompt ?? string.Empty;
+                if (generated.ConstraintLoss != null)
+                    result["constraint_loss"] = generated.ConstraintLoss.DeepClone();
                 if (!string.IsNullOrWhiteSpace(generated.AnalysisJson))
                 {
                     try
@@ -368,7 +381,7 @@ namespace KimodoUnityBridge.Command
             }
             if (record?.TimelineGenerationTrace == null) return;
             TimelineSessionRecord timelineSession = record.TimelineGenerationTrace.Session;
-            JObject status = BuildStatus(record);
+            JObject status = BuildStatus(record, includeBackendRequestJson: true);
             WriteJsonAtomically(GenerationJobPath(timelineSession, jobSession.RequestId), status);
             UpdateGenerationHistory(timelineSession, status);
             PersistTimelineSessionMetadata(timelineSession);
