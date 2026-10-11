@@ -1581,7 +1581,7 @@
     },
     {
       "name": "session.clear",
-      "description": "Clear a current runtime Timeline session. Persisted Timeline and animation assets are retained; the automatic session is recreated lazily by the next command.",
+      "description": "Clear the active scene context by destroying transient context GameObjects. Persisted Timeline and animation assets are retained; the automatic session is recreated lazily by the next command.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -1590,7 +1590,7 @@
       },
       "examples": [
         {
-          "description": "Clear the current runtime session while retaining persisted assets.",
+          "description": "Destroy the current temporary workspace while retaining persisted Timeline and animation assets.",
           "arguments": {}
         }
       ]

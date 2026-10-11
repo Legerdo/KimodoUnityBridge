@@ -132,7 +132,7 @@ namespace KimodoUnityBridge.Command
                             Required("request_id", "string", "Generation request id returned by kimodo_generate_animation."),
                             Optional("reason", "string", "Optional cancellation reason."))),
                     CommandDefinition(SessionClearCommand,
-                        "Clear the active scene context. Context GameObjects are moved into the scene archive, persisted Timeline and animation assets are retained, and one fresh context is recreated lazily by the next command.",
+                        "Clear the active scene context by destroying its transient context GameObjects. Persisted Timeline and animation assets are retained, and one fresh context is recreated lazily by the next command.",
                         Properties()),
                 }
             }.ToString(Formatting.None);

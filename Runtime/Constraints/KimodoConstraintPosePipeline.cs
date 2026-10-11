@@ -23,7 +23,8 @@ namespace KimodoBridge
             RetargetSkeleton cache,
             out BoneSample boneSample,
             out MuscleSample muscleSample,
-            out string error)
+            out string error,
+            bool fullBodyRootSemantics = false)
         {
             boneSample = null;
             muscleSample = null;
@@ -51,9 +52,8 @@ namespace KimodoBridge
                 return false;
             }
 
-            // Root2D is handled directly by the canonical solver. The legacy
-            // support-pose promotion to FullBody was an upper-layer preview
-            // special case and is intentionally ignored.
+            // Root2D remains planar for normal callers. Preview callers may
+            // promote its root channels to FullBody semantics after composition.
 
             return TryApply(
                 canonical,
@@ -61,7 +61,8 @@ namespace KimodoBridge
                 cache,
                 out boneSample,
                 out muscleSample,
-                out error);
+                out error,
+                fullBodyRootSemantics);
         }
 
         internal static bool TryApply(
@@ -70,7 +71,8 @@ namespace KimodoBridge
             RetargetSkeleton cache,
             out BoneSample boneSample,
             out MuscleSample muscleSample,
-            out string error)
+            out string error,
+            bool fullBodyRootSemantics = false)
         {
             return TryApply(
                 sample,
@@ -80,7 +82,8 @@ namespace KimodoBridge
                 Quaternion.identity,
                 out boneSample,
                 out muscleSample,
-                out error);
+                out error,
+                fullBodyRootSemantics);
         }
 
         internal static bool TryApply(
@@ -91,7 +94,8 @@ namespace KimodoBridge
             Quaternion unusedTrackRotation,
             out BoneSample boneSample,
             out MuscleSample muscleSample,
-            out string error)
+            out string error,
+            bool fullBodyRootSemantics = false)
         {
             boneSample = null;
             muscleSample = null;
@@ -108,7 +112,7 @@ namespace KimodoBridge
             // Every command constraint is evaluated from its authored support
             // pose. The concrete family decides which authored channels the
             // solver applies; no Mix execution branch remains here.
-            if (!KimodoConstraintIkSolver.TryApply(sample, frameRate, cache, out error))
+            if (!KimodoConstraintIkSolver.TryApply(sample, frameRate, cache, out error, fullBodyRootSemantics))
             {
                 return false;
             }
@@ -320,10 +324,11 @@ namespace KimodoBridge
             KimodoMarkerSampleResult sample,
             float frameRate,
             RetargetSkeleton cache,
-            out string error)
+            out string error,
+            bool fullBodyRootSemantics = false)
         {
             error = string.Empty;
-            if (!TryBuildJob(sample, cache, out SolveJob job, out bool any, out error) || !any)
+            if (!TryBuildJob(sample, cache, out SolveJob job, out bool any, out error, fullBodyRootSemantics) || !any)
             {
                 return string.IsNullOrEmpty(error);
             }
@@ -417,7 +422,8 @@ namespace KimodoBridge
             RetargetSkeleton cache,
             out SolveJob job,
             out bool any,
-            out string error)
+            out string error,
+            bool fullBodyRootSemantics = false)
         {
             job = default;
             any = false;
@@ -452,8 +458,9 @@ namespace KimodoBridge
             {
                 job.applyRoot = true;
                 job.applyRootPosition = applyRootPosition;
-                job.rootPlanar = sample.composedRoot2D ||
-                    KimodoConstraintInternal.ResolveExecutionMode(sample) == "root2d";
+                job.rootPlanar = !fullBodyRootSemantics &&
+                    (sample.composedRoot2D ||
+                     KimodoConstraintInternal.ResolveExecutionMode(sample) == "root2d");
                 job.rootHeading = KimodoConstraintMask.IsActive(sample, "rootheading");
                 job.rootPosition = sample.rootOverride.t;
                 job.rootRotation = sample.rootOverride.q.normalized;

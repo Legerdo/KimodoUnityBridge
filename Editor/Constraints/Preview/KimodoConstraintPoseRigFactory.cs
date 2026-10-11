@@ -134,7 +134,8 @@ namespace KimodoBridge.Editor
                     instance.TargetCache,
                     out _,
                     out _,
-                    out error);
+                    out error,
+                    fullBodyRootSemantics: true);
             }
             catch (Exception ex)
             {
@@ -143,8 +144,7 @@ namespace KimodoBridge.Editor
             }
         }
 
-        // FullBody samples capture a complete Hips world rotation. Root2D
-        // samples intentionally supply only a planar heading.
+        // All constraint previews use the captured complete Hips rotation.
         internal static Quaternion ResolvePreviewHipsRotation(
             KimodoMarkerSampleResult sample,
             Quaternion evaluatedHipsRotation)
@@ -155,10 +155,7 @@ namespace KimodoBridge.Editor
                 return evaluatedHipsRotation;
             }
 
-            string mode = KimodoConstraintInternal.ResolveExecutionMode(sample);
-            return mode == "root2d"
-                ? KimodoMotionMath.ApplyPlanarHeading(evaluatedHipsRotation, sample.rootOverride.q)
-                : sample.rootOverride.q.normalized;
+            return sample.rootOverride.q.normalized;
         }
 
         internal static void DisposePoseRig(PoseRigInstance instance)

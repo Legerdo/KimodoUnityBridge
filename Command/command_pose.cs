@@ -54,7 +54,7 @@ namespace KimodoUnityBridge.Command
                     throw new InvalidOperationException("source.scene_time_seconds must be non-negative.");
                 }
             }
-            else
+            else if (hasClipTime)
             {
                 animation = ResolveAnimation(
                     new JObject { ["animation"] = RequiredStringValue(source, "clip") },
@@ -67,6 +67,10 @@ namespace KimodoUnityBridge.Command
                         $"source.clip_time_seconds must be inside clip '{animation.Name}' range [0,{clipDuration:F6}).");
                 }
                 timelineTime = animation.TimelineStartSeconds + clipTime;
+            }
+            else
+            {
+                timelineTime = session.Director != null ? session.Director.time : 0.0;
             }
 
             if (hasScenePose || hasRestPose) timelineTime = session.Director != null ? session.Director.time : 0.0;
@@ -134,7 +138,7 @@ namespace KimodoUnityBridge.Command
                     cache.root.transform.SetPositionAndRotation(sourceRoot.transform.position, sourceRoot.transform.rotation);
                     foreach (HumanBodyBones bone in System.Enum.GetValues(typeof(HumanBodyBones)).Cast<HumanBodyBones>())
                     {
-                        if (bone == HumanBodyBones.LastBone || bone == HumanBodyBones.Invalid) continue;
+                        if (bone == HumanBodyBones.LastBone) continue;
                         Transform sourceBone = sourceAnimator.GetBoneTransform(bone);
                         if (sourceBone != null && cache.animator.GetBoneTransform(bone) is Transform targetBone)
                         {

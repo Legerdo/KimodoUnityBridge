@@ -248,6 +248,9 @@ namespace KimodoBridge.Editor.Tests
                 Assert.That(KimodoConstraintPoseRigFactory.TryCreatePoseRig(model, source.animator, avatar, out rig, out error), Is.True, error);
                 Assert.That(KimodoConstraintPoseRigFactory.TryApplyPose(rig, sample, model, out error), Is.True, error);
                 var expected = KimodoRetargetSamplingUtility.CaptureBoneSample(rig.TargetCache);
+                Transform expectedHips = rig.TargetCache.animator.GetBoneTransform(HumanBodyBones.Hips);
+                Vector3 expectedHipsPosition = expectedHips.position;
+                Quaternion expectedHipsRotation = expectedHips.rotation;
                 var originalData = (float[])sample.sampleData.data.Clone();
                 if (staleEffectorMasks)
                 {
@@ -269,6 +272,9 @@ namespace KimodoBridge.Editor.Tests
                     Assert.That(previewSample.enableMask.muscle, Is.EqualTo(sample.enableMask.muscle));
                     CollectionAssert.AreEqual(originalData, previewSample.sampleData.data);
                     var actual = KimodoRetargetSamplingUtility.CaptureBoneSample(rig.TargetCache);
+                    Transform actualHips = rig.TargetCache.animator.GetBoneTransform(HumanBodyBones.Hips);
+                    Assert.That(Vector3.Distance(actualHips.position, expectedHipsPosition), Is.LessThan(0.001f));
+                    Assert.That(Quaternion.Angle(actualHips.rotation, expectedHipsRotation), Is.LessThan(0.1f));
                     for (int i = 0; i < expected.boneNames.Length; i++)
                     {
                         Assert.That(Vector3.Distance(actual.localPositions[i], expected.localPositions[i]), Is.LessThan(0.001f), expected.boneNames[i]);
@@ -383,7 +389,7 @@ namespace KimodoBridge.Editor.Tests
         }
 
         [Test]
-        public void PreviewRootRotation_UsesFullHipsForFullBodyAndHeadingForRoot2D()
+        public void PreviewRootRotation_UsesFullHipsRotationForAllModes()
         {
             Quaternion evaluatedHips = Quaternion.Euler(12f, 35f, -8f);
             Quaternion capturedHips = Quaternion.Euler(-16f, 70f, 11f);
@@ -410,7 +416,7 @@ namespace KimodoBridge.Editor.Tests
             Assert.That(
                 Quaternion.Angle(
                     KimodoConstraintPoseRigFactory.ResolvePreviewHipsRotation(root2D, evaluatedHips),
-                    KimodoMotionMath.ApplyPlanarHeading(evaluatedHips, capturedHips)),
+                    capturedHips),
                 Is.LessThan(0.01f));
         }
 

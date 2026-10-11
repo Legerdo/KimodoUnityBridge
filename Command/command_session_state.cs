@@ -29,27 +29,14 @@ namespace KimodoUnityBridge.Command
         private static readonly object TimelineSessionsLock = new object();
         private static TimelineSessionRecord currentTimelineSession;
         private static TimelineSessionRecord firstTimelineSession;
-        private const string ArchivedSessionRootName = KimodoRuntimeUtility.ArchiveRootName;
 
         private static GameObject[] GetSceneSessionRoots(Scene scene)
         {
             if (!scene.IsValid() || !scene.isLoaded) return Array.Empty<GameObject>();
             return Resources.FindObjectsOfTypeAll<GameObject>()
                 .Where(item => item != null && item.scene == scene &&
-                    item.name.StartsWith(KimodoRuntimeUtility.SessionRootPrefix, StringComparison.Ordinal) &&
-                    !IsArchivedSessionObject(item))
+                    item.name.StartsWith(KimodoRuntimeUtility.SessionRootPrefix, StringComparison.Ordinal))
                 .ToArray();
-        }
-
-        private static bool IsArchivedSessionObject(GameObject item)
-        {
-            Transform current = item != null ? item.transform.parent : null;
-            while (current != null)
-            {
-                if (KimodoRuntimeUtility.IsArchivedObject(current.gameObject)) return true;
-                current = current.parent;
-            }
-            return false;
         }
 
         private static void RequireSingleSceneSession(Scene scene)
@@ -59,35 +46,20 @@ namespace KimodoUnityBridge.Command
             {
                 throw new CommandException(
                     "multiple_contexts",
-                    $"Scene '{scene.name}' contains {roots.Length} Kimodo contexts. This plugin supports exactly one context per scene. Run session.clear to archive the duplicates, then retry.");
+                    $"Scene '{scene.name}' contains {roots.Length} Kimodo contexts. This plugin supports exactly one context per scene. Run session.clear to destroy the duplicates, then retry.");
             }
         }
 
-        private static int ArchiveSceneSessionRoots(Scene scene)
+        private static int DestroySceneSessionRoots(Scene scene)
         {
             GameObject[] roots = GetSceneSessionRoots(scene);
-            if (roots.Length == 0) return 0;
-
-            GameObject archive = scene.GetRootGameObjects()
-                .FirstOrDefault(item => item != null && string.Equals(item.name, ArchivedSessionRootName, StringComparison.Ordinal));
-            if (archive == null)
-            {
-                archive = new GameObject(ArchivedSessionRootName)
-                {
-                    hideFlags = HideFlags.DontSaveInBuild | HideFlags.DontSaveInEditor,
-                    layer = SessionCaptureLayer
-                };
-                SceneManager.MoveGameObjectToScene(archive, scene);
-            }
-
+            int removedCount = roots.Length;
             foreach (GameObject root in roots)
             {
-                if (root == null) continue;
-                root.SetActive(false);
-                root.name = $"Archived_{root.name}_{KimodoUnityObjectIdUtility.IdHash(root)}";
-                root.transform.SetParent(archive.transform, true);
+                if (root != null) UnityEngine.Object.DestroyImmediate(root);
             }
-            return roots.Length;
+
+            return removedCount;
         }
 
         private static void ActivateTimelineSession(TimelineSessionRecord session)
@@ -115,7 +87,6 @@ namespace KimodoUnityBridge.Command
             {
                 throw new CommandException("context_already_exists", "A context GameObject already exists in the active scene but is not registered. Re-resolve it or run session.clear before creating another.");
             }
-
             KimodoEditorClipWritebackService.EnsureFolderExists(GeneratedTimelineFolder);
             string safeName = KimodoRuntimeUtility.SanitizeName(name, "Session");
             string assetPath = AssetDatabase.GenerateUniqueAssetPath(
@@ -127,6 +98,7 @@ namespace KimodoUnityBridge.Command
             metadata.name = "Kimodo Session Metadata";
             metadata.sessionId = Guid.NewGuid().ToString("D");
             metadata.sessionName = name;
+            metadata.scenePath = SceneManager.GetActiveScene().path;
             metadata.isAutomatic = isAutomatic;
             AssetDatabase.AddObjectToAsset(metadata, timelineAsset);
 
@@ -150,7 +122,10 @@ namespace KimodoUnityBridge.Command
             return record;
         }
 
-        private static GameObject CloneCharacterToSession(TimelineSessionRecord session, GameObject source)
+        private static GameObject CloneCharacterToSession(
+            TimelineSessionRecord session,
+            GameObject source,
+            string characterName)
         {
             if (source == null || session == null || session.SessionRoot == null || source.transform.IsChildOf(session.SessionRoot.transform))
             {
@@ -159,8 +134,27 @@ namespace KimodoUnityBridge.Command
             Vector3 sourceWorldPosition = source.transform.position;
             Quaternion sourceWorldRotation = source.transform.rotation;
             Dictionary<string, TransformSnapshot> sourcePose = CaptureTransformSnapshots(source.transform);
-            GameObject clone = UnityEngine.Object.Instantiate(source);
-            clone.name = source.name;
+            string ghostName = $"Ghost_{KimodoRuntimeUtility.SanitizeName(characterName, source.name)}";
+            Transform[] existingGhostCandidates = session.SessionRoot.transform.Cast<Transform>()
+                .Where(child => child != source.transform &&
+                    (string.Equals(child.name, ghostName, StringComparison.Ordinal) ||
+                     string.Equals(child.name, source.name, StringComparison.Ordinal)))
+                .ToArray();
+            Transform existingGhost = existingGhostCandidates
+                .FirstOrDefault(child => string.Equals(child.name, ghostName, StringComparison.Ordinal))
+                ?? existingGhostCandidates.FirstOrDefault();
+            // Reuse a clone restored from this session before making another one.
+            GameObject clone = existingGhost != null
+                ? existingGhost.gameObject
+                : UnityEngine.Object.Instantiate(source);
+            clone.name = ghostName;
+            Transform[] duplicateGhosts = existingGhostCandidates
+                .Where(child => child != existingGhost)
+                .ToArray();
+            foreach (Transform duplicate in duplicateGhosts)
+            {
+                if (duplicate != null) UnityEngine.Object.DestroyImmediate(duplicate.gameObject);
+            }
             clone.hideFlags = HideFlags.DontSaveInBuild | HideFlags.DontSaveInEditor;
             clone.transform.SetParent(session.SessionRoot.transform, true);
             SetLayerRecursively(clone, SessionCaptureLayer);
@@ -397,7 +391,8 @@ namespace KimodoUnityBridge.Command
                 return false;
             }
             GameObject sourceRoot = root;
-            root = CloneCharacterToSession(session, sourceRoot);
+            string characterName = MakeUniqueCharacterName(session, sourceRoot.name);
+            root = CloneCharacterToSession(session, sourceRoot, characterName);
             animator = root != null ? root.GetComponentInChildren<Animator>(true) : null;
             Avatar avatar = null;
             string avatarError = string.Empty;
@@ -420,7 +415,6 @@ namespace KimodoUnityBridge.Command
                 return false;
             }
 
-            string characterName = MakeUniqueCharacterName(session, root.name);
             AnimationTrack track = session.TimelineAsset.CreateTrack<AnimationTrack>(null, characterName);
             // Match Timeline's "Apply Scene Offsets" using the clone's scene pose.
             track.trackOffset = TrackOffset.ApplySceneOffsets;
@@ -904,7 +898,7 @@ namespace KimodoUnityBridge.Command
             if (session.SessionRoot != null)
             {
                 Scene scene = session.SessionRoot.scene;
-                ArchiveSceneSessionRoots(scene);
+                DestroySceneSessionRoots(scene);
             }
             lock (TimelineSessionsLock)
             {
@@ -921,7 +915,7 @@ namespace KimodoUnityBridge.Command
                 EnsureTimelineSessionsRestored();
                 TimelineSessionRecord session = currentTimelineSession;
                 if (session != null) CancelTimelineSessionGenerations(session, "Session cleared by session.clear.");
-                int archivedCount = ArchiveSceneSessionRoots(scene);
+                int removedCount = DestroySceneSessionRoots(scene);
                 if (session != null)
                 {
                     if (session.Director != null) session.Director.Stop();
@@ -931,12 +925,12 @@ namespace KimodoUnityBridge.Command
                 firstTimelineSession = null;
                 lock (TimelineSessionsLock) TimelineSessions.Clear();
                 timelineSessionsRestored = false;
-                Debug.LogWarning($"[Kimodo] Cleared runtime context in scene '{scene.name}'; archived {archivedCount} context object(s). Persisted Timeline and animation assets were retained.");
+                Debug.LogWarning($"[Kimodo] Cleared runtime context in scene '{scene.name}'; destroyed {removedCount} context object(s). Persisted Timeline and animation assets were retained.");
                 return Ok(new JObject
                 {
-                    ["cleared"] = archivedCount > 0 || session != null,
+                    ["cleared"] = removedCount > 0 || session != null,
                     ["name"] = session != null ? session.Name : "__AutoContext",
-                    ["archived_context_count"] = archivedCount,
+                    ["destroyed_context_count"] = removedCount,
                     ["recreated_on_next_command"] = true
                 });
             });
