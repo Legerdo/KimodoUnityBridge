@@ -10,8 +10,8 @@ session shared by Timeline evaluation, generation, analysis, and Pose sampling. 
 no separate public context command.
 
 - Scene characters are resolved from the active scene and the selected/open `Animator` when available.
-- Protocol character entries use `role: "scene"`; their nested `ghost` entry is an internal evaluation clone and is never a valid character handle.
-- Commands reject Ghost hierarchy paths. Pass the scene character `name` or `object_ref` instead.
+- Protocol character entries use `role: "scene"`; their nested `timeline_preview` entry refers to that same original character and is diagnostic only.
+- Timeline preview binds the original scene Animator. Session preview objects are not valid character handles; pass the scene character `name` or `object_ref`.
 - Existing clips remain immutable; generation, analysis, retargeting, and corrections append derived assets.
 - Returned character and animation names, `{track,index}` pose references, and project-relative paths are the only handles passed between commands.
 - Use the character and animation references returned by the command that resolved them;
@@ -22,4 +22,4 @@ no separate public context command.
 
 Kimodo rejects every command when more than one active `KimodoSession_*` context exists in a scene. Call `session.clear` to destroy the duplicate contexts before retrying.
 
-When a session is hydrated, Kimodo reuses its matching `Ghost_<track>` object and destroys extra legacy clones. Temporary context objects are not cached in the scene.
+When a session is hydrated, Kimodo binds the saved Timeline track directly to the original scene Animator. Legacy Ghost objects are deactivated and moved under the session's `Archive_GhostPreviews` object; they are not used for preview. Temporary context objects are not cached in the scene.

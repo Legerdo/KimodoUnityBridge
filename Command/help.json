@@ -1168,7 +1168,7 @@
           }
         },
         {
-          "description": "Capture the original scene Animator's currently evaluated pose, independent of the Timeline Ghost.",
+          "description": "Capture the original scene Animator's currently evaluated pose, independent of Timeline preview time.",
           "arguments": {
             "source": {
               "character": "<character>",

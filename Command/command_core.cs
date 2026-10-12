@@ -87,14 +87,14 @@ namespace KimodoUnityBridge.Command
                     CommandDefinition(RetargetAnimationCommand,
                         "Retarget one loaded animation to another current scene context character and append the result.",
                         Properties(
-                            Required("source_character", "string", "Source scene character name or object_ref. Ghost character paths are rejected."),
+                            Required("source_character", "string", "Source scene character name or object_ref. Session preview objects are rejected."),
                             Required("animation", "string", "Safe source animation name."),
-                            Required("target_character", "string", "Target scene character name or object_ref. Ghost character paths are rejected."),
+                            Required("target_character", "string", "Target scene character name or object_ref. Session preview objects are rejected."),
                             OptionalOutput())),
                     CommandDefinition(GenerateAnimationCommand,
                         "Start asynchronous generation for a character in the current scene context. The accepted response includes non-blocking generation checks and must be polled by request_id.",
                         Properties(
-                            Required("character", "string", "Scene character name or object_ref. Ghost character paths are rejected; use the source scene character."),
+                            Required("character", "string", "Scene character name or object_ref. Session preview objects are rejected; use the source scene character."),
                             Required("prompt", "string", "Motion prompt."),
                             Optional("duration_frames", "integer", "Duration in 60 FPS frames; defaults to 300."),
                             OptionalLoop(),

@@ -530,9 +530,7 @@ namespace KimodoUnityBridge.Command
                 foreach (KimodoCommandCharacterMetadata savedCharacter in metadata.characters ?? new List<KimodoCommandCharacterMetadata>())
                 {
                     GameObject sourceRoot = ResolveObject(savedCharacter.characterRef) as GameObject;
-                    GameObject root = sourceRoot != null
-                        ? CloneCharacterToSession(session, sourceRoot, savedCharacter.trackName)
-                        : null;
+                    GameObject root = sourceRoot;
                     Animator animator = root != null ? root.GetComponentInChildren<Animator>(true) : null;
                     AnimationTrack track = timeline.GetRootTracks().OfType<AnimationTrack>()
                         .FirstOrDefault(item => string.Equals(item.name, savedCharacter.trackName, StringComparison.Ordinal));
@@ -545,7 +543,7 @@ namespace KimodoUnityBridge.Command
                     }
                     KimodoLocalAvatarUtility.AvatarResolveResult avatarResult = KimodoLocalAvatarUtility.ResolveAvatarFromGameObject(root);
                     var character = new TimelineCharacterRecord(savedCharacter.characterRef, root, animator, avatarResult.Avatar, track, poseTrack, avatarResult.Error);
-                    BindGhostCharacter(session, root, sourceRoot, animator, track);
+                    BindTimelineCharacter(session, root, sourceRoot, animator, track);
                     session.Characters.Add(character);
                 }
                 foreach (KimodoCommandAnimationMetadata saved in metadata.animations ?? new List<KimodoCommandAnimationMetadata>())

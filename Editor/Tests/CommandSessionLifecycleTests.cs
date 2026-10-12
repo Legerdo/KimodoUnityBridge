@@ -38,7 +38,7 @@ namespace KimodoUnityBridge.Command.Tests
         }
 
         [Test]
-        public void CloneCharacterToSession_ReusesGhostAndDestroysLegacyDuplicates()
+        public void BindTimelineCharacter_UsesOriginalAnimatorAndArchivesLegacyGhost()
         {
             Type context = typeof(command_dispatcher).Assembly.GetType("KimodoUnityBridge.Command.command_context");
             Type sessionType = context.GetNestedType("TimelineSessionRecord", BindingFlags.NonPublic);
@@ -46,31 +46,31 @@ namespace KimodoUnityBridge.Command.Tests
                 "KimodoUnityBridge.Command.KimodoCommandSessionMetadata");
             GameObject sessionRoot = new GameObject("KimodoSession_Test");
             GameObject source = new GameObject("TestCharacter");
-            GameObject oldGhost = new GameObject("TestCharacter");
-            GameObject duplicateOldGhost = new GameObject("TestCharacter");
-            GameObject duplicateNamedGhost = new GameObject("Ghost_TestCharacter");
+            Animator animator = source.AddComponent<Animator>();
+            animator.applyRootMotion = true;
+            source.transform.position = new Vector3(3f, 1f, 7f);
+            Vector3 sourcePosition = source.transform.position;
+            GameObject oldGhost = new GameObject("Ghost_TestCharacter");
             oldGhost.transform.SetParent(sessionRoot.transform, false);
-            duplicateOldGhost.transform.SetParent(sessionRoot.transform, false);
-            duplicateNamedGhost.transform.SetParent(sessionRoot.transform, false);
             TimelineAsset timeline = ScriptableObject.CreateInstance<TimelineAsset>();
             ScriptableObject metadata = ScriptableObject.CreateInstance(metadataType);
             var directorObject = new GameObject("Kimodo_CommandSession_Test");
             directorObject.transform.SetParent(sessionRoot.transform, false);
             PlayableDirector director = directorObject.AddComponent<PlayableDirector>();
             object session = CreateSessionRecord(sessionType, timeline, metadata, director, sessionRoot);
-            MethodInfo cloneMethod = context.GetMethod("CloneCharacterToSession", BindingFlags.Static | BindingFlags.NonPublic);
+            AnimationTrack track = timeline.CreateTrack<AnimationTrack>(null, "TestCharacter");
+            track.trackOffset = TrackOffset.ApplySceneOffsets;
+            MethodInfo bindMethod = context.GetMethod("BindTimelineCharacter", BindingFlags.Static | BindingFlags.NonPublic);
 
             try
             {
-                GameObject first = (GameObject)cloneMethod.Invoke(null, new object[] { session, source, "TestCharacter" });
-                GameObject second = (GameObject)cloneMethod.Invoke(null, new object[] { session, source, "TestCharacter" });
+                bindMethod.Invoke(null, new object[] { session, source, source, animator, track });
 
-                Assert.That(first, Is.SameAs(duplicateNamedGhost));
-                Assert.That(second, Is.SameAs(first), "Repeated session hydration must reuse its Ghost.");
-                Assert.That(first.name, Is.EqualTo("Ghost_TestCharacter"));
-                Assert.That(first.transform.parent, Is.EqualTo(sessionRoot.transform));
-                Assert.That(new[] { oldGhost, duplicateOldGhost }.All(item => item == null), Is.True);
-                Assert.That(sessionRoot.transform.Cast<Transform>().Count(item => item.name == "Ghost_TestCharacter"), Is.EqualTo(1));
+                Assert.That(director.GetGenericBinding(track), Is.SameAs(animator));
+                Assert.That(animator.applyRootMotion, Is.True);
+                Assert.That(source.transform.position, Is.EqualTo(sourcePosition));
+                Assert.That(oldGhost.activeSelf, Is.False);
+                Assert.That(oldGhost.transform.parent.name, Is.EqualTo("Archive_GhostPreviews"));
             }
             finally
             {

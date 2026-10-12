@@ -19,6 +19,7 @@ namespace KimodoUnityBridge.Command
 {
     internal static partial class command_context
     {
+        private const string CreateTimelineSessionUndoName = "Create Kimodo Timeline Session";
         private const string AnalysisContractVersion = "4-command-60-timeline-keyframes-v1";
         internal const int SessionCaptureLayer = 17;
         internal const int ClipSafeZoneFrames = 4;
@@ -91,201 +92,87 @@ namespace KimodoUnityBridge.Command
             string safeName = KimodoRuntimeUtility.SanitizeName(name, "Session");
             string assetPath = AssetDatabase.GenerateUniqueAssetPath(
                 $"{GeneratedTimelineFolder}/Kimodo_CommandSession_{safeName}_{DateTime.Now:yyyyMMdd_HHmmss_fff}.playable");
-            TimelineAsset timelineAsset = ScriptableObject.CreateInstance<TimelineAsset>();
-            timelineAsset.editorSettings.frameRate = SessionFrameRate;
-            AssetDatabase.CreateAsset(timelineAsset, assetPath);
-            var metadata = ScriptableObject.CreateInstance<KimodoCommandSessionMetadata>();
-            metadata.name = "Kimodo Session Metadata";
-            metadata.sessionId = Guid.NewGuid().ToString("D");
-            metadata.sessionName = name;
-            metadata.scenePath = SceneManager.GetActiveScene().path;
-            metadata.isAutomatic = isAutomatic;
-            AssetDatabase.AddObjectToAsset(metadata, timelineAsset);
+            Undo.IncrementCurrentGroup();
+            int undoGroup = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName(CreateTimelineSessionUndoName);
+            try
+            {
+                TimelineAsset timelineAsset = ScriptableObject.CreateInstance<TimelineAsset>();
+                Undo.RegisterCreatedObjectUndo(timelineAsset, CreateTimelineSessionUndoName);
+                timelineAsset.editorSettings.frameRate = SessionFrameRate;
+                AssetDatabase.CreateAsset(timelineAsset, assetPath);
+                var metadata = ScriptableObject.CreateInstance<KimodoCommandSessionMetadata>();
+                metadata.name = "Kimodo Session Metadata";
+                metadata.sessionId = Guid.NewGuid().ToString("D");
+                metadata.sessionName = name;
+                metadata.scenePath = SceneManager.GetActiveScene().path;
+                metadata.isAutomatic = isAutomatic;
+                AssetDatabase.AddObjectToAsset(metadata, timelineAsset);
 
-            GameObject sessionRoot = new GameObject($"KimodoSession_{safeName}");
-            sessionRoot.layer = SessionCaptureLayer;
-            sessionRoot.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
-            GameObject directorObject = new GameObject($"{KimodoRuntimeUtility.SessionDirectorPrefix}{safeName}");
-            directorObject.transform.SetParent(sessionRoot.transform, false);
-            directorObject.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
-            PlayableDirector director = directorObject.AddComponent<PlayableDirector>();
-            director.playableAsset = timelineAsset;
-            director.time = 0.0;
+                GameObject sessionRoot = new GameObject($"KimodoSession_{safeName}");
+                sessionRoot.layer = SessionCaptureLayer;
+                sessionRoot.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
+                GameObject directorObject = new GameObject($"{KimodoRuntimeUtility.SessionDirectorPrefix}{safeName}");
+                directorObject.transform.SetParent(sessionRoot.transform, false);
+                directorObject.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
+                PlayableDirector director = directorObject.AddComponent<PlayableDirector>();
+                director.playableAsset = timelineAsset;
+                director.time = 0.0;
 
-            var record = new TimelineSessionRecord(Guid.Parse(metadata.sessionId), name, director, timelineAsset, assetPath, isAutomatic, metadata, sessionRoot);
-            firstTimelineSession ??= record;
-
-            PersistTimelineSessionMetadata(record);
-            EditorUtility.SetDirty(timelineAsset);
-            EditorUtility.SetDirty(director);
-            AssetDatabase.SaveAssets();
-            return record;
+                var record = new TimelineSessionRecord(Guid.Parse(metadata.sessionId), name, director, timelineAsset, assetPath, isAutomatic, metadata, sessionRoot);
+                PersistTimelineSessionMetadata(record);
+                EditorUtility.SetDirty(timelineAsset);
+                EditorUtility.SetDirty(director);
+                AssetDatabase.SaveAssets();
+                firstTimelineSession ??= record;
+                Undo.CollapseUndoOperations(undoGroup);
+                return record;
+            }
+            catch
+            {
+                Undo.RevertAllDownToGroup(undoGroup);
+                throw;
+            }
         }
 
-        private static GameObject CloneCharacterToSession(
+        private static void BindTimelineCharacter(
             TimelineSessionRecord session,
-            GameObject source,
-            string characterName)
-        {
-            if (source == null || session == null || session.SessionRoot == null || source.transform.IsChildOf(session.SessionRoot.transform))
-            {
-                return source;
-            }
-            Vector3 sourceWorldPosition = source.transform.position;
-            Quaternion sourceWorldRotation = source.transform.rotation;
-            Dictionary<string, TransformSnapshot> sourcePose = CaptureTransformSnapshots(source.transform);
-            string ghostName = $"Ghost_{KimodoRuntimeUtility.SanitizeName(characterName, source.name)}";
-            Transform[] existingGhostCandidates = session.SessionRoot.transform.Cast<Transform>()
-                .Where(child => child != source.transform &&
-                    (string.Equals(child.name, ghostName, StringComparison.Ordinal) ||
-                     string.Equals(child.name, source.name, StringComparison.Ordinal)))
-                .ToArray();
-            Transform existingGhost = existingGhostCandidates
-                .FirstOrDefault(child => string.Equals(child.name, ghostName, StringComparison.Ordinal))
-                ?? existingGhostCandidates.FirstOrDefault();
-            // Reuse a clone restored from this session before making another one.
-            GameObject clone = existingGhost != null
-                ? existingGhost.gameObject
-                : UnityEngine.Object.Instantiate(source);
-            clone.name = ghostName;
-            Transform[] duplicateGhosts = existingGhostCandidates
-                .Where(child => child != existingGhost)
-                .ToArray();
-            foreach (Transform duplicate in duplicateGhosts)
-            {
-                if (duplicate != null) UnityEngine.Object.DestroyImmediate(duplicate.gameObject);
-            }
-            clone.hideFlags = HideFlags.DontSaveInBuild | HideFlags.DontSaveInEditor;
-            clone.transform.SetParent(session.SessionRoot.transform, true);
-            SetLayerRecursively(clone, SessionCaptureLayer);
-            // Preserve components from the source character. In particular, a
-            // pre-existing CharacterController is part of the authored rig and
-            // must not be removed merely because the clone is used for preview.
-            foreach (Animator candidate in clone.GetComponentsInChildren<Animator>(true))
-            {
-                candidate.runtimeAnimatorController = null;
-                candidate.applyRootMotion = false;
-                candidate.Rebind();
-                candidate.Update(0f);
-            }
-            // Rebinding resets the Animator skeleton to the Avatar rest pose. Restore
-            // every authored local bone transform, then restore the scene root pose.
-            RestoreTransformSnapshots(clone.transform, sourcePose);
-            clone.transform.SetPositionAndRotation(sourceWorldPosition, sourceWorldRotation);
-            // The Ghost is detached from the source parent and attached below
-            // the session root. Preserve the source root's world scale at that
-            // boundary; writing source.localScale would omit any scale owned by
-            // the original parent and make the Ghost's skeleton proportionally
-            // different from the scene character.
-            clone.transform.localScale = source.transform.localScale;
-            return clone;
-        }
-
-        private readonly struct TransformSnapshot
-        {
-            public TransformSnapshot(Vector3 position, Quaternion rotation, Vector3 scale)
-            {
-                LocalPosition = position;
-                LocalRotation = rotation;
-                LocalScale = scale;
-            }
-
-            public Vector3 LocalPosition { get; }
-            public Quaternion LocalRotation { get; }
-            public Vector3 LocalScale { get; }
-        }
-
-        private static Dictionary<string, TransformSnapshot> CaptureTransformSnapshots(Transform root)
-        {
-            var result = new Dictionary<string, TransformSnapshot>(StringComparer.Ordinal);
-            if (root == null) return result;
-            foreach (Transform item in root.GetComponentsInChildren<Transform>(true))
-            {
-                result[GetRelativeTransformPath(root, item)] = new TransformSnapshot(
-                    item.localPosition, item.localRotation, item.localScale);
-            }
-            return result;
-        }
-
-        private static void RestoreTransformSnapshots(Transform root, Dictionary<string, TransformSnapshot> snapshots)
-        {
-            if (root == null || snapshots == null) return;
-            foreach (Transform item in root.GetComponentsInChildren<Transform>(true))
-            {
-                if (!snapshots.TryGetValue(GetRelativeTransformPath(root, item), out TransformSnapshot snapshot)) continue;
-                item.localPosition = snapshot.LocalPosition;
-                item.localRotation = snapshot.LocalRotation;
-                item.localScale = snapshot.LocalScale;
-            }
-        }
-
-        private static void RestoreCloneHierarchyFromSource(GameObject clone, GameObject source)
-        {
-            if (clone == null || source == null || clone == source) return;
-            Dictionary<string, TransformSnapshot> snapshots = CaptureTransformSnapshots(source.transform);
-            Transform[] cloneTransforms = clone.GetComponentsInChildren<Transform>(true);
-            var clonePaths = new HashSet<string>(cloneTransforms.Select(item => GetRelativeTransformPath(clone.transform, item)), StringComparer.Ordinal);
-            string[] missingPaths = snapshots.Keys.Where(path => !clonePaths.Contains(path)).ToArray();
-            if (missingPaths.Length > 0 || clonePaths.Count != snapshots.Count)
-            {
-                throw new InvalidOperationException(
-                    $"Ghost hierarchy does not match source '{source.name}' (source transforms: {snapshots.Count}, ghost transforms: {clonePaths.Count}, missing paths: {string.Join(", ", missingPaths.Take(5))}).");
-            }
-            RestoreTransformSnapshots(clone.transform, snapshots);
-            clone.transform.SetPositionAndRotation(source.transform.position, source.transform.rotation);
-            // Restore the detached Ghost in the source character's world TRS.
-            // Its parent is the neutral session root, so lossyScale is the
-            // scale that reproduces the source root in the new hierarchy.
-            clone.transform.localScale = source.transform.localScale;
-
-            float maxPositionError = 0f;
-            float maxRotationError = 0f;
-            float maxScaleError = 0f;
-            foreach (Transform sourceTransform in source.GetComponentsInChildren<Transform>(true))
-            {
-                string path = GetRelativeTransformPath(source.transform, sourceTransform);
-                Transform cloneTransform = cloneTransforms.FirstOrDefault(item =>
-                    string.Equals(GetRelativeTransformPath(clone.transform, item), path, StringComparison.Ordinal));
-                if (cloneTransform == null) continue;
-                maxPositionError = Mathf.Max(maxPositionError, Vector3.Distance(sourceTransform.position, cloneTransform.position));
-                maxRotationError = Mathf.Max(maxRotationError, Quaternion.Angle(sourceTransform.rotation, cloneTransform.rotation));
-                maxScaleError = Mathf.Max(maxScaleError, Vector3.Distance(sourceTransform.lossyScale, cloneTransform.lossyScale));
-            }
-            if (maxPositionError > 0.0001f || maxRotationError > 0.01f || maxScaleError > 0.0001f)
-            {
-                throw new InvalidOperationException(
-                    $"Ghost transform synchronization failed for '{source.name}' (max position error {maxPositionError:F6} m, rotation error {maxRotationError:F4} degrees, scale error {maxScaleError:F6}).");
-            }
-        }
-
-        private static void BindGhostCharacter(
-            TimelineSessionRecord session,
-            GameObject ghost,
+            GameObject timelineCharacter,
             GameObject source,
             Animator animator,
             AnimationTrack track)
         {
-            if (ghost == null || source == null) throw new InvalidOperationException("Ghost and source character are required.");
-            RestoreCloneHierarchyFromSource(ghost, source);
+            if (timelineCharacter == null || source == null) throw new InvalidOperationException("Timeline-bound and source characters are required.");
+            if (timelineCharacter != source) throw new InvalidOperationException("Timeline preview must bind the original scene character directly.");
+            ArchiveLegacyGhostPreviews(session, source);
             if (animator == null || track == null || session?.Director == null) return;
             session.Director.SetGenericBinding(track, animator);
             KimodoTimelinePreviewRefreshUtility.InitializeSceneOffset(track, animator);
-            // Binding/offset initialization can rebind the Animator. Restore and
-            // validate the complete authored hierarchy once at the end.
-            RestoreCloneHierarchyFromSource(ghost, source);
         }
 
-        private static string GetRelativeTransformPath(Transform root, Transform item)
+        private static void ArchiveLegacyGhostPreviews(TimelineSessionRecord session, GameObject source)
         {
-            if (item == root) return string.Empty;
-            var names = new Stack<string>();
-            Transform current = item;
-            while (current != null && current != root)
+            if (session?.SessionRoot == null || source == null) return;
+            Transform[] legacyGhosts = session.SessionRoot.transform.Cast<Transform>()
+                .Where(child => child != null && child.gameObject != source &&
+                    child.name.StartsWith("Ghost_", StringComparison.Ordinal))
+                .ToArray();
+            if (legacyGhosts.Length == 0) return;
+
+            Transform archive = session.SessionRoot.transform.Find("Archive_GhostPreviews");
+            if (archive == null)
             {
-                names.Push(current.name);
-                current = current.parent;
+                var archiveObject = new GameObject("Archive_GhostPreviews");
+                archiveObject.hideFlags = HideFlags.DontSaveInBuild | HideFlags.DontSaveInEditor;
+                archiveObject.transform.SetParent(session.SessionRoot.transform, false);
+                archive = archiveObject.transform;
             }
-            return string.Join("/", names);
+
+            foreach (Transform ghost in legacyGhosts)
+            {
+                ghost.gameObject.SetActive(false);
+                ghost.SetParent(archive, true);
+            }
         }
 
         private static IEnumerable<GameObject> FindSceneMeshObjects()
@@ -392,7 +279,7 @@ namespace KimodoUnityBridge.Command
             }
             GameObject sourceRoot = root;
             string characterName = MakeUniqueCharacterName(session, sourceRoot.name);
-            root = CloneCharacterToSession(session, sourceRoot, characterName);
+            root = sourceRoot;
             animator = root != null ? root.GetComponentInChildren<Animator>(true) : null;
             Avatar avatar = null;
             string avatarError = string.Empty;
@@ -403,10 +290,6 @@ namespace KimodoUnityBridge.Command
                 avatar = result.Avatar;
                 avatarError = result.Error;
             }
-            // Avatar generation/import can rebind the clone to the rig rest pose.
-            // Reapply the authored scene hierarchy after that operation so the
-            // Ghost starts from the same complete transform state as the source.
-            RestoreCloneHierarchyFromSource(root, sourceRoot);
             if (requireAvatar && !KimodoRetargetCoreUtility.IsValidHumanoid(avatar))
             {
                 error = string.IsNullOrWhiteSpace(avatarError)
@@ -416,12 +299,12 @@ namespace KimodoUnityBridge.Command
             }
 
             AnimationTrack track = session.TimelineAsset.CreateTrack<AnimationTrack>(null, characterName);
-            // Match Timeline's "Apply Scene Offsets" using the clone's scene pose.
+            // Match Timeline's "Apply Scene Offsets" using the original scene pose.
             track.trackOffset = TrackOffset.ApplySceneOffsets;
             AnimationTrack poseCacheTrack = session.TimelineAsset.CreateTrack<AnimationTrack>(
                 track,
                 MakeUniqueSessionObjectName(session, $"{characterName}.Poses"));
-            BindGhostCharacter(session, root, sourceRoot, animator, track);
+            BindTimelineCharacter(session, root, sourceRoot, animator, track);
             var character = new TimelineCharacterRecord(
                 characterRef, root, animator, avatar, track, poseCacheTrack, avatarError);
             session.Characters.Add(character);
@@ -894,6 +777,7 @@ namespace KimodoUnityBridge.Command
         private static void ClearRuntimeSession(TimelineSessionRecord session)
         {
             if (session == null) return;
+            KimodoTimelinePreviewRefreshUtility.DisablePreview(session.Director);
             if (session.Director != null) session.Director.Stop();
             if (session.SessionRoot != null)
             {
@@ -915,6 +799,7 @@ namespace KimodoUnityBridge.Command
                 EnsureTimelineSessionsRestored();
                 TimelineSessionRecord session = currentTimelineSession;
                 if (session != null) CancelTimelineSessionGenerations(session, "Session cleared by session.clear.");
+                if (session != null) KimodoTimelinePreviewRefreshUtility.DisablePreview(session.Director);
                 int removedCount = DestroySceneSessionRoots(scene);
                 if (session != null)
                 {
@@ -1012,9 +897,9 @@ namespace KimodoUnityBridge.Command
                     }
 
                     string characterName = RequiredStringValue(requested, "character");
-                    if (IsGhostCharacterReference(characterName))
+                    if (IsLegacyPreviewCharacterReference(characterName))
                     {
-                        throw new InvalidOperationException($"Character reference '{characterName}' identifies a Ghost character. Use the source scene character name instead.");
+                        throw new InvalidOperationException($"Character reference '{characterName}' identifies a session preview object. Use the source scene character name instead.");
                     }
                     TimelineCharacterRecord character = session.Characters.FirstOrDefault(item =>
                         string.Equals(item.Name, characterName, StringComparison.OrdinalIgnoreCase));
@@ -1750,9 +1635,9 @@ namespace KimodoUnityBridge.Command
             string reference,
             bool addIfMissing = false)
         {
-            if (IsGhostCharacterReference(reference))
+            if (IsLegacyPreviewCharacterReference(reference))
             {
-                throw new InvalidOperationException($"Character reference '{reference}' identifies a Ghost character. Use the source scene character name or object_ref instead.");
+                throw new InvalidOperationException($"Character reference '{reference}' identifies a session preview object. Use the source scene character name or object_ref instead.");
             }
             TimelineCharacterRecord match = session.Characters.FirstOrDefault(character =>
                 character.CharacterRef == reference || string.Equals(character.Name, reference, StringComparison.OrdinalIgnoreCase));
@@ -1790,7 +1675,7 @@ namespace KimodoUnityBridge.Command
             return match;
         }
 
-        private static bool IsGhostCharacterReference(string reference)
+        private static bool IsLegacyPreviewCharacterReference(string reference)
         {
             return !string.IsNullOrWhiteSpace(reference) &&
                 (reference.IndexOf(KimodoRuntimeUtility.SessionRootPrefix, StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -1837,12 +1722,12 @@ namespace KimodoUnityBridge.Command
                     ["scene_object"] = sourceRoot != null ? GetSceneHierarchyPath(sourceRoot) : string.Empty,
                     ["object_ref"] = character.CharacterRef ?? string.Empty,
                     ["animator"] = sourceAnimator != null ? GetSceneHierarchyPath(sourceAnimator.gameObject) : string.Empty,
-                    ["ghost"] = new JObject
+                    ["timeline_preview"] = new JObject
                     {
-                        ["role"] = "ghost",
+                        ["role"] = "scene",
                         ["scene_object"] = character.Root != null ? GetSceneHierarchyPath(character.Root) : string.Empty,
                         ["animator"] = animator != null ? GetSceneHierarchyPath(animator.gameObject) : string.Empty,
-                        ["source_character"] = character.Name
+                        ["bound_to_original"] = true
                     },
                     ["avatar"] = character.Avatar != null ? character.Avatar.name : string.Empty,
                     ["avatar_valid_humanoid"] = KimodoRetargetCoreUtility.IsValidHumanoid(character.Avatar),

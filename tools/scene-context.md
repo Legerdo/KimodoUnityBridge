@@ -13,7 +13,7 @@ Kimodo commands resolve the active Unity scene directly. This page records only 
 
 - Scene characters are resolved from the active scene and the selected/open `Animator` when available.
 - Every returned character has `role: "scene"` and is the only valid character handle for generation, analysis, Pose, retarget, and constraints.
-- The nested `ghost` object has `role: "ghost"`; it is an internal evaluation clone used for Timeline binding and sampling. Ghost paths are diagnostic only and must never be passed as `character`, `source_character`, or `target_character`.
+- Timeline preview tracks bind directly to the original scene Animator. The returned `timeline_preview` object identifies that same scene object; it is diagnostic and does not introduce another character handle.
 - Constraint and effector coordinates follow the spaces documented by their command schemas.
 - RootEffect reachability is reported inside the non-blocking generation check and uses the selected generation model.
 - Existing clips remain immutable; generation, analysis, retargeting, and corrections append derived assets.

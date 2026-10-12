@@ -61,9 +61,8 @@ namespace KimodoUnityBridge.Command
             GameObject sourceRoot = ResolveSourceCharacterRoot(sessionCharacter);
             if (sourceRoot == null)
             {
-                throw new InvalidOperationException($"Character '{sessionCharacter.Name}' has no resolvable scene source for its Ghost.");
+                throw new InvalidOperationException($"Character '{sessionCharacter.Name}' has no resolvable scene source.");
             }
-            RestoreCloneHierarchyFromSource(root, sourceRoot);
             KimodoTimelinePreviewRefreshUtility.InitializeSceneOffset(sessionCharacter.Track, animator);
             return new ResolvedCharacter(root, animator, sessionCharacter.Avatar, sessionCharacter.Name);
         }
