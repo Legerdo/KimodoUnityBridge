@@ -5,9 +5,9 @@ description: Resolve the active scene context shared by Kimodo commands.
 
 # Scene inputs / 场景输入
 
-The command layer uses one automatically managed session for the active scene. Scene
-characters, Timeline assets, Animators, Avatars and loaded animation names are resolved
-through that same session by each command. There is no separate public context command.
+The command layer uses one automatically managed session for the active scene. The public
+`scene.context` command returns the current scene characters, loaded Clips, Timeline ranges,
+object references, and active scene through that session.
 
 Kimodo commands resolve the active Unity scene directly. This page records only the input and evidence boundary used by the command layer.
 

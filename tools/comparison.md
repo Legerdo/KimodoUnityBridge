@@ -54,39 +54,27 @@ function compare(candidate_1, candidate_2):
     candidate_1 = resolve_scene_candidate(candidate_1)
     candidate_2 = resolve_scene_candidate(candidate_2)
 
-    analysis = animation_analyze({
-        clips: [
-            {
-                role: "source",
-                character: candidate_1.character,
-                clip: candidate_1.clip
-            },
-            {
-                role: "target",
-                character: candidate_2.character,
-                clip: candidate_2.clip
-            }
-        ],
-       picture: {"output": "composite"},
+    analysis_1 = animation_analyze({
+        clips: [{character: candidate_1.character, clip: candidate_1.clip}],
+        picture: {"output": "composite"},
         resolution: 1920
     })
-    ASSERT analysis.analysis_schema_version == "3-command-60-phase-track-v2"
-    ASSERT analysis.pictures.render_version == "51-unified-picture-space"
+    analysis_2 = animation_analyze({
+        clips: [{character: candidate_2.character, clip: candidate_2.clip}],
+        picture: {"output": "composite"},
+        resolution: 1920
+    })
+    ASSERT analysis_1.analysis_schema_version == "5-command-60-single-clip-v1"
+    ASSERT analysis_2.analysis_schema_version == "5-command-60-single-clip-v1"
 
-    image_path = analysis.pictures.image_path
-    picture_map = analysis.pictures.images
-    candidate_1_tiles, candidate_2_tiles =
-        map_tiles_by_role_and_character_and_clip(picture_map)
-    CANDIDATE_MAPPING_VALID =
-        mapping_is_unambiguous(candidate_1_tiles, candidate_2_tiles)
-    VISUAL_OPENED = OPEN_WITH_AVAILABLE_VISUAL_TOOL(image_path)
+    candidate_1_tiles = analysis_1.pictures.images
+    candidate_2_tiles = analysis_2.pictures.images
+    CANDIDATE_MAPPING_VALID = mapping_is_unambiguous(candidate_1_tiles, candidate_2_tiles)
+    VISUAL_OPENED = OPEN_WITH_AVAILABLE_VISUAL_TOOL(analysis_1.pictures.image_path) == YES and
+                    OPEN_WITH_AVAILABLE_VISUAL_TOOL(analysis_2.pictures.image_path) == YES
 
-    candidate_1_recognition = recognize_clip(
-        analysis, TARGET_SEMANTICS, clip_index = 0
-    )
-    candidate_2_recognition = recognize_clip(
-        analysis, TARGET_SEMANTICS, clip_index = 1
-    )
+    candidate_1_recognition = recognize_clip(analysis_1, TARGET_SEMANTICS)
+    candidate_2_recognition = recognize_clip(analysis_2, TARGET_SEMANTICS)
     criterion_observations = compare_quality_criteria(
         candidate_1_recognition, candidate_2_recognition, TARGET_SEMANTICS
     )
@@ -147,7 +135,8 @@ function compare(candidate_1, candidate_2):
         candidate_1_tiles = candidate_1_tiles,
         candidate_2_tiles = candidate_2_tiles,
         structured_evidence = {
-            "analysis": analysis,
+            "analysis_1": analysis_1,
+            "analysis_2": analysis_2,
             "candidate_1_recognition": candidate_1_recognition,
             "candidate_2_recognition": candidate_2_recognition,
             "criterion_observations": criterion_observations

@@ -56,32 +56,28 @@ asks to use them.
 - 编辑命令都创建派生 Pose，不覆盖已存在的 Pose。
 - Pose 引用只有在用户明确要求约束时才传入 generation；不能把分析选帧自动当作约束。
 
-`pose_get` 支持三种互斥的时间寻址方式：
+`pose_get` 只支持一个绝对的 Timeline-global 60 FPS 帧，或两个无时间的读取模式：
 
-约束如何使用 `pose_get` 返回的 `{track,index}`，见 [`constraints.md`](constraints.md)。
-`root2d` 与 `root_effect` 的 Pose 可省略；`fullbody` 需要显式 Pose。写入末端目标前，
+```json
+{ "source": { "character": "<character>", "timeline_frame_60": 90 } }
+```
+
+```json
+{ "source": { "character": "<character>", "mode": "scene_pose" } }
+```
+
+```json
+{ "source": { "character": "<character>", "mode": "skeleton_rest_pose" } }
+```
+
+三种模式互斥。`scene_pose` 读取当前场景 Animator 的原始姿态，
+`skeleton_rest_pose` 读取 Avatar 保存的骨架静止姿态；它们不接受时间字段。
+如果要取某个 Clip 的某一帧，先用 `animation_analyze` 取得返回 `clip` 的
+`start_timeline_frame_60`，再加上 Clip 内的帧偏移后调用 `pose_get`。命令不再接受
+`timeline_time_seconds`、`clip_time_seconds` 或 `scene_time_seconds`，也不接受局部坐标系
+的时间寻址。约束如何使用返回的 `{track,index}`，见 [`constraints.md`](constraints.md)。
+`root2d` 与带 `effect` 的约束的 Pose 可省略；仅使用 FullBody 通道时需要显式 Pose。写入末端目标前，
 提交生成前由统一的非阻断 generate check 检查其可达性。
-
-```json
-{ "source": { "character": "<character>", "timeline_time_seconds": 1.5 } }
-```
-
-上面按角色的 Timeline 全局时间采样。也可以指定目标 Clip，并使用 Clip 在 Timeline 上的局部时间：
-
-```json
-{ "source": { "character": "<character>", "clip": "<clip>", "clip_time_seconds": 0.5 } }
-```
-
-当角色已经绑定到当前场景的 Animator/Timeline，但没有可用的源 Clip 时，使用场景时间直接采样：
-
-```json
-{ "source": { "character": "<character>", "scene_time_seconds": 0.0 } }
-```
-
-三种模式不能混用。`scene_time_seconds` 会从当前场景上下文的真实角色、Animator 和
-Timeline 采样完整支撑姿态，即使当前角色没有 Timeline Clip，也会返回可供后续约束
-引用的 `{track,index}`。返回的 `timeline_frame_60` 是由全局秒值派生的 60 FPS 对齐字段；
-命令会按 Clip 在 Timeline 中的实际播放范围采样。
 
 生成约束时，只将已确认的 `{track,index}` 传入请求。三种约束的完整协议见
 [`constraints.md`](constraints.md)。

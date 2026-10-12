@@ -50,13 +50,13 @@ ALLOWED_CONTACT_PATTERN  = ["alternating", "left_dominant", "right_dominant", "u
 ALLOWED_LOOP_ENDPOINT    = ["candidate", "not_candidate", "unknown"]
 ALLOWED_KEYFRAME_HEADING = ["consistent", "inconsistent", "unknown"]
 
-function recognize_clip(analysis, semantic_alternatives, clip_index = 0):
-    if analysis.analysis_schema_version != "3-command-60-phase-track-v2":
+function recognize_clip(analysis, semantic_alternatives):
+    if analysis.analysis_schema_version != "5-command-60-single-clip-v1":
         return not_verified_all_tasks("analysis_schema_version_mismatch")
     image = analysis.pictures.image_path
-    if analysis.pictures.render_version != "51-unified-picture-space":
+    if analysis.pictures.render_version is empty:
         return not_verified_all_tasks("render_version_mismatch")
-    picture_map = tiles_for_clip(analysis.pictures.images, clip_index)
+    picture_map = analysis.pictures.images
     ASSERT OPEN_WITH_AVAILABLE_VISUAL_TOOL(image) == YES
 
     result = {}
@@ -69,7 +69,7 @@ function recognize_clip(analysis, semantic_alternatives, clip_index = 0):
             )
 
     for TASK in STRUCTURED_TASKS:
-        result[TASK] = run_structured_task(TASK, analysis.clips[clip_index])
+        result[TASK] = run_structured_task(TASK, analysis.clip)
 
     return finalize_recognition(result)
 
@@ -96,9 +96,8 @@ function run_structured_task(TASK, clip_analysis):
         return structured_array(
             clip_analysis.phase_track,
             required_fields = [
-                "start_frame", "end_frame", "start_frame_60", "end_frame_60",
-                "duration_frames", "duration_seconds", "anchor_frame", "anchor_frame_60",
-                "anchor_time_seconds", "kind", "confidence"
+                "start_timeline_frame_60", "end_timeline_frame_60_exclusive",
+                "anchor_timeline_frame_60", "kind", "confidence"
             ]
         )
 
@@ -207,7 +206,7 @@ function identify_semantics(alternatives, character_ref, clip_ref):
     character = resolve_scene_character(character_ref)
     clip = resolve_scene_clip(character, clip_ref)
     analysis = animation_analyze({
-        clips: [{role: "source", character: character, clip: clip}],
+        clips: [{character: character, clip: clip}],
         picture: {"output": "composite"},
         resolution: 1920
     })
@@ -216,9 +215,9 @@ function identify_semantics(alternatives, character_ref, clip_ref):
     picture_map = analysis.pictures.images
     ASSERT OPEN_WITH_AVAILABLE_VISUAL_TOOL(image_path) == YES
 
-    recognition = recognize_clip(analysis, alternatives, clip_index = 0)
+    recognition = recognize_clip(analysis, alternatives)
     choice = recognition.analysis_handoff.action_semantics
-    profile = analysis.clips[0].motion_profile
+    profile = analysis.clip.motion_profile
     return {
         status: recognition.status,
         semantic: choice.value,

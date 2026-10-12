@@ -26,6 +26,7 @@ namespace KimodoUnityBridge.Command
             var handlers = new Dictionary<string, Func<string, string>>(StringComparer.Ordinal)
             {
                 [HelpCommand] = GetCommandHelp,
+                [SceneContextCommand] = SceneContextGet,
                 [InstallServerCommand] = InstallServer,
                 [AnimationAnalyzeCommand] = AnimationAnalyze,
                 [TransformCaptureCommand] = TransformCapture,
@@ -217,28 +218,6 @@ namespace KimodoUnityBridge.Command
             }, true);
         }
 
-        private static PropertyDefinition RequiredAnalysisClips()
-        {
-            return new PropertyDefinition("clips", new JObject
-            {
-                ["type"] = "array",
-                ["description"] = "Exactly one animation clip reference. Use a loaded Clip name or an Assets/Packages path; an external asset is appended to the character's Kimodo Timeline before analysis and is never modified.",
-                ["minItems"] = 1,
-                ["maxItems"] = 1,
-                ["items"] = new JObject
-                {
-                    ["type"] = "object",
-                    ["additionalProperties"] = false,
-                    ["properties"] = new JObject
-                    {
-                        ["character"] = new JObject { ["type"] = "string" },
-                        ["clip"] = new JObject { ["type"] = "string" }
-                    },
-                    ["required"] = new JArray("character", "clip")
-                }
-            }, true);
-        }
-
         private static PropertyDefinition OptionalEnumArray(string name, string description, params string[] values)
         {
             return new PropertyDefinition(name, new JObject
@@ -366,7 +345,7 @@ namespace KimodoUnityBridge.Command
                         ["type"] = "integer",
                         ["minimum"] = 0,
                         ["default"] = 0,
-                        ["description"] = "First path frame; defaults to the clip start."
+                        ["description"] = "First path frame; defaults to the clip start. root_path generates only start and end Root2D constraints."
                     },
                     ["root_path"] = new JObject
                     {
@@ -382,7 +361,7 @@ namespace KimodoUnityBridge.Command
                 ["required"] = new JArray("root_path")
             };
             ((JObject)rootPathItem["properties"]?["root_path"]?["properties"]?["path"])["description"] =
-                "Analyzed Root Path slot returned by animation_analyze at clips[].root_trajectory.path.";
+                "Analyzed Root Path slot returned by animation_analyze at clip.root_trajectory.path.";
             return new PropertyDefinition(name, new JObject
             {
                 ["type"] = "array",
@@ -422,73 +401,32 @@ namespace KimodoUnityBridge.Command
                 ["properties"] = new JObject
                 {
                     ["character"] = new JObject { ["type"] = "string" },
-                    ["clip"] = new JObject { ["type"] = "string" },
                     ["mode"] = new JObject { ["type"] = "string", ["enum"] = new JArray("scene_pose", "skeleton_rest_pose"), ["description"] = "Sample the original scene Animator's currently evaluated pose, or the Avatar's stored skeleton rest pose." },
-                    ["timeline_time_seconds"] = new JObject
+                    ["timeline_frame_60"] = new JObject
                     {
-                        ["type"] = "number",
-                        ["description"] = "Absolute Timeline-global time in seconds."
-                    },
-                    ["scene_time_seconds"] = new JObject
-                    {
-                        ["type"] = "number",
+                        ["type"] = "integer",
                         ["minimum"] = 0,
-                        ["description"] = "Absolute scene Timeline time in seconds. Samples the bound Animator directly, even when the character has no animation Clip."
-                    },
-                    ["clip_time_seconds"] = new JObject
-                    {
-                        ["type"] = "number",
-                        ["minimum"] = 0,
-                        ["description"] = "Time in seconds relative to the selected Clip's Timeline range."
+                        ["description"] = "Absolute Timeline-global frame at 60 FPS. Use animation_analyze to find the selected Clip's start frame, then add the clip-local frame offset."
                     }
                 },
                 ["required"] = new JArray("character"),
                 ["oneOf"] = new JArray(
                     new JObject
                     {
-                        ["required"] = new JArray("character", "timeline_time_seconds"),
-                        ["not"] = new JObject { ["anyOf"] = new JArray(
-                            new JObject { ["required"] = new JArray("clip") },
-                            new JObject { ["required"] = new JArray("clip_time_seconds") },
-                            new JObject { ["required"] = new JArray("scene_time_seconds") },
-                            new JObject { ["required"] = new JArray("mode") }) }
-                    },
-                    new JObject
-                    {
-                        ["required"] = new JArray("character", "scene_time_seconds"),
-                        ["not"] = new JObject { ["anyOf"] = new JArray(
-                            new JObject { ["required"] = new JArray("timeline_time_seconds") },
-                            new JObject { ["required"] = new JArray("clip") },
-                            new JObject { ["required"] = new JArray("clip_time_seconds") },
-                            new JObject { ["required"] = new JArray("mode") }) }
-                    },
-                    new JObject
-                    {
-                        ["required"] = new JArray("character", "clip", "clip_time_seconds"),
-                        ["not"] = new JObject { ["anyOf"] = new JArray(
-                            new JObject { ["required"] = new JArray("timeline_time_seconds") },
-                            new JObject { ["required"] = new JArray("scene_time_seconds") },
-                            new JObject { ["required"] = new JArray("mode") }) }
+                        ["required"] = new JArray("character", "timeline_frame_60"),
+                        ["not"] = new JObject { ["required"] = new JArray("mode") }
                     },
                     new JObject
                     {
                         ["required"] = new JArray("character", "mode"),
                         ["properties"] = new JObject { ["mode"] = new JObject { ["enum"] = new JArray("scene_pose") } },
-                        ["not"] = new JObject { ["anyOf"] = new JArray(
-                            new JObject { ["required"] = new JArray("timeline_time_seconds") },
-                            new JObject { ["required"] = new JArray("scene_time_seconds") },
-                            new JObject { ["required"] = new JArray("clip") },
-                            new JObject { ["required"] = new JArray("clip_time_seconds") }) }
+                        ["not"] = new JObject { ["required"] = new JArray("timeline_frame_60") }
                     },
                     new JObject
                     {
                         ["required"] = new JArray("character", "mode"),
                         ["properties"] = new JObject { ["mode"] = new JObject { ["enum"] = new JArray("skeleton_rest_pose") } },
-                        ["not"] = new JObject { ["anyOf"] = new JArray(
-                            new JObject { ["required"] = new JArray("timeline_time_seconds") },
-                            new JObject { ["required"] = new JArray("scene_time_seconds") },
-                            new JObject { ["required"] = new JArray("clip") },
-                            new JObject { ["required"] = new JArray("clip_time_seconds") }) }
+                        ["not"] = new JObject { ["required"] = new JArray("timeline_frame_60") }
                     })
             };
             return new PropertyDefinition(name, schema, true);
@@ -582,6 +520,28 @@ namespace KimodoUnityBridge.Command
                         ["time"] = new JObject { ["type"] = "number" }
                     },
                     ["required"] = new JArray("character", "time")
+                }
+            }, true);
+        }
+
+        private static PropertyDefinition RequiredAnalysisClips()
+        {
+            return new PropertyDefinition("clips", new JObject
+            {
+                ["type"] = "array",
+                ["description"] = "Exactly one animation clip reference. Use a loaded Clip name or an Assets/Packages path; an external asset is appended to the character's Kimodo Timeline before analysis and is never modified.",
+                ["minItems"] = 1,
+                ["maxItems"] = 1,
+                ["items"] = new JObject
+                {
+                    ["type"] = "object",
+                    ["additionalProperties"] = false,
+                    ["properties"] = new JObject
+                    {
+                        ["character"] = new JObject { ["type"] = "string" },
+                        ["clip"] = new JObject { ["type"] = "string" }
+                    },
+                    ["required"] = new JArray("character", "clip")
                 }
             }, true);
         }

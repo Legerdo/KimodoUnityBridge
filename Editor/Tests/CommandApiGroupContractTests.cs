@@ -31,7 +31,10 @@ namespace KimodoUnityBridge.Command.Tests
             CollectionAssert.Contains(((JArray)poseReference["required"]).Values<string>(), "character");
             CollectionAssert.AreEquivalent(new[] { "scene_pose", "skeleton_rest_pose" },
                 ((JArray)poseReference["properties"]?["mode"]?["enum"]).Values<string>());
-            Assert.That(poseReference["oneOf"]?.Values<JObject>().Count(), Is.EqualTo(5));
+            Assert.That(poseReference["oneOf"]?.Values<JObject>().Count(), Is.EqualTo(3));
+            Assert.That(poseReference["properties"]?["timeline_frame_60"]?.Value<string>("type"), Is.EqualTo("integer"));
+            Assert.That(poseReference["properties"]?["timeline_time_seconds"], Is.Null);
+            Assert.That(poseReference["properties"]?["clip_time_seconds"], Is.Null);
 
             AssertPosePropertyUsesTrackIndex(poseSet["inputSchema"]["properties"]["pose"]);
             AssertPosePropertyUsesTrackIndex(transformCapture["inputSchema"]["properties"]["pose"]);
@@ -60,8 +63,16 @@ namespace KimodoUnityBridge.Command.Tests
             AssertRequiredProperty(get, "request_id");
             AssertRequiredProperty(cancel, "request_id");
             Assert.That(get["inputSchema"]?["properties"]?["include_request_json"]?.Value<string>("type"), Is.EqualTo("boolean"));
-            Assert.That(analyze["inputSchema"]?["properties"]?["clips"], Is.Not.Null);
-            Assert.That(analyze["description"]?.Value<string>(), Does.Contain("start_frame"));
+            JObject analyzeClips = (JObject)analyze["inputSchema"]?["properties"]?["clips"];
+            Assert.That(analyzeClips?.Value<int>("minItems"), Is.EqualTo(1));
+            Assert.That(analyzeClips?.Value<int>("maxItems"), Is.EqualTo(1));
+            Assert.That(analyzeClips?["items"]?["properties"]?["character"], Is.Not.Null);
+            Assert.That(analyzeClips?["items"]?["properties"]?["clip"], Is.Not.Null);
+            Assert.That(analyze["description"]?.Value<string>(), Does.Contain("one scene character"));
+            Assert.That(analyze["description"]?.Value<string>(), Does.Contain("Timeline-global 60 FPS frames"));
+            JObject duration = (JObject)generate["inputSchema"]?["properties"]?["duration_frames"];
+            Assert.That(duration?.Value<int>("minimum"), Is.EqualTo(1));
+            Assert.That(duration?.Value<int>("default"), Is.EqualTo(300));
             Assert.That(retarget["inputSchema"]?["properties"]?["source_character"], Is.Not.Null);
             Assert.That(retarget["inputSchema"]?["properties"]?["animation"], Is.Not.Null);
 
@@ -111,6 +122,7 @@ namespace KimodoUnityBridge.Command.Tests
             {
                 "kimodo_help",
                 "kimodo_install_server",
+                "scene.context",
                 "session.clear",
                 "animation_analyze"
             };
@@ -124,6 +136,9 @@ namespace KimodoUnityBridge.Command.Tests
                     Assert.That(example["arguments"], Is.TypeOf<JObject>(), name);
             }
 
+            JObject sceneContext = Tool(document, "scene.context");
+            Assert.That(sceneContext["inputSchema"]?["additionalProperties"]?.Value<bool>(), Is.False);
+            Assert.That(sceneContext["description"]?.Value<string>(), Does.Contain("authoritative source"));
             Assert.That(Tool(document, "session.clear")["inputSchema"]["required"], Is.Null.Or.Empty);
         }
 

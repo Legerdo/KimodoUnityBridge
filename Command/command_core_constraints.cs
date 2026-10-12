@@ -85,7 +85,7 @@ namespace KimodoUnityBridge.Command
                         PoseReference reference = RequirePoseReference(rootPath["path"] as JObject);
                         if (!pathFrames.Add(startFrame))
                             throw new InvalidOperationException($"constraints[{i}].root_path reuses frame {startFrame}; command constraints are not merged.");
-                        pathSamples.AddRange(BuildRootPathConstraintsSparse(
+                        pathSamples.AddRange(BuildRootPathConstraints(
                             RequirePathMarker(reference).PathData,
                             i,
                             startFrame,
@@ -167,9 +167,8 @@ namespace KimodoUnityBridge.Command
             var rootPathFrames = new HashSet<int>();
             var rootPathIndices = new Dictionary<int, int>();
 
-            // Collect every frame before validating. Root paths own both their
-            // authored start and the generated terminal frame, so validation
-            // must not depend on JSON ordering.
+            // Collect path endpoints before validating. Intermediate adaptive
+            // samples are checked after the path reference is resolved.
             for (int i = 0; i < constraints.Count; i++)
             {
                 if (constraints[i] is not JObject item || item.Property("inout") != null)
@@ -182,20 +181,19 @@ namespace KimodoUnityBridge.Command
                     if (!rootPathFrames.Add(rootPathFrame))
                         return $"constraints[{i}].root_path reuses frame {rootPathFrame}; multiple constraints at one frame are undefined.";
                     rootPathIndices[rootPathFrame] = i;
-                    if (durationFrames > 0)
+                    int endpoint = durationFrames - 1;
+                    if (endpoint != rootPathFrame && !rootPathFrames.Add(endpoint))
                     {
-                        int endpoint = durationFrames - 1;
-                        if (endpoint != rootPathFrame && !rootPathFrames.Add(endpoint))
-                            return $"constraints[{i}].root_path overlaps another root_path endpoint; multiple constraints at one frame are undefined.";
-                        rootPathIndices[endpoint] = i;
+                        return $"constraints[{i}].root_path overlaps another root_path endpoint; multiple constraints at one frame are undefined.";
                     }
+                    rootPathIndices[endpoint] = i;
                     continue;
                 }
-                int frame = RequiredNonNegativeFrame(item, "frame");
-                if (frame >= durationFrames)
+                int pointFrame = RequiredNonNegativeFrame(item, "frame");
+                if (pointFrame >= durationFrames)
                     return $"constraints[{i}].frame must be within [0,{durationFrames}).";
-                if (!pointFrames.Add(frame))
-                    return $"constraints[{i}].frame {frame} duplicates another point constraint; multiple constraints at one frame are undefined.";
+                if (!pointFrames.Add(pointFrame))
+                    return $"constraints[{i}].frame {pointFrame} duplicates another point constraint; multiple constraints at one frame are undefined.";
             }
 
             foreach (int frame in pointFrames)
@@ -434,7 +432,7 @@ namespace KimodoUnityBridge.Command
             return result;
         }
 
-        private static IEnumerable<KimodoMarkerSampleResult> BuildRootPathConstraintsSparse(
+        private static IEnumerable<KimodoMarkerSampleResult> BuildRootPathConstraints(
             KimodoRootPathData path,
             int constraintIndex,
             int startFrame,
@@ -463,7 +461,9 @@ namespace KimodoUnityBridge.Command
                 ? path.length / sourceLength * retargetScale
                 : retargetScale;
             int endFrame = durationFrames - 1;
-            var sampleFrames = new SortedSet<int> { startFrame, endFrame };
+            // A root_path is an endpoint constraint pair. Keep the path reusable
+            // without turning it into a dense sequence of authored constraints.
+            SortedSet<int> sampleFrames = new SortedSet<int> { startFrame, endFrame };
             foreach (int frame in sampleFrames)
             {
                 if (frame < startFrame || frame > endFrame)

@@ -82,8 +82,19 @@ namespace TimelineInject
 
         public static void DisablePreview(PlayableDirector director)
         {
-            if (director == null || TimelineEditor.inspectedDirector != director) return;
+            TryDisablePreview(director);
+        }
+
+        public static bool TryDisablePreview(PlayableDirector director)
+        {
+            var state = TimelineEditor.state;
+            if (director == null || TimelineEditor.inspectedDirector != director || state == null || !state.previewMode)
+            {
+                return false;
+            }
+
             DisablePreview();
+            return true;
         }
 
         public static GameObject InstantiateForAnimatorPreview(Object original)

@@ -49,8 +49,8 @@ string response = command_dispatcher.Invoke(
 - `animation_analyze` 只接受一个 Clip，默认生成固定 16:9 的 20-tile composite（宽度由 resolution 决定）；比较多个候选时分别调用分析。
 - 需要单张图片时传 `picture: {output: "tile", tile_index: N}`；`tile_index` 从 1 开始，`resolution` 在该模式表示高度，默认 720px，宽度按 4:3 自适应。
 - `kimodo_generate_animation` 的普通调用只需要 `character` 与 `prompt`；模型、采样、命名、存储和分析覆盖项均可省略。
-- generation 的 point constraints 允许 `fullbody`、`root2d` 和 `root_effect`，解析后统一转换为内部 `mix`，并遵守
-  [`constraints.md`](constraints.md)；末端目标通过 `root_effect.effect` 表达。
+- generation 的 point constraints 不使用 `type` 标签；根据 `pose`、`root2d` 和 `effect`
+  字段推断约束通道并统一转换为内部 `mix`，遵守 [`constraints.md`](constraints.md)。
 - 每次接受生成都会带有 Editor 层共享的非阻断 `check`：检查 `root_trajectory`、
   `constraint_overlap` 和 `effectors`。速度阈值为 7 m/s，加速度阈值为 5 m/s²；warning 不阻止任务。
 
@@ -85,17 +85,17 @@ string response = command_dispatcher.Invoke(
 
 ### Phase track / 连续阶段轨道
 
-Humanoid analysis 使用破坏性的新契约 `analysis_schema_version=3-command-60-phase-track-v2`
-与 `phase_track_version=1-temporal-cluster-v2-command-60`。图片同时返回
-`pictures.render_version=51-unified-picture-space`；识别/比较必须记录并校验这些版本，版本不匹配时返回
-`UNKNOWN` 并要求更新提示词。旧的均分关键帧
-列表不再是阶段证据；`phase_track` 是唯一阶段来源。每项必须覆盖连续帧区间，
-区间首尾相接、无重叠、无空洞，并包含局部数组索引与全局命令帧：
-`start_frame`、`end_frame`、`start_frame_60`、`end_frame_60`、
-`duration_frames`、`duration_seconds`、`anchor_frame`、`anchor_frame_60`、
-`anchor_time_seconds`、`kind` 和 `confidence`。
-`kind` 只能是 `phase` 或 `transition`；聚类器不得直接命名 `walk`、`wave` 等语义。
-Mesh analysis 对该字段返回 `NOT_APPLICABLE`。
+Humanoid analysis 使用 `analysis_schema_version=5-command-60-single-clip-v1`，
+并在 `clip.phase_track` 中返回 `phase_track_version=1-temporal-cluster-v2-command-60`。
+图片的 `render_version` 以实时返回值为准；识别/比较必须记录它，版本不匹配时返回
+`UNKNOWN` 并要求更新提示词。`animation_analyze` 的输入保留 `clips` 数组，但必须恰好
+包含一个 `{character, clip}`；返回一个 `clip` 对象，不再使用 `clips[]` 输出。旧的均分关键帧列表不再是阶段证据；
+`phase_track` 是唯一阶段来源。每项必须覆盖连续帧区间，区间首尾相接、无重叠、无空洞，
+并使用全局 60 FPS 帧：`start_timeline_frame_60`、`end_timeline_frame_60_exclusive`、
+`anchor_timeline_frame_60`、`kind` 和 `confidence`。`duration_frames` 可以作为区间长度，
+但不要把秒值或局部 `start_frame`/`end_frame` 当作公开协议字段。`kind` 只能是 `phase` 或
+`transition`；聚类器不得直接命名 `walk`、`wave` 等语义。Mesh analysis 对 `phase_track`
+返回空数组，并通过 `analysis_mode=mesh` 表示阶段语义不适用。
 
 比较多个目标语义时，按用户给出的优先级计算时长先验：第 `i` 个语义的权重为
 `w_i = 1/(i*i)`，目标占比为 `p_i = w_i / sum(w_j)`。比较使用实际阶段覆盖
@@ -145,7 +145,9 @@ conflicting action, such as sitting while the requested semantic is standing.
 ## Handles and paths
 
 - 安全角色名和动画名是当前场景上下文的引用。
-- `animation_analyze` 返回的 `{track,index}` 可作为 Root Path 或 Pose 引用。
+- `animation_analyze` 返回的 `clip.root_trajectory.path` 是可复用的 `{track,index}` Root Path
+  引用；它只在生成约束的起始帧和结束帧生成 Root2D 约束。普通关键帧 Pose 仍必须来自
+  `pose_get`，不能把分析结果自动当成生成约束。
 - 生成结果的 `path` 是 Unity 资产元数据，不是场景 Clip handle；若返回中没有派生资产路径，不自行推断。
 
 ## Report envelope

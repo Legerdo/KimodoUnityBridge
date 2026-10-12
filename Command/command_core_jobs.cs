@@ -222,7 +222,7 @@ namespace KimodoUnityBridge.Command
             if (record.TimelineGenerationTrace != null)
             {
                 TimelineGenerationTrace reservation = record.TimelineGenerationTrace;
-                result["start_frame"] = Mathf.RoundToInt((float)(reservation.StartSeconds * SessionFrameRate));
+                result["start_timeline_frame_60"] = Mathf.RoundToInt((float)(reservation.StartSeconds * SessionFrameRate));
                 result["duration_frames"] = Mathf.RoundToInt((float)(reservation.DurationSeconds * SessionFrameRate));
                 if (reservation.InOutSampling != null) result["inout_sampling"] = reservation.InOutSampling.DeepClone();
                 if (reservation.Animation != null)

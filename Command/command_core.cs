@@ -20,6 +20,7 @@ namespace KimodoUnityBridge.Command
     internal static partial class command_context
     {
         public const string HelpCommand = "kimodo_help";
+        public const string SceneContextCommand = "scene.context";
         public const string InstallServerCommand = "kimodo_install_server";
         public const string GenerateAnimationCommand = "kimodo_generate_animation";
         public const string AnimationAnalyzeCommand = "animation_analyze";
@@ -53,11 +54,14 @@ namespace KimodoUnityBridge.Command
                         Properties(
                             Optional("command", "string", "Command name whose full manual entry should be returned."),
                             Enum("section", "commands", "models", "constraints"))),
+                    CommandDefinition(SceneContextCommand,
+                        "Return the current active-scene context JSON. Use this response as the authoritative source for scene characters, Clips, Timeline ranges, and object references.",
+                        Properties()),
                     CommandDefinition(InstallServerCommand,
                         "Start an asynchronous project-local QuickServer installation task. Returns a request_id (install:<guid>) that can be polled with kimodo_get_generation; models and the Python environment are preserved.",
                         Properties()),
                     CommandDefinition(AnimationAnalyzeCommand,
-                        "Analyze one animation clip at the fixed command time base of 60 FPS and render unified graph-space picture evidence. Select standard tile types explicitly and choose composite, individual tiles, or both outputs. Results include its Timeline start_frame and keyframes whose only time coordinate is the absolute timeline_frame_60. A loaded Clip is reused; an Assets/Packages Clip path or unique asset name is appended to the character's Kimodo Timeline before analysis. Source Clips are never modified.",
+                        "Analyze one animation clip at 60 FPS and render graph-space picture evidence. Pass a clips array containing exactly one scene character and one loaded Clip name or Assets/Packages Clip path. The result contains one clip object; temporal positions use absolute Timeline-global 60 FPS frames. External Clips are appended to the character's Kimodo Timeline and never modified.",
                         Properties(
                             RequiredAnalysisClips(),
                             new PropertyDefinition("picture", new JObject
@@ -96,15 +100,21 @@ namespace KimodoUnityBridge.Command
                         Properties(
                             Required("character", "string", "Scene character name or object_ref. Session preview objects are rejected; use the source scene character."),
                             Required("prompt", "string", "Motion prompt."),
-                            Optional("duration_frames", "integer", "Duration in 60 FPS frames; defaults to 300."),
+                            new PropertyDefinition("duration_frames", new JObject
+                            {
+                                ["type"] = "integer",
+                                ["minimum"] = 1,
+                                ["default"] = 300,
+                                ["description"] = "Duration in 60 FPS frames; defaults to 300 frames (5 seconds)."
+                            }, false),
                             OptionalLoop(),
                             OptionalPath(),
                             OptionalGeneration(),
                             OptionalOutput(),
-                            Optional("analysis_option", "object", "Optional analysis object for the phase-track analyzer. Legacy uniform keyframe-count controls are removed; Humanoid output always uses phase_track_version and continuous phase_track intervals."),
+                            Optional("analysis_option", "object", "Optional generation-time lightweight analysis. When enabled, generation returns sparse salient keyframe markers and foot-contact changes; it does not run the full animation_analyze command."),
                             OptionalConstraints("constraints", "Point constraints are selected by optional pose, root2d, and effect data; multiple fields at one frame compose by channel. root_path and inout remain separate constraint forms; duplicate frames are rejected; command frames use 60 FPS."))),
                     CommandDefinition(PoseGetCommand,
-                        "Sample one Timeline time, scene time, or Clip-local time, or select mode scene_pose / skeleton_rest_pose to read the original scene Animator or Avatar rest pose. Every call creates an External Pose slot and returns {track,index}.",
+                        "Sample one absolute Timeline-global frame at 60 FPS, or select mode scene_pose / skeleton_rest_pose to read the original scene Animator or Avatar rest pose. Every call creates an External Pose slot and returns {track,index}.",
                         Properties(
                             RequiredPoseSource("source"),
                             Optional("full_data", "boolean", "Return all 49 muscles and TQ channels; defaults to false."))),
@@ -213,6 +223,7 @@ namespace KimodoUnityBridge.Command
                     ["routing"] = new JArray
                     {
                         Route("discover schema or models", HelpCommand),
+                        Route("read active scene context", SceneContextCommand),
                         Route("install or refresh server", InstallServerCommand, "then " + GetGenerationCommand),
                         Route("generate motion", GenerateAnimationCommand, "then " + GetGenerationCommand),
                         Route("analyze and render motion", AnimationAnalyzeCommand, "returns one composite picture and self-describing tiles"),
@@ -280,7 +291,7 @@ namespace KimodoUnityBridge.Command
                         ["shape"] = new JObject
                         {
                             ["frame"] = "Optional first path frame; defaults to 0.",
-                            ["root_path"] = new JObject { ["path"] = "{track,index} from animation_analyze clips[].root_trajectory.path" }
+                            ["root_path"] = new JObject { ["path"] = "{track,index} from animation_analyze clip.root_trajectory.path" }
                         }
                     }
                 },
@@ -288,12 +299,12 @@ namespace KimodoUnityBridge.Command
                 {
                     "Point constraint family is inferred from the presence of pose, root2d, and effect data. Any non-empty combination composes by channel; Root2D overlays planar root channels and effect data overlays the named end effectors.",
                     "A point constraint must contain at least one of pose, root2d, or effect. Put mixed data in one point object; separate point objects at a duplicate frame are rejected.",
-                    "Use animation_analyze, then reference clips[].root_trajectory.path from root_path.",
+                    "Use animation_analyze, then reference clip.root_trajectory.path from root_path.",
                     "An explicit point frame cannot overlap a root_path sample frame; the command rejects the collision.",
                     "At most one standalone inout entry; in/out each require an explicit completed source Clip. Source character defaults to the generation character and must be the same character.",
                     "In/Out window_frames and source.frame use 60 FPS. Windows round up to model frames; sample_count must fit distinct model frames. One sample uses the seam; multiple samples include both endpoints.",
                     "In/Out rejects short sources, overlapping inside windows, conflicting point samples, unsupported ARDY models, loop generation, and runtime duration above the model limit. It does not silently clamp or downgrade.",
-                    "inout_sampling is returned on acceptance and polling, with source times, output/runtime model frames, context counts and the exclusive crop range. Padding/cropping is automatic; the final requested duration is preserved."
+                    "inout_sampling is returned on acceptance and polling, with source-local and Timeline-global 60 FPS sample frames, output/runtime model frames, model-frame context counts and the exclusive model-frame crop range. Padding/cropping is automatic; the final requested duration is preserved."
                 }
             };
         }
@@ -670,7 +681,7 @@ namespace KimodoUnityBridge.Command
                 };
                 if (trace != null)
                 {
-                    startedResponse["start_frame"] = Mathf.RoundToInt((float)(trace.StartSeconds * SessionFrameRate));
+                    startedResponse["start_timeline_frame_60"] = Mathf.RoundToInt((float)(trace.StartSeconds * SessionFrameRate));
                     startedResponse["duration_frames"] = Mathf.RoundToInt((float)(trace.DurationSeconds * SessionFrameRate));
                     if (trace.InOutSampling != null) startedResponse["inout_sampling"] = trace.InOutSampling.DeepClone();
                 }
@@ -695,15 +706,17 @@ namespace KimodoUnityBridge.Command
                     };
                     startedResponse["loop_source_duration_frames"] = durationFrames;
                 }
-                if (overridePathAngle)
+                if (overridePathAngle || overrideHeading)
                 {
-                    startedResponse["path"] = new JObject
+                    var acceptedPath = new JObject();
+                    if (overridePathAngle)
                     {
-                        ["start_angle"] = pathBeginAngleDegrees,
-                        ["end_angle"] = pathEndAngleDegrees
-                    };
-                    if (overridePathDistance) ((JObject)startedResponse["path"])["distance"] = pathDistance;
-                    if (overrideHeading) ((JObject)startedResponse["path"])["heading"] = headingDegrees;
+                        acceptedPath["start_angle"] = pathBeginAngleDegrees;
+                        acceptedPath["end_angle"] = pathEndAngleDegrees;
+                    }
+                    if (overridePathDistance) acceptedPath["distance"] = pathDistance;
+                    if (overrideHeading) acceptedPath["heading"] = headingDegrees;
+                    startedResponse["path"] = acceptedPath;
                 }
                 if (poseWarnings != null && poseWarnings.Count > 0)
                 {

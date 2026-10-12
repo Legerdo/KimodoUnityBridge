@@ -4,6 +4,7 @@ namespace KimodoUnityBridge.Command
     public static class command_kimodo
     {
         public const string HelpCommand = command_context.HelpCommand;
+        public const string SceneContextCommand = command_context.SceneContextCommand;
         public const string InstallServerCommand = command_context.InstallServerCommand;
         public const string GenerateAnimationCommand = command_context.GenerateAnimationCommand;
         public const string AnalyzeCommand = command_context.AnimationAnalyzeCommand;
@@ -13,6 +14,7 @@ namespace KimodoUnityBridge.Command
         public const string SessionClearCommand = command_context.SessionClearCommand;
 
         public static string Help(string argumentsJson = "{}") => command_dispatcher.Invoke(HelpCommand, argumentsJson);
+        public static string SceneContext(string argumentsJson = "{}") => command_dispatcher.Invoke(SceneContextCommand, argumentsJson);
         public static string InstallServer(string argumentsJson = "{}") => command_dispatcher.Invoke(InstallServerCommand, argumentsJson);
         public static string GenerateAnimation(string argumentsJson) => command_dispatcher.Invoke(GenerateAnimationCommand, argumentsJson);
         public static string Analyze(string argumentsJson) => command_dispatcher.Invoke(AnalyzeCommand, argumentsJson);

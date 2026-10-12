@@ -13,6 +13,7 @@ namespace KimodoUnityBridge.Command
             {
                 case HelpCommand: return Examples("Inspect generation parameters and examples.",
                     @"{'command':'kimodo_generate_animation'}");
+                case SceneContextCommand: return Examples("Read the authoritative active-scene context before choosing characters, Clips, or Timeline references.", @"{}");
                 case InstallServerCommand: return Examples("Install the local server, then poll the returned request_id.", @"{}");
                 case AnimationAnalyzeCommand: return Examples("Analyze one returned Clip; open the returned image to inspect it.",
                     @"{'clips':[{'character':'<character>','clip':'<clip>'}],'picture':{'output':'composite'},'resolution':512}");
@@ -34,12 +35,8 @@ namespace KimodoUnityBridge.Command
                     Example("Mix a FullBody pose, Root2D root override, and hand target at one frame. Root2D overlays the pose root channels and effect overlays the named hand target.",
                         @"{'character':'<character>','prompt':'Reach to the apple','duration_frames':180,'loop':false,'constraints':[{'frame':90,'pose':{'track':'<pose track>','index':0},'root2d':{'position':[2.4,5.0],'heading':[0,1]},'effect':{'right_hand':{'position':[2.55,0.95,5.35]}}}]}"));
                 case PoseGetCommand: return new JArray(
-                    Example("Capture a pose at an absolute Timeline-global time in seconds.",
-                        @"{'source':{'character':'<character>','timeline_time_seconds':1.5},'full_data':true}"),
-                    Example("Capture the current scene Timeline pose when no source Clip exists.",
-                        @"{'source':{'character':'<character>','scene_time_seconds':1.5},'full_data':true}"),
-                    Example("Capture a pose at a time relative to a target Clip's Timeline range.",
-                        @"{'source':{'character':'<character>','clip':'<clip>','clip_time_seconds':0.5},'full_data':true}"),
+                    Example("Capture a pose at an absolute Timeline-global frame. Analyze the Clip first, then add its local frame offset to start_timeline_frame_60.",
+                        @"{'source':{'character':'<character>','timeline_frame_60':90},'full_data':true}"),
                     Example("Capture the original scene Animator's currently evaluated pose, independent of Timeline preview time.",
                         @"{'source':{'character':'<character>','mode':'scene_pose'},'full_data':true}"),
                     Example("Capture the Humanoid Avatar's stored skeleton rest pose.",

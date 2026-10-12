@@ -33,6 +33,22 @@
       ]
     },
     {
+      "name": "scene.context",
+      "description": "Return the current active-scene context JSON. Use this response as the authoritative source for scene characters, Clips, Timeline ranges, and object references.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "description": "Read the authoritative active-scene context before choosing characters, Clips, or Timeline references.",
+          "arguments": {}
+        }
+      ]
+    },
+    {
       "name": "kimodo_install_server",
       "description": "Start an asynchronous project-local QuickServer installation task. Returns a request_id (install:<guid>) that can be polled with kimodo_get_generation; models and the Python environment are preserved.",
       "inputSchema": {
@@ -50,10 +66,20 @@
     },
     {
       "name": "animation_analyze",
-      "description": "Analyze one animation clip at 60 FPS and render graph-space evidence. Results include Timeline start_frame and keyframes using absolute timeline_frame_60. Loaded clips are reused; external Assets/ or Packages/ clip references are appended to the character's Kimodo Timeline. Source clips are never modified.",
+      "description": "Analyze one animation clip at 60 FPS and render graph-space picture evidence. Pass a clips array containing exactly one scene character and one loaded Clip name or Assets/Packages Clip path. The result contains one clip object; temporal positions use absolute Timeline-global 60 FPS frames. External Clips are appended to the character's Kimodo Timeline and never modified.",
       "inputSchema": {
         "type": "object",
         "properties": {
+          "picture": {
+            "type": "object",
+            "description": "Unified graph-space picture request with tiles and output mode."
+          },
+          "resolution": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 4096,
+            "description": "Final picture tile resolution in pixels; accepts 64 through 4096. Rendering uses a 2x supersample and downsamples to this size. Defaults to 1920."
+          },
           "clips": {
             "type": "array",
             "description": "Exactly one animation clip reference. Use a loaded Clip name or an Assets/Packages path; an external asset is appended to the character's Kimodo Timeline before analysis and is never modified.",
@@ -75,16 +101,6 @@
                 "clip"
               ]
             }
-          },
-          "picture": {
-            "type": "object",
-            "description": "Unified graph-space picture request with tiles and output mode."
-          },
-          "resolution": {
-            "type": "integer",
-            "minimum": 64,
-            "maximum": 4096,
-            "description": "Final picture tile resolution in pixels; accepts 64 through 4096. Rendering uses a 2x supersample and downsamples to this size. Defaults to 1920."
           }
         },
         "required": [
@@ -96,16 +112,16 @@
         {
           "description": "Analyze one returned Clip; open the returned image to inspect it.",
           "arguments": {
+            "picture": {
+              "output": "composite"
+            },
+            "resolution": 512,
             "clips": [
               {
                 "character": "<character>",
                 "clip": "<clip>"
               }
-            ],
-            "picture": {
-              "output": "composite"
-            },
-            "resolution": 1920
+            ]
           }
         }
       ]
@@ -182,7 +198,7 @@
         "properties": {
           "source_character": {
             "type": "string",
-            "description": "Source scene character name or object_ref. Ghost character paths are rejected."
+            "description": "Source scene character name or object_ref. Session preview objects are rejected."
           },
           "animation": {
             "type": "string",
@@ -190,7 +206,7 @@
           },
           "target_character": {
             "type": "string",
-            "description": "Target scene character name or object_ref. Ghost character paths are rejected."
+            "description": "Target scene character name or object_ref. Session preview objects are rejected."
           },
           "output": {
             "type": "object",
@@ -243,7 +259,7 @@
         "properties": {
           "character": {
             "type": "string",
-            "description": "Scene character name or object_ref. Ghost character paths are rejected; use the source scene character."
+            "description": "Scene character name or object_ref. Session preview objects are rejected; use the source scene character."
           },
           "prompt": {
             "type": "string",
@@ -251,7 +267,9 @@
           },
           "duration_frames": {
             "type": "integer",
-            "description": "Duration in 60 FPS frames; defaults to 300."
+            "minimum": 1,
+            "default": 300,
+            "description": "Duration in 60 FPS frames; defaults to 300 frames (5 seconds)."
           },
           "loop": {
             "description": "Enable loop preprocessing, or provide per-axis endpoint locks with {enabled, lock_pos:{x,y,z}, lock_rot:{x,y,z}}.",
@@ -367,7 +385,7 @@
           },
           "analysis_option": {
             "type": "object",
-            "description": "Optional analysis object for the phase-track analyzer. Legacy uniform keyframe-count controls are removed; Humanoid output always uses phase_track_version and continuous phase_track intervals."
+            "description": "Optional generation-time lightweight analysis. When enabled, generation returns sparse salient keyframe markers and foot-contact changes; it does not run the full animation_analyze command."
           },
           "constraints": {
             "type": "array",
@@ -384,7 +402,7 @@
                     },
                     "pose": {
                       "type": "object",
-                      "description": "External Pose slot in current scene context.",
+                      "description": "External Pose slot in the current scene context.",
                       "additionalProperties": false,
                       "properties": {
                         "track": {
@@ -436,19 +454,19 @@
                           "properties": {
                             "position": {
                               "type": "array",
+                              "minItems": 3,
+                              "maxItems": 3,
                               "items": {
                                 "type": "number"
-                              },
-                              "minItems": 3,
-                              "maxItems": 3
+                              }
                             },
                             "rotation": {
                               "type": "array",
+                              "minItems": 4,
+                              "maxItems": 4,
                               "items": {
                                 "type": "number"
-                              },
-                              "minItems": 4,
-                              "maxItems": 4
+                              }
                             }
                           },
                           "anyOf": [
@@ -470,19 +488,19 @@
                           "properties": {
                             "position": {
                               "type": "array",
+                              "minItems": 3,
+                              "maxItems": 3,
                               "items": {
                                 "type": "number"
-                              },
-                              "minItems": 3,
-                              "maxItems": 3
+                              }
                             },
                             "rotation": {
                               "type": "array",
+                              "minItems": 4,
+                              "maxItems": 4,
                               "items": {
                                 "type": "number"
-                              },
-                              "minItems": 4,
-                              "maxItems": 4
+                              }
                             }
                           },
                           "anyOf": [
@@ -504,19 +522,19 @@
                           "properties": {
                             "position": {
                               "type": "array",
+                              "minItems": 3,
+                              "maxItems": 3,
                               "items": {
                                 "type": "number"
-                              },
-                              "minItems": 3,
-                              "maxItems": 3
+                              }
                             },
                             "rotation": {
                               "type": "array",
+                              "minItems": 4,
+                              "maxItems": 4,
                               "items": {
                                 "type": "number"
-                              },
-                              "minItems": 4,
-                              "maxItems": 4
+                              }
                             }
                           },
                           "anyOf": [
@@ -538,19 +556,19 @@
                           "properties": {
                             "position": {
                               "type": "array",
+                              "minItems": 3,
+                              "maxItems": 3,
                               "items": {
                                 "type": "number"
-                              },
-                              "minItems": 3,
-                              "maxItems": 3
+                              }
                             },
                             "rotation": {
                               "type": "array",
+                              "minItems": 4,
+                              "maxItems": 4,
                               "items": {
                                 "type": "number"
-                              },
-                              "minItems": 4,
-                              "maxItems": 4
+                              }
                             }
                           },
                           "anyOf": [
@@ -567,7 +585,28 @@
                           ]
                         }
                       },
-                      "minProperties": 1
+                      "anyOf": [
+                        {
+                          "required": [
+                            "left_hand"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "right_hand"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "left_foot"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "right_foot"
+                          ]
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -607,7 +646,7 @@
                       "properties": {
                         "path": {
                           "type": "object",
-                          "description": "Analyzed Root Path slot returned by animation_analyze at clips[].root_trajectory.path.",
+                          "description": "Analyzed Root Path slot returned by animation_analyze at clip.root_trajectory.path.",
                           "additionalProperties": false,
                           "properties": {
                             "track": {
@@ -922,7 +961,7 @@
     },
     {
       "name": "pose_get",
-      "description": "Sample a Timeline time, scene time, Clip-local time, the original scene Animator pose, or the Avatar skeleton rest pose into an External Pose slot. Returns the reusable pose identity {track,index}.",
+      "description": "Sample one absolute Timeline-global frame at 60 FPS, or select mode scene_pose / skeleton_rest_pose to read the original scene Animator or Avatar rest pose. Every call creates an External Pose slot and returns {track,index}.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -933,23 +972,6 @@
               "character": {
                 "type": "string"
               },
-              "clip": {
-                "type": "string"
-              },
-              "timeline_time_seconds": {
-                "type": "number",
-                "description": "Absolute Timeline-global time in seconds."
-              },
-              "scene_time_seconds": {
-                "type": "number",
-                "minimum": 0,
-                "description": "Absolute scene Timeline time in seconds. Samples the bound Animator directly, even when the character has no animation Clip."
-              },
-              "clip_time_seconds": {
-                "type": "number",
-                "minimum": 0,
-                "description": "Time in seconds relative to the selected Clip's Timeline range."
-              },
               "mode": {
                 "type": "string",
                 "enum": [
@@ -957,6 +979,11 @@
                   "skeleton_rest_pose"
                 ],
                 "description": "Sample the original scene Animator's currently evaluated pose, or the Avatar's stored skeleton rest pose."
+              },
+              "timeline_frame_60": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Absolute Timeline-global frame at 60 FPS. Use animation_analyze to find the selected Clip's start frame, then add the clip-local frame offset."
               }
             },
             "required": [
@@ -966,86 +993,11 @@
               {
                 "required": [
                   "character",
-                  "timeline_time_seconds"
+                  "timeline_frame_60"
                 ],
                 "not": {
-                  "anyOf": [
-                    {
-                      "required": [
-                        "clip"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "clip_time_seconds"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "scene_time_seconds"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "mode"
-                      ]
-                    }
-                  ]
-                }
-              },
-              {
-                "required": [
-                  "character",
-                  "scene_time_seconds"
-                ],
-                "not": {
-                  "anyOf": [
-                    {
-                      "required": [
-                        "timeline_time_seconds"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "clip"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "clip_time_seconds"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "mode"
-                      ]
-                    }
-                  ]
-                }
-              },
-              {
-                "required": [
-                  "character",
-                  "clip",
-                  "clip_time_seconds"
-                ],
-                "not": {
-                  "anyOf": [
-                    {
-                      "required": [
-                        "timeline_time_seconds"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "scene_time_seconds"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "mode"
-                      ]
-                    }
+                  "required": [
+                    "mode"
                   ]
                 }
               },
@@ -1062,27 +1014,8 @@
                   }
                 },
                 "not": {
-                  "anyOf": [
-                    {
-                      "required": [
-                        "timeline_time_seconds"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "scene_time_seconds"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "clip"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "clip_time_seconds"
-                      ]
-                    }
+                  "required": [
+                    "timeline_frame_60"
                   ]
                 }
               },
@@ -1099,27 +1032,8 @@
                   }
                 },
                 "not": {
-                  "anyOf": [
-                    {
-                      "required": [
-                        "timeline_time_seconds"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "scene_time_seconds"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "clip"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "clip_time_seconds"
-                      ]
-                    }
+                  "required": [
+                    "timeline_frame_60"
                   ]
                 }
               }
@@ -1137,32 +1051,11 @@
       },
       "examples": [
         {
-          "description": "Capture a pose at an absolute Timeline-global time in seconds.",
+          "description": "Capture a pose at an absolute Timeline-global frame. Analyze the Clip first, then add its local frame offset to start_frame.",
           "arguments": {
             "source": {
               "character": "<character>",
-              "timeline_time_seconds": 1.5
-            },
-            "full_data": true
-          }
-        },
-        {
-          "description": "Capture the current scene Timeline pose when no source Clip exists.",
-          "arguments": {
-            "source": {
-              "character": "<character>",
-              "scene_time_seconds": 1.5
-            },
-            "full_data": true
-          }
-        },
-        {
-          "description": "Capture a pose at a time relative to a target Clip's Timeline range.",
-          "arguments": {
-            "source": {
-              "character": "<character>",
-              "clip": "<clip>",
-              "clip_time_seconds": 0.5
+              "timeline_frame_60": 90
             },
             "full_data": true
           }
@@ -1581,7 +1474,7 @@
     },
     {
       "name": "session.clear",
-      "description": "Clear the active scene context by destroying transient context GameObjects. Persisted Timeline and animation assets are retained; the automatic session is recreated lazily by the next command.",
+      "description": "Clear the active scene context by destroying its transient context GameObjects. Persisted Timeline and animation assets are retained, and one fresh context is recreated lazily by the next command.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -1590,7 +1483,7 @@
       },
       "examples": [
         {
-          "description": "Destroy the current temporary workspace while retaining persisted Timeline and animation assets.",
+          "description": "Clear the current runtime session while retaining persisted assets.",
           "arguments": {}
         }
       ]

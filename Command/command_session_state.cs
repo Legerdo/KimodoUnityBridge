@@ -20,7 +20,7 @@ namespace KimodoUnityBridge.Command
     internal static partial class command_context
     {
         private const string CreateTimelineSessionUndoName = "Create Kimodo Timeline Session";
-        private const string AnalysisContractVersion = "4-command-60-timeline-keyframes-v1";
+        private const string AnalysisContractVersion = "5-command-60-single-clip-v1";
         internal const int SessionCaptureLayer = 17;
         internal const int ClipSafeZoneFrames = 4;
         internal const double ClipSafeZoneSeconds = ClipSafeZoneFrames / 60.0;
@@ -873,11 +873,34 @@ namespace KimodoUnityBridge.Command
             return Execute(argumentsJson, arguments =>
             {
                 TimelineSessionRecord session = RequireTimelineSession(arguments);
-                JArray requestedClips = arguments["clips"] as JArray;
-                if (requestedClips == null || requestedClips.Count != 1)
+                JArray clips = arguments["clips"] as JArray;
+                if (clips == null || clips.Count != 1 || clips[0] is not JObject clipReference)
                 {
-                    throw new InvalidOperationException("animation_analyze requires exactly one {character,clip} object.");
+                    throw new InvalidOperationException("clips must contain exactly one character and clip reference.");
                 }
+                string characterName = RequiredStringValue(clipReference, "character");
+                if (IsLegacyPreviewCharacterReference(characterName))
+                {
+                    throw new InvalidOperationException($"Character reference '{characterName}' identifies a session preview object. Use the source scene character name instead.");
+                }
+                TimelineCharacterRecord character = session.Characters.FirstOrDefault(item =>
+                    string.Equals(item.Name, characterName, StringComparison.OrdinalIgnoreCase));
+                if (character == null)
+                {
+                    throw new InvalidOperationException($"Character '{characterName}' is not in the current scene context.");
+                }
+
+                string clipName = RequiredStringValue(clipReference, "clip");
+                TimelineAnimationRecord animation = character.Animations.FirstOrDefault(item =>
+                    string.Equals(item.Name, clipName, StringComparison.OrdinalIgnoreCase));
+                if (animation == null)
+                {
+                    AnimationClip externalClip = ResolveAnimationClip(clipName);
+                    animation = AppendAnimationClip(session, character, externalClip, "analysis_source", null);
+                }
+                int startFrame = Mathf.RoundToInt((float)(animation.TimelineStartSeconds * SessionFrameRate));
+                int endFrame = startFrame + Math.Max(1, Mathf.RoundToInt((float)(animation.TimelineDurationSeconds * SessionFrameRate)));
+                ThrowIfGenerationRangeLocked(session, character, startFrame, endFrame, AnimationAnalyzeCommand);
 
                 JObject picture = AnalysisPictureRequest.Parse(arguments["picture"] as JObject).ToJson();
                 int pictureResolution = ResolveAnalysisPictureResolution(arguments["resolution"]);
@@ -888,88 +911,55 @@ namespace KimodoUnityBridge.Command
                     requestedAnalysisOptions = JObject.Parse(requestedAnalysisOptionsJson);
                 }
                 JObject analysisOptions = BuildEffectiveAnalysisOptions(requestedAnalysisOptions);
-                var subjects = new List<AnalysisSubject>(requestedClips.Count);
-                for (int index = 0; index < requestedClips.Count; index++)
+                string inputSignature = BuildAnimationAnalysisSignature(character, animation, analysisOptions);
+                AnalysisCacheRecord record;
+                if (!TryFindCachedAnimationAnalysis(session, character, animation, inputSignature, out record))
                 {
-                    if (requestedClips[index] is not JObject requested)
+                    if (!IsHumanoidCharacter(character) && !HasRenderableMesh(character.Root))
                     {
-                        throw new InvalidOperationException($"clips[{index}] must be an object.");
+                        throw new InvalidOperationException(
+                            $"Character '{character.Name}' is neither a valid humanoid nor a renderable Mesh object.");
                     }
 
-                    string characterName = RequiredStringValue(requested, "character");
-                    if (IsLegacyPreviewCharacterReference(characterName))
-                    {
-                        throw new InvalidOperationException($"Character reference '{characterName}' identifies a session preview object. Use the source scene character name instead.");
-                    }
-                    TimelineCharacterRecord character = session.Characters.FirstOrDefault(item =>
-                        string.Equals(item.Name, characterName, StringComparison.OrdinalIgnoreCase));
-                    if (character == null)
-                    {
-                throw new InvalidOperationException($"Character '{characterName}' is not in the current scene context.");
-                    }
-
-                    string clipName = RequiredStringValue(requested, "clip");
-                    TimelineAnimationRecord animation = character.Animations.FirstOrDefault(item =>
-                        string.Equals(item.Name, clipName, StringComparison.OrdinalIgnoreCase));
-                    if (animation == null)
-                    {
-                        AnimationClip externalClip = ResolveAnimationClip(clipName);
-                        animation = AppendAnimationClip(session, character, externalClip, "analysis_source", null);
-                    }
-                    int startFrame = Mathf.RoundToInt((float)(animation.TimelineStartSeconds * SessionFrameRate));
-                    int endFrame = startFrame + Math.Max(1, Mathf.RoundToInt((float)(animation.TimelineDurationSeconds * SessionFrameRate)));
-                    ThrowIfGenerationRangeLocked(session, character, startFrame, endFrame, AnimationAnalyzeCommand);
-
-                    string inputSignature = BuildAnimationAnalysisSignature(character, animation, analysisOptions);
-                    AnalysisCacheRecord record;
-                    if (!TryFindCachedAnimationAnalysis(session, character, animation, inputSignature, out record))
-                    {
-                        if (!IsHumanoidCharacter(character) && !HasRenderableMesh(character.Root))
-                        {
-                            throw new InvalidOperationException(
-                                $"Character '{character.Name}' is neither a valid humanoid nor a renderable Mesh object.");
-                        }
-
-                        JObject analysis;
-                        byte[] analysisMotionBytes;
-                        if (IsHumanoidCharacter(character))
-                        {
-                            analysis = AnalyzeAnimation(session, animation, analysisOptions, out analysisMotionBytes);
-                        }
-                        else
-                        {
-                            analysis = BuildMeshAnalysis(animation);
-                            analysisMotionBytes = null;
-                        }
-                        if (!IsHumanoidCharacter(character)) analysis["source"] = "mesh_only_pose_sampling";
-                        string id = CacheAnalysisResult(
-                            session, character, startFrame / SessionFrameRate, endFrame / SessionFrameRate,
-                            new JArray(), analysis, analysisMotionBytes, animation, inputSignature);
-                        record = GetCachedAnalysis(session, id);
-                    }
-                    // Normalize on cache hits as well so persisted results never
-                    // reintroduce the deprecated absolute-seconds keyframe field.
-                    NormalizeAnalysisContract(record.Analysis, startFrame, endFrame);
+                    JObject analysis;
+                    byte[] analysisMotionBytes;
                     if (IsHumanoidCharacter(character))
                     {
-                        EnsureAnalysisRootTrajectory(session, character, record, startFrame, endFrame);
-                        EnsureEndpointPoseComparison(session, character, animation, record, startFrame, endFrame);
+                        analysis = AnalyzeAnimation(session, animation, analysisOptions, out analysisMotionBytes);
                     }
-                    subjects.Add(new AnalysisSubject(character, animation, record, startFrame, endFrame));
+                    else
+                    {
+                        analysis = BuildMeshAnalysis(animation);
+                        analysisMotionBytes = null;
+                    }
+                    if (!IsHumanoidCharacter(character)) analysis["source"] = "mesh_only_pose_sampling";
+                    string id = CacheAnalysisResult(
+                        session, character, startFrame / SessionFrameRate, endFrame / SessionFrameRate,
+                        new JArray(), analysis, analysisMotionBytes, animation, inputSignature);
+                    record = GetCachedAnalysis(session, id);
                 }
 
-                JObject pictures = RenderAnalysisPictures(session, subjects, picture, pictureResolution);
+                // Normalize on cache hits as well so persisted results never
+                // reintroduce deprecated relative-time keyframe fields.
+                NormalizeAnalysisContract(record.Analysis, startFrame, endFrame);
+                if (IsHumanoidCharacter(character))
+                {
+                    EnsureAnalysisRootTrajectory(session, character, record, startFrame, endFrame);
+                    EnsureEndpointPoseComparison(session, character, animation, record, startFrame, endFrame);
+                }
+                var subject = new AnalysisSubject(character, animation, record, startFrame, endFrame);
+                JObject pictures = RenderAnalysisPictures(session, new[] { subject }, picture, pictureResolution);
                 SaveTimelineSession(session);
                 string analysisImagePath = pictures?.Value<string>("image_path") ?? string.Empty;
                 var analysisLog = new JObject
                 {
                     ["picture"] = picture.DeepClone(),
-                    ["clips"] = new JArray(subjects.Select(subject => new JObject
+                    ["clip"] = new JObject
                     {
                         ["character"] = subject.Character?.Name ?? string.Empty,
                         ["clip"] = subject.Animation?.Name ?? string.Empty,
                         ["analysis"] = subject.Record.Analysis?.DeepClone() ?? new JObject()
-                    })),
+                    },
                     ["image_path"] = analysisImagePath,
                     ["image_path_absolute"] = string.IsNullOrWhiteSpace(analysisImagePath)
                         ? string.Empty
@@ -980,8 +970,8 @@ namespace KimodoUnityBridge.Command
                 {
                     ["analysis_schema_version"] = AnalysisContractVersion,
                     ["picture"] = picture.DeepClone(),
-                    ["clips"] = new JArray(subjects.Select(BuildAnimationAnalyzeClipResult)),
-                    ["pictures"] = pictures
+                    ["clip"] = BuildAnimationAnalyzeClipResult(subject),
+                    ["pictures"] = BuildPublicPictureMetadata(pictures, subject)
                 });
             });
         }
@@ -992,31 +982,150 @@ namespace KimodoUnityBridge.Command
             var result = new JObject
             {
                 ["character"] = subject.Character.Name,
-                ["clip"] = subject.Animation.Name,
-                ["start_frame"] = subject.StartFrame,
-                ["end_frame_exclusive"] = subject.EndFrameExclusive,
+                ["name"] = subject.Animation.Name,
+                ["start_timeline_frame_60"] = subject.StartFrame,
+                ["end_timeline_frame_60_exclusive"] = subject.EndFrameExclusive,
                 ["analysis_schema_version"] = AnalysisContractVersion,
                 ["analysis_mode"] = humanoid ? "humanoid" : "mesh",
                 ["phase_track_version"] = humanoid
                     ? subject.Record.Analysis?.Value<string>("phase_track_version") ?? string.Empty
                     : "NOT_APPLICABLE",
-                ["phase_track"] = humanoid
-                    ? subject.Record.Analysis?["phase_track"]?.DeepClone() ?? new JArray()
-                    : "NOT_APPLICABLE",
+                ["phase_track"] = BuildPublicPhaseTrack(subject),
                 ["keyframes"] = subject.Record.Analysis?["keyframes"]?.DeepClone() ?? new JArray(),
-                ["foot_contacts"] = subject.Record.Analysis?["foot_contacts"]?.DeepClone() ?? new JArray()
+                ["foot_contacts"] = BuildPublicFootContacts(subject)
             };
             if (humanoid)
             {
-                result["root_trajectory"] = subject.Record.RootTrajectory?.DeepClone() ?? new JObject();
-                result["endpoint_pose_comparison"] = subject.Record.Analysis?["endpoint_pose_comparison"]?.DeepClone() ?? new JObject
+                result["root_trajectory"] = BuildPublicRootTrajectory(subject);
+                result["endpoint_pose_comparison"] = BuildPublicEndpointPoseComparison(subject);
+                if (result["endpoint_pose_comparison"] == null)
                 {
-                    ["status"] = "insufficient_evidence",
-                    ["root_transform_included"] = true,
-                    ["root2d_constraint_included"] = false
-                };
+                    result["endpoint_pose_comparison"] = new JObject
+                    {
+                        ["status"] = "insufficient_evidence",
+                        ["root_transform_included"] = true,
+                        ["root2d_constraint_included"] = false
+                    };
+                }
                 result["motion_profile"] = subject.Record.Analysis?["motion_profile"]?.DeepClone() ?? new JObject();
             }
+            return result;
+        }
+
+        private static JObject BuildPublicPictureMetadata(JObject pictures, AnalysisSubject subject)
+        {
+            if (pictures == null) return new JObject();
+            JObject result = (JObject)pictures.DeepClone();
+            int durationFrames = Math.Max(1, subject.EndFrameExclusive - subject.StartFrame);
+            foreach (JObject section in new[]
+            {
+                result["title"] as JObject,
+                result["header"] as JObject
+            }.Where(item => item != null).Concat((result["headers"] as JArray ?? new JArray()).OfType<JObject>()))
+            {
+                if (section.Property("duration_seconds") != null)
+                {
+                    section.Remove("duration_seconds");
+                    section["duration_frames"] = durationFrames;
+                }
+            }
+
+            foreach (JObject image in (result["images"] as JArray ?? new JArray()).OfType<JObject>())
+            {
+                if (image["description"] is not JObject description) continue;
+                if (description["frame"] is JValue frame && frame.Type == JTokenType.Integer)
+                {
+                    int localFrame = frame.Value<int>();
+                    description.Remove("frame");
+                    if (localFrame >= 0) description["timeline_frame_60"] = subject.StartFrame + localFrame;
+                    else description["timeline_frame_60"] = JValue.CreateNull();
+                }
+                if (description["frames"] is JArray frames)
+                {
+                    description["timeline_frames_60"] = new JArray(frames.Values<int>().Select(value => subject.StartFrame + value));
+                    description.Remove("frames");
+                }
+                if (description["selected_frames"] is JArray selectedFrames)
+                {
+                    description["selected_timeline_frames_60"] = new JArray(selectedFrames.Values<int>().Select(value => subject.StartFrame + value));
+                    description.Remove("selected_frames");
+                }
+            }
+            return result;
+        }
+
+        private static JArray BuildPublicPhaseTrack(AnalysisSubject subject)
+        {
+            var result = new JArray();
+            foreach (JObject phase in (subject.Record.Analysis?["phase_track"] as JArray ?? new JArray()).OfType<JObject>())
+            {
+                int localStart = phase.Value<int?>("start_frame") ?? 0;
+                int localEnd = phase.Value<int?>("end_frame") ?? localStart;
+                int anchor = phase.Value<int?>("anchor_frame") ?? localStart;
+                JObject item = (JObject)phase.DeepClone();
+                item.Remove("start_frame");
+                item.Remove("end_frame");
+                item.Remove("start_frame_60");
+                item.Remove("end_frame_60");
+                item.Remove("duration_seconds");
+                item.Remove("anchor_frame");
+                item.Remove("anchor_frame_60");
+                item.Remove("anchor_time_seconds");
+                item["start_timeline_frame_60"] = subject.StartFrame + localStart;
+                item["end_timeline_frame_60_exclusive"] = subject.StartFrame + localEnd + 1;
+                item["anchor_timeline_frame_60"] = subject.StartFrame + anchor;
+                result.Add(item);
+            }
+            return result;
+        }
+
+        private static JArray BuildPublicFootContacts(AnalysisSubject subject)
+        {
+            var result = new JArray();
+            foreach (JObject contact in (subject.Record.Analysis?["foot_contacts"] as JArray ?? new JArray()).OfType<JObject>())
+            {
+                JObject item = (JObject)contact.DeepClone();
+                int localFrame = item.Value<int?>("frame") ?? 0;
+                item.Remove("frame");
+                item["timeline_frame_60"] = subject.StartFrame + localFrame;
+                result.Add(item);
+            }
+            return result;
+        }
+
+        private static JObject BuildPublicRootTrajectory(AnalysisSubject subject)
+        {
+            JObject result = subject.Record.RootTrajectory != null
+                ? (JObject)subject.Record.RootTrajectory.DeepClone()
+                : new JObject();
+            int frameCount = result.Value<int?>("frame_count") ?? Math.Max(1, subject.EndFrameExclusive - subject.StartFrame);
+            result.Remove("duration_seconds");
+            result.Remove("sample_span_seconds");
+            result["duration_frames"] = frameCount;
+            result["sample_span_frames"] = Math.Max(0, frameCount - 1);
+            if (result["samples"] is JArray samples)
+            {
+                foreach (JObject sample in samples.OfType<JObject>())
+                {
+                    int localFrame = sample.Value<int?>("frame") ?? 0;
+                    sample.Remove("frame");
+                    sample["timeline_frame_60"] = subject.StartFrame + localFrame;
+                }
+            }
+            return result;
+        }
+
+        private static JObject BuildPublicEndpointPoseComparison(AnalysisSubject subject)
+        {
+            JObject result = subject.Record.Analysis?["endpoint_pose_comparison"] as JObject;
+            if (result == null) return null;
+            result = (JObject)result.DeepClone();
+            int localStart = result.Value<int?>("start_frame") ?? 0;
+            int localEnd = result.Value<int?>("end_frame") ?? Math.Max(0, subject.EndFrameExclusive - subject.StartFrame - 1);
+            result.Remove("start_frame");
+            result.Remove("end_frame");
+            result["start_timeline_frame_60"] = subject.StartFrame + localStart;
+            result["end_timeline_frame_60"] = subject.StartFrame + localEnd;
             return result;
         }
 
@@ -1356,6 +1465,7 @@ namespace KimodoUnityBridge.Command
 
         private static JObject BuildMeshAnalysis(TimelineAnimationRecord animation)
         {
+            int startFrame = Math.Max(0, animation?.StartFrame ?? 0);
             int frameCount = Math.Max(1, animation?.EndFrameExclusive > animation?.StartFrame
                 ? animation.EndFrameExclusive - animation.StartFrame
                 : Mathf.Max(1, Mathf.RoundToInt((float)((animation?.TimelineDurationSeconds ?? 0.0) * SessionFrameRate))));
@@ -1365,9 +1475,9 @@ namespace KimodoUnityBridge.Command
             {
                 keyframes.Add(new JObject
                 {
-                    ["frame"] = count <= 1
+                    ["timeline_frame_60"] = startFrame + (count <= 1
                         ? 0
-                        : Mathf.RoundToInt(Mathf.Lerp(0f, frameCount - 1, index / (float)(count - 1))),
+                        : Mathf.RoundToInt(Mathf.Lerp(0f, frameCount - 1, index / (float)(count - 1)))),
                     ["kind"] = "mesh_pose"
                 });
             }
@@ -1376,7 +1486,7 @@ namespace KimodoUnityBridge.Command
                 ["keyframes"] = keyframes,
                 ["foot_contacts"] = new JArray(),
                 ["phase_track_version"] = "NOT_APPLICABLE",
-                ["phase_track"] = "NOT_APPLICABLE",
+                ["phase_track"] = new JArray(),
                 ["source"] = "mesh_only_pose_sampling"
             };
         }
@@ -1697,7 +1807,7 @@ namespace KimodoUnityBridge.Command
                 ["session"] = session.Name,
                 ["session_game_object"] = session.SessionRoot != null ? session.SessionRoot.name : string.Empty,
                 ["characters"] = new JArray(session.Characters.Select(DescribeCharacter)),
-                ["current_frame"] = session.Director != null
+                ["current_timeline_frame_60"] = session.Director != null
                     ? Mathf.RoundToInt((float)(session.Director.time * SessionFrameRate))
                     : 0,
                 ["current"] = ReferenceEquals(currentTimelineSession, session)
@@ -1748,8 +1858,10 @@ namespace KimodoUnityBridge.Command
                 ["name"] = item.name,
                 ["enabled"] = item.enabled,
                 ["playable_asset"] = item.playableAsset != null ? item.playableAsset.name : string.Empty,
-                ["time_seconds"] = item.time,
-                ["duration_seconds"] = item.playableAsset != null ? item.playableAsset.duration : 0.0,
+                ["timeline_frame_60"] = Mathf.RoundToInt((float)(item.time * SessionFrameRate)),
+                ["duration_frames_60"] = item.playableAsset != null
+                    ? Mathf.RoundToInt((float)(item.playableAsset.duration * SessionFrameRate))
+                    : 0,
                 ["frame_rate"] = item.playableAsset is TimelineAsset authoredTimeline
                     ? authoredTimeline.editorSettings.frameRate
                     : 0.0
@@ -1765,8 +1877,9 @@ namespace KimodoUnityBridge.Command
                 ["command_context_director"] = commandDirector != null ? GetSceneHierarchyPath(commandDirector.gameObject) : string.Empty,
                 ["playable_asset"] = timeline != null ? timeline.name : string.Empty,
                 ["playable_asset_path"] = session.TimelineAssetPath ?? string.Empty,
-                ["time_seconds"] = activeAuthoredDirector != null ? activeAuthoredDirector.time : 0.0,
-                ["duration_seconds"] = timeline != null ? timeline.duration : 0.0,
+                ["duration_frames_60"] = timeline != null
+                    ? Mathf.RoundToInt((float)(timeline.duration * SessionFrameRate))
+                    : 0,
                 ["frame_rate"] = timeline != null ? timeline.editorSettings.frameRate : SessionFrameRate,
                 ["current_frame_60"] = activeAuthoredDirector != null
                     ? Mathf.RoundToInt((float)(activeAuthoredDirector.time * SessionFrameRate))
@@ -1792,12 +1905,12 @@ namespace KimodoUnityBridge.Command
                 ["name"] = animation.Name,
                 ["source"] = animation.Source,
                 ["kind"] = animation.Kind,
-                ["start_frame"] = animation.TimelineClip != null ? Mathf.RoundToInt((float)(animation.TimelineStartSeconds * SessionFrameRate)) : 0,
+                ["start_timeline_frame_60"] = animation.TimelineClip != null ? Mathf.RoundToInt((float)(animation.TimelineStartSeconds * SessionFrameRate)) : 0,
                 ["duration_frames"] = animation.TimelineClip != null ? Mathf.RoundToInt((float)(animation.TimelineDurationSeconds * SessionFrameRate)) : 0,
                 ["segments"] = new JArray(animation.TimelineSegments.Select(segment => new JObject
                 {
                     ["role"] = segment.Role,
-                    ["start_frame"] = segment.TimelineClip != null ? Mathf.RoundToInt((float)(segment.TimelineClip.start * SessionFrameRate)) : 0,
+                    ["start_timeline_frame_60"] = segment.TimelineClip != null ? Mathf.RoundToInt((float)(segment.TimelineClip.start * SessionFrameRate)) : 0,
                     ["duration_frames"] = segment.TimelineClip != null ? Mathf.RoundToInt((float)(segment.TimelineClip.duration * SessionFrameRate)) : 0
                 }))
             };

@@ -97,45 +97,64 @@ ASSERT WORKFLOW_READY == YES before animation work
 
 ## Orchestration loop / 总编排 Loop
 
+动画任务固定经过“分析提示词 → 构造约束 → 生成动画 → 分析/比较 → 重新构造约束”的
+闭环。第一轮没有参考 Clip 时，分析提示词阶段只解析用户明确写出的动作、阶段、方向、
+接触和结束语义；不能凭经验补写未声明的动作。若请求涉及已有动作，先调用
+`animation_analyze` 分析一个明确的 `character + clip`，再把结构化结果转成候选时序和约束。
+
+分析提示词前必须先调用 `scene.context`。该命令返回的 context JSON 是本次 AI 分析的
+唯一场景事实来源：角色、Clip、Timeline 区间、Animator 和对象引用只能使用 JSON 中
+出现的值。不要读取内部 session/context 文件，也不要从保存路径猜测场景对象；若 JSON
+没有足够事实，应报告需要补充场景信息。
+
 ```pseudo
 function run_kimodo_task(request):
-    intent = classify_intent(request)
+    intent = analyze_prompt_semantics(request)
     ensure_installation_gate()
-
-    if request.has_animation_reference():
-        analysis = run_analysis_tool(request)
-        pose_set = run_pose_loop(analysis, request)
-    elif request.has_pose_or_keyframe_reference():
-        pose_set = run_pose_loop(request, request)
-    else:
-        pose_set = EMPTY_CONFIRMED_POSE_SET
 
     best = NONE
     no_improvement = 0
-    do:
-        generated = run_generation_tool(request, pose_set)
-        analysis = run_analysis_and_evaluation(generated, request)
+    repeat:
+        # 1. 分析提示词：先确定动作阶段和物理可行的时间预算。
+        # duration_frames 是唯一对外时间单位；没有用户时长时，依据阶段数量、位移
+        # 和接触事件给出保守预算，并检查平均速度/加速度是否可实现。
+        plan = infer_timing_and_feasibility(intent, request.reference_clip)
+        # 2. 构造约束：只把用户明确要求或已确认的分析证据转换为约束。
+        constraints, confirmed_poses = build_confirmed_constraints(plan, request)
+        generated = generate_animation(request, duration_frames=plan.duration_frames,
+                                       constraints=constraints, poses=confirmed_poses)
+        if generated.status != "completed":
+            return unified_report(generated)
+
+        # 3. 生成后的首次检查自动执行一次 animation_analyze。
+        analysis = analyze_generated_clip(generated)
         if best == NONE:
             best = generated
-            no_improvement += 1
+            comparison = NOT_APPLICABLE
         else:
-            comparison = run_compare_tool(generated, best, request)
+            # 4. 有候选时在相同证据条件下逐个分析并比较。
+            comparison = compare_candidates(generated, best, request)
             if comparison.improves_best == YES:
                 best = generated
                 no_improvement = 0
             else:
                 no_improvement += 1
-        if no_improvement > request.max_no_improvement:
-            return unified_report(best, analysis)
-        request, pose_set = plan_next_iteration(request, pose_set, analysis)
-    while true
+
+        if analysis_is_acceptable(analysis, request) or no_improvement >= request.max_no_improvement:
+            return unified_report(best, analysis, comparison)
+        # 5. 只根据分析/比较中确认的缺陷重构下一轮约束和时长；不把整份分析
+        # 自动塞回 generation，也不把自由文本当成协议字段。
+        intent, request = revise_plan_from_analysis(analysis, comparison, intent, request)
 ```
 
-Analysis evidence never enters generation directly. It must pass through the
-Pose loop and become an explicitly confirmed Pose before generation may use it.
-The first generated candidate is only a baseline; Compare must run before final
-output. The loop stops when consecutive non-improvement exceeds the configured
-`max_no_improvement`.
+`animation_analyze` 输入使用恰好一个元素的 `clips` 数组，返回单个 `clip`，不是 `clips[]` 输出；时间字段使用全局 60 FPS 帧：
+`start_timeline_frame_60`、`end_timeline_frame_60_exclusive`、
+`anchor_timeline_frame_60` 和 `timeline_frame_60`。`pose_get` 只能接受全局
+`timeline_frame_60`，或无时间的 `scene_pose`／`skeleton_rest_pose`；要采样 Clip 内某一帧，
+先用 Analysis 的 Clip 起始帧加上局部偏移。`clip.root_trajectory.path` 只在生成时形成
+起点和终点 Root2D 约束；关键帧 Pose 必须先经 Pose loop 明确确认。分析输出中的
+`analysis_option` 是 generation-time 的轻量关键帧/脚接触分析开关，不是完整
+`animation_analyze`，不参与最终语义判断。
 
 路由至少覆盖 installation、scene context、generation、recognition、comparison、pose 和 retarget；未匹配到能力时才返回 `unsupported` 或 `needs_clarification`。
 
@@ -144,7 +163,7 @@ output. The loop stops when consecutive non-improvement exceeds the configured
 - 只使用运行时返回的安全角色名、动画名和 `{track,index}` 引用；生成结果的 `path` 是资产元数据，不是场景 Clip handle。
 - 不得把伪代码中的能力名称、C# Handler 名称或 Editor pipeline 类型当作 CLI 命令名；命令名必须来自实时 schema。
 - 所有命令都以当前活动场景中用户打开/选中的 `Animator` 所属角色为权威来源；不要从保存的 prefab 路径猜测替代场景对象。
-- 只要生成请求点名动作（例如 walk/run），生成前必须检查当前场景中是否已有语义匹配的角色/动画；修复、改进、替换、续作或变体请求绝不能跳过这一步。找到的动画先作为上下文证据分析，只有请求明确要求参考、复用或约束时才传入生成约束。
+- 只要生成请求点名动作（例如 walk/run），生成前必须检查当前场景中是否已有语义匹配的角色/动画；修复、改进、替换、续作或变体请求绝不能跳过这一步。请求明确要求沿用、复刻或延续参考 Clip 的路线时，分析后必须传入 `clip.root_trajectory.path` 作为 `root_path`；仅发现同语义 Clip 不代表用户要求复用路径。明确距离/方向的移动任务应使用相应的 path 参数或已知点约束，不能只把它写进 prompt。
 - 视觉结论必须建立在实际打开的返回图像上；静态证据不足时不得报告视觉通过。
 - 已完成 Clip 不覆盖；修正、Retarget 和生成变体均追加派生 Clip。
 - 安装和生成都返回 `request_id`，并通过 `kimodo_get_generation` 轮询。安装终态为 `done` 或 `error`；生成终态为 `completed`、`failed` 或 `canceled`。轮询必须有固定间隔和总超时；过期或未知请求按失败/未验证报告。

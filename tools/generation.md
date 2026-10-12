@@ -26,7 +26,11 @@ Command `window_frames` and `source.frame` use **60 FPS**, unlike the Timeline U
 The complete point-constraint contract is defined in [`constraints.md`](constraints.md).
 The sections below summarize the generation-specific behavior.
 
-`constraints[].type` accepts `fullbody`, `root2d`, or `root_effect`. The command parser resolves each point to one concrete family. `root_effect` carries optional `pose`, required `root2d.position/heading`, and required `effect` targets, then resolves to Effector with root support. Duplicate constraint frames and root_path collisions are rejected at the command boundary.
+Point constraints do not accept a `type` field. The command parser infers the concrete
+family from the supplied `pose`, `root2d`, and `effect` fields: a Pose selects FullBody,
+Root2D supplies planar root channels, and effect supplies named end-effector targets;
+multiple fields at one frame are composed by channel. Duplicate constraint frames and
+root_path collisions are rejected at the command boundary.
 
 The three point types are a discriminated union and are never nested. See `constraints.md`
 for the complete shape and validation rules.
@@ -42,7 +46,7 @@ runtime/raw composition rules are defined in [`constraints.md`](constraints.md).
 
 每次生成接受后都会返回非阻断的 `check`。检查由 Editor 层共享服务执行，因此 Timeline、命令和其他 generator 使用同一套规则：`root_trajectory` 检查 Root2D 的 XZ/heading 与 FullBody 的 root（含可用 Y）连续性，`constraint_overlap` 检查同帧 root 描述冲突，`effectors` 检查 RootEffect 以及 FullBody 中有效的手脚目标。速度超过 7 m/s、加速度超过 5 m/s² 或约束之间出现跳变时，状态为 `warning`，任务仍会继续。`blocking` 仅用于协议级阻断，warning 不会设置为 true。
 
-Command In/Out rejects insufficient source ranges, too many samples for distinct model frames, overlapping inside windows, same-frame explicit constraints, cross-character sources, loop generation, ARDY, and requests exceeding the model frame limit including context. These checks do not silently shorten or downgrade the request. Acceptance and `kimodo_get_generation` return `inout_sampling`: source-local and Timeline sample times, output/runtime model frames, padding counts, and the exclusive crop range. The output retains the requested duration. This metadata verifies sampling and transport, not visual seam quality. Loop is enabled only by the explicit `loop` argument; prompt wording is never parsed as a loop flag.
+Command In/Out rejects insufficient source ranges, too many samples for distinct model frames, overlapping inside windows, same-frame explicit constraints, cross-character sources, loop generation, ARDY, and requests exceeding the model frame limit including context. These checks do not silently shorten or downgrade the request. Acceptance and `kimodo_get_generation` return `inout_sampling`: source-local and Timeline-global 60 FPS sample frames, output/runtime model frames, padding counts, and the exclusive model-frame crop range. The output retains the requested duration. This metadata verifies sampling and transport, not visual seam quality. Loop is enabled only by the explicit `loop` argument; prompt wording is never parsed as a loop flag.
 
 Every command's help entry includes `examples`. Replace illustrative names and request IDs with actual returned handles before executing them.
 
@@ -98,7 +102,7 @@ BODY_OR_CONTACT        = OPTIONAL("<body or contact / 身体或接触>")
 ENDING_OR_LOOP         = OPTIONAL("<ending or loop / 结束或循环>")
 STYLE                  = OPTIONAL("<relevant style / 相关风格>")
 
-DURATION_FRAMES        = OPTIONAL("<60 FPS frames / 60FPS 帧数>")
+DURATION_FRAMES        = REQUIRED("<planned total duration in 60 FPS frames / 计划总时长>")
 PATH_BEGIN_YAW_DEGREES = REQUIRED_IF(SHOULD_OVERRIDE_PATH_DIRECTIONS, "<absolute Unity yaw>")
 PATH_END_YAW_DEGREES   = REQUIRED_IF(SHOULD_OVERRIDE_PATH_DIRECTIONS, "<absolute Unity yaw>")
 FIXED_HEADING_DEGREES  = REQUIRED_IF(SHOULD_OVERRIDE_FIXED_HEADING, "<absolute Unity yaw>")
@@ -134,6 +138,32 @@ GENERATION_PROMPT = JOIN_EXPLICIT_FIELDS(
 # Only fields explicitly supplied by the caller are emitted. Do not infer
 # preparation/recovery structure, breathing, contacts, root displacement, or
 # other unstated semantics; preserve unknown abbreviations verbatim.
+
+## Prompt analysis and physical timing / 提示词语义与物理时序
+
+生成前先把用户提示词拆成已明确要求的动作阶段、先后顺序、接触/目标、方向、位移、
+速度意图和结束状态。可以为这些已声明阶段推导时间预算，但不得增添用户没说的动作。
+随后把明确的路径、姿态或接触转成命令约束，生成 Clip；生成完成后必须调用一次完整
+`animation_analyze`；有参考 Clip 或已选最佳候选时，再用 Comparison 做同条件比较。
+根据分析中确认的缺陷调整提示词、时长或约束，进入下一轮。
+
+- 对外时间单位统一为 60 FPS 的 `duration_frames`。用户给出秒数时按
+  `round(seconds * 60)` 转帧；用户未给时长时，根据动作阶段数、起止状态、位移和接触
+  事件规划总时长，并把计划值传给 `kimodo_generate_animation`，不要无意中依赖默认
+  `300` 帧（5 秒）。
+- 对带位移的动作先计算 `distance / duration`。例如“3 秒走 10 米”意味着平均速度约
+  `3.33 m/s`；这不应被当作普通步行的默认节奏。若用户明确说“走”，应调整时长或确认
+  用户实际想表达的是快走/跑；若用户明确说跑，则仍要检查起步、转向和停止所需时间。
+- `kimodo_generate_animation` 返回的 `check` 中速度超过 `7 m/s` 或加速度超过
+  `5 m/s²` 是非阻断 warning。它只能作为需要复核的信号；没有 warning 不能证明动作
+  符合日常动作语义，也不能代替 Analysis/Compare。
+- 不要只在 prompt 文本里写“沿参考路径”或“在 3 秒内走 10 米”。请求明确要求复用
+  已有 Clip 的路线时，先分析该 Clip，再将返回的 `clip.root_trajectory.path` 作为
+  `root_path` 约束传入。`root_path` 只在起点和终点生成 Root2D 约束，不保证逐帧复刻
+  中间曲线；若中间转向/停靠位置是硬要求，必须在计划中显式处理，并在结果中核验，
+  不得宣称端点约束已经锁定整条曲线。
+- `analysis_option` 只控制生成阶段的轻量关键帧/脚接触分析。生成后仍必须运行完整的
+  `animation_analyze`；不要把 `analysis_option` 当作完整分析或语义评分。
 
 ## Animation source discovery / 动画来源发现
 
@@ -180,9 +210,13 @@ if request_names_one_or_more_actions():
     if request_semantics_include_fix_or_variant_of_named_actions() and related_clips is empty:
         record_context_evidence("No matching action clip found; this is a new baseline generation.")
     if related_clips is not empty:
-        related_analysis = animation_analyze(related_clips, picture={"output": "composite"}, resolution=1920)
-        source_profile = related_analysis.clips[0].motion_profile
-        source_keyframes = related_analysis.clips[0].phase_track[*].anchor_frame_60
+        related_analysis = animation_analyze(
+            clips=[{character: CHARACTER, clip: related_clips[0]}],
+            picture={"output": "composite"},
+            resolution=1920
+        )
+        source_profile = related_analysis.clip.motion_profile
+        source_keyframes = related_analysis.clip.phase_track[*].anchor_timeline_frame_60
         if request_is_repair_or_variant_of_related_clip():
             derive_loop_path_and_heading_decisions_from(
                 source_profile,
@@ -194,17 +228,18 @@ if request_names_one_or_more_actions():
 ```
 
 匹配到已有动画后，必须先使用 analysis 返回的 `motion_profile` 判断循环、路径和
-heading，再决定是否覆盖。关键帧列表用于动作阶段、采样帧和验证证据；默认不调用
-`pose_get` 或 `pose_set`，也不创建/修改 Pose 资产。轨迹直接复用
-`root_trajectory.path`，明确方向使用 PathAngle 起止角度。只有用户明确要求编辑 Pose，
-并确认接受 rig/Humanoid 映射副作用时，才允许启用 `ALLOW_DIRECT_POSE_EDIT=YES`。若没有匹配动画，
+heading，再决定是否覆盖。关键帧列表用于阶段计划、Pose 采样帧和验证证据。请求明确
+要求某个参考姿态时，用 Analysis 的 Clip 起始全局帧加 Clip 内偏移，调用 `pose_get`；
+检查并确认返回的 Pose 后，才把其 `{track,index}` 放入 generation 的 point constraint。
+`pose_set` 只用于用户明确要求编辑 Pose 的任务。轨迹通过 `root_path` 复用，明确方向
+使用 PathAngle 起止角度。若没有匹配动画，
 报告未找到上下文后再按动作语义推断：向前为 PathAngle 起止 `0°`，左转终点
 `-90°`，右转终点 `+90°`；仅在语义明确时启用对应覆盖。
 
 ```pseudo
-analysis_frame_anchors = source_analysis.clips[0].phase_track[*].anchor_frame_60
+analysis_frame_anchors = source_analysis.clip.phase_track[*].anchor_timeline_frame_60
 verification_frames = choose_phase_and_endpoint_frames(analysis_frame_anchors)
-path_constraint = source_analysis.clips[0].root_trajectory.path
+path_constraint = source_analysis.clip.root_trajectory.path
 path_angle = derive_path_angle_from_motion_profile_and_request(source_profile, request)
 // Analysis anchors are metadata only. They may enter the independent Pose loop,
 // but never become generation inputs without explicit conversion and
@@ -248,19 +283,15 @@ function execute_generate_skill(request):
     if HAS_SOURCE_ANIMATION == YES:
         source_clip = resolve_scene_clip(character, SOURCE_CLIP)
         source_analysis = animation_analyze({
-            clips: [{
-                role: "source",
-                character: character,
-                clip: source_clip
-            }],
+            clips: [{character: character, clip: source_clip}],
             picture: {"output": "composite"},
             resolution: 1920
         })
         source_image_path = source_analysis.pictures.image_path
         source_picture_map = source_analysis.pictures.images
         ASSERT OPEN_WITH_AVAILABLE_VISUAL_TOOL(source_image_path) == YES
-        source_profile = source_analysis.clips[0].motion_profile
-        source_keyframes = source_analysis.clips[0].phase_track[*].anchor_frame_60
+        source_profile = source_analysis.clip.motion_profile
+        source_keyframes = source_analysis.clip.phase_track[*].anchor_timeline_frame_60
         if request_is_repair_or_variant_of_source_clip():
             derive_loop_path_and_heading_decisions_from(
                 source_profile,
@@ -272,7 +303,7 @@ function execute_generate_skill(request):
 
     if SHOULD_REUSE_ANALYZED_PATH == YES:
         ASSERT HAS_SOURCE_ANIMATION == YES
-        path_ref = source_analysis.clips[0].root_trajectory.path
+        path_ref = source_analysis.clip.root_trajectory.path
         ASSERT path_ref has exactly {track, index} returned by animation_analyze
         constraints.append({
             frame: request.path_start_frame if supplied else 0,
@@ -280,22 +311,23 @@ function execute_generate_skill(request):
         })
 
     if any_pose_constraint_is_needed() == YES:
-        if ALLOW_DIRECT_POSE_EDIT != YES:
-            record_generation_warning(
-                "Pose constraints deferred: generation uses analysis trajectory/PathAngle only."
-            )
-        else:
-            ASSERT request_explicitly_confirms_rig_side_effects() == YES
-            ASSERT HAS_SOURCE_ANIMATION == YES
-            use_explicit_pose_workflow_only(request, source_analysis)
+        ASSERT HAS_SOURCE_ANIMATION == YES
+        source_global_frame = source_analysis.clip.start_timeline_frame_60 + source_local_frame
+        pose_result = pose_get({
+            source: {character: character, timeline_frame_60: source_global_frame}
+        })
+        inspect_and_confirm_pose(pose_result.pose)
+        constraints.append({
+            frame: planned_output_frame,
+            pose: pose_result.pose
+        })
 
     args = {
         character: character,
         prompt: GENERATION_PROMPT
     }
 
-    if DURATION_FRAMES is supplied:
-        args.duration_frames = DURATION_FRAMES
+    args.duration_frames = DURATION_FRAMES
 
     if SHOULD_LOOP == YES:
         args.loop = {
@@ -406,11 +438,7 @@ function execute_generate_skill(request):
 
 function verify_final_output(final_ref, runtime_evidence):
     final_analysis = animation_analyze({
-        clips: [{
-            role: "target",
-            character: final_ref.character,
-            clip: final_ref.clip
-        }],
+        clips: [{character: final_ref.character, clip: final_ref.clip}],
         picture: {"output": "composite"},
         resolution: 1920
     })
@@ -545,7 +573,7 @@ function derive_supported_correction_from_failed_macros():
 function required(required_flag, evidence):
     return evidence if required_flag == YES else NOT_APPLICABLE
 
-ASSERT analysis_keyframes_are_used_as_evidence_and_timing_anchors()
+    ASSERT analysis_keyframes_are_used_as_evidence_and_timing_anchors()
 ASSERT default_generation_does_not_materialize_or_edit_pose_assets()
 ASSERT analysis_candidates_do_not_enter_generation_directly()
 ASSERT only_confirmed_pose_set_entries_enter_generation()
@@ -565,14 +593,11 @@ ASSERT failed_canceled_or_fallback_results_are_reported_as_returned()
 ## Root path and path-angle constraints / Root 路径统一采样
 
 `root_path` 与 `path.start_angle/path.end_angle` 使用同一条
-稀疏 Root2D 约束管线。两者的区别仅在路径采样对象：
+稀疏 Root2D 约束管线。`root_path` 在生成约束中只产生起点和终点两个样本；
+中间路径形状由生成器连续解算，不展开为每帧或自适应的中间约束。两者的区别仅在路径采样对象：
 
 ```pseudo
-sample_frames = union(
-    clip_start_frame,
-    clip_end_frame,
-    frames_already_containing_root_constraints
-)
+sample_frames = [clip_start_frame, clip_end_frame]
 
 if ROOT_PATH:
     path_samples = sample_animationclip_root_trajectory(root_path.source_clip)
@@ -584,10 +609,10 @@ if PATH_ANGLE_OVERRIDE:
         path.end_angle
     )
 
-emit_one_sparse_root2d_constraint(path_samples, sample_frames)
+emit_two_endpoint_root2d_constraints(path_samples, sample_frames)
 ```
 
-路径约束默认只在起点、终点和当前 Clip 已有约束帧采样；固定 heading
+路径约束默认只在起点和终点采样；固定 heading
 覆盖是独立选项，只有显式启用时才可按其采样间隔增加帧。不得把路径默认展开为
 每一帧一个 Root2D 约束。路径和姿态均应通过实际 `AnimationClip` 采样。PathAngle
 的第一遍生成结果在最终 Clip 写回前，应先物化为临时 `AnimationClip`（或使用等价
