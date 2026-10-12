@@ -46,7 +46,7 @@ runtime/raw composition rules are defined in [`constraints.md`](constraints.md).
 
 每次生成接受后都会返回非阻断的 `check`。检查由 Editor 层共享服务执行，因此 Timeline、命令和其他 generator 使用同一套规则：`root_trajectory` 检查 Root2D 的 XZ/heading 与 FullBody 的 root（含可用 Y）连续性，`constraint_overlap` 检查同帧 root 描述冲突，`effectors` 检查 RootEffect 以及 FullBody 中有效的手脚目标。速度超过 7 m/s、加速度超过 5 m/s² 或约束之间出现跳变时，状态为 `warning`，任务仍会继续。`blocking` 仅用于协议级阻断，warning 不会设置为 true。
 
-Command In/Out rejects insufficient source ranges, too many samples for distinct model frames, overlapping inside windows, same-frame explicit constraints, cross-character sources, loop generation, ARDY, and requests exceeding the model frame limit including context. These checks do not silently shorten or downgrade the request. Acceptance and `kimodo_get_generation` return `inout_sampling`: source-local and Timeline-global 60 FPS sample frames, output/runtime model frames, padding counts, and the exclusive model-frame crop range. The output retains the requested duration. This metadata verifies sampling and transport, not visual seam quality. Loop is enabled only by the explicit `loop` argument; prompt wording is never parsed as a loop flag.
+Command In/Out rejects insufficient source ranges, too many samples for distinct model frames, overlapping inside windows, same-frame explicit constraints, cross-character sources, loop generation, ARDY, and requests exceeding the model frame limit including context. These checks do not silently shorten or downgrade the request. The completed `kimodo_get_generation` response returns `inout_sampling`: source-local and Timeline-global 60 FPS sample frames, output/runtime model frames, padding counts, and the exclusive model-frame crop range. The output retains the requested duration. This metadata verifies sampling and transport, not visual seam quality. Loop is enabled only by the explicit `loop` argument; prompt wording is never parsed as a loop flag.
 
 Every command's help entry includes `examples`. Replace illustrative names and request IDs with actual returned handles before executing them.
 
@@ -406,9 +406,9 @@ function execute_generate_skill(request):
     GENERATION_COMPLETED = YES
     LAST_COMPLETED_SEED = state.seed
     generated_ref = {
-        character: character,
-        clip: state.animation,
-        path: state.path
+        character: state.clip.character,
+        clip: state.clip.name,
+        asset_path: state.clip.asset_path
     }
 
     runtime_payload = {

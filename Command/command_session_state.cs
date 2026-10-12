@@ -969,7 +969,6 @@ namespace KimodoUnityBridge.Command
                 return Ok(new JObject
                 {
                     ["analysis_schema_version"] = AnalysisContractVersion,
-                    ["picture"] = picture.DeepClone(),
                     ["clip"] = BuildAnimationAnalyzeClipResult(subject),
                     ["pictures"] = BuildPublicPictureMetadata(pictures, subject)
                 });
@@ -985,7 +984,6 @@ namespace KimodoUnityBridge.Command
                 ["name"] = subject.Animation.Name,
                 ["start_timeline_frame_60"] = subject.StartFrame,
                 ["end_timeline_frame_60_exclusive"] = subject.EndFrameExclusive,
-                ["analysis_schema_version"] = AnalysisContractVersion,
                 ["analysis_mode"] = humanoid ? "humanoid" : "mesh",
                 ["phase_track_version"] = humanoid
                     ? subject.Record.Analysis?.Value<string>("phase_track_version") ?? string.Empty
@@ -1016,20 +1014,11 @@ namespace KimodoUnityBridge.Command
         {
             if (pictures == null) return new JObject();
             JObject result = (JObject)pictures.DeepClone();
-            int durationFrames = Math.Max(1, subject.EndFrameExclusive - subject.StartFrame);
-            foreach (JObject section in new[]
-            {
-                result["title"] as JObject,
-                result["header"] as JObject
-            }.Where(item => item != null).Concat((result["headers"] as JArray ?? new JArray()).OfType<JObject>()))
-            {
-                if (section.Property("duration_seconds") != null)
-                {
-                    section.Remove("duration_seconds");
-                    section["duration_frames"] = durationFrames;
-                }
-            }
-
+            // Keep the public picture result focused on render evidence. Older
+            // cached records may still contain the legacy title/header copies.
+            result.Remove("title");
+            result.Remove("header");
+            result.Remove("headers");
             foreach (JObject image in (result["images"] as JArray ?? new JArray()).OfType<JObject>())
             {
                 if (image["description"] is not JObject description) continue;

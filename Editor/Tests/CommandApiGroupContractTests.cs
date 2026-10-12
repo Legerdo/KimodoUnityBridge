@@ -5,6 +5,8 @@ using System.Reflection;
 using KimodoUnityBridge.Command;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
+using UnityEditor;
+using UnityEngine;
 
 namespace KimodoUnityBridge.Command.Tests
 {
@@ -140,6 +142,152 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(sceneContext["inputSchema"]?["additionalProperties"]?.Value<bool>(), Is.False);
             Assert.That(sceneContext["description"]?.Value<string>(), Does.Contain("authoritative source"));
             Assert.That(Tool(document, "session.clear")["inputSchema"]["required"], Is.Null.Or.Empty);
+        }
+
+        [Test]
+        [Category("Other")]
+        public void EveryCommand_PublishesItsTopLevelOutputContract()
+        {
+            JObject document = Definitions();
+            foreach (JObject command in ((JArray)document["tools"]).Values<JObject>())
+            {
+                JObject output = command["outputSchema"] as JObject;
+                Assert.That(output, Is.Not.Null, command.Value<string>("name"));
+                Assert.That(output["properties"]?["ok"]?.Value<string>("type"), Is.EqualTo("boolean"));
+                Assert.That(output["properties"]?["error"], Is.Not.Null);
+                CollectionAssert.Contains(output["required"].Values<string>(), "ok");
+            }
+
+            JObject generate = Tool(document, "kimodo_generate_animation");
+            Assert.That(generate["outputSchema"]?["properties"]?["request_id"], Is.Not.Null);
+            Assert.That(generate["outputSchema"]?["properties"]?["check"], Is.Not.Null);
+            Assert.That(generate["outputSchema"]?["properties"]?["warnings"]?["type"]?.Value<string>(), Is.EqualTo("array"));
+            Assert.That(generate["outputSchema"]?["properties"]?["model"], Is.Null);
+            Assert.That(generate["outputSchema"]?["properties"]?["constraints"], Is.Null);
+
+            JObject install = Tool(document, "kimodo_install_server");
+            CollectionAssert.AreEquivalent(
+                new[] { "ok", "error", "request_id", "status" },
+                ((JObject)install["outputSchema"]["properties"]).Properties().Select(property => property.Name));
+
+            JObject poll = Tool(document, "kimodo_get_generation");
+            Assert.That(poll["outputSchema"]?["properties"]?["clip"], Is.Not.Null);
+            Assert.That(poll["outputSchema"]?["properties"]?["asset_path"], Is.Null);
+            Assert.That(poll["outputSchema"]?["properties"]?["clip"]?["properties"]?["asset_path"]?.Value<string>("type"), Is.EqualTo("string"));
+            Assert.That(poll["outputSchema"]?["properties"]?["clip"]?["properties"]?["end_timeline_frame_60_exclusive"]?.Value<string>("type"), Is.EqualTo("integer"));
+            Assert.That(poll["outputSchema"]?["properties"]?["clip"]?["properties"]?["duration_frames"], Is.Null);
+
+            JObject cancel = Tool(document, "kimodo_cancel_generation");
+            CollectionAssert.AreEquivalent(
+                new[] { "ok", "error", "request_id", "status", "stage", "message", "canceled", "clip" },
+                ((JObject)cancel["outputSchema"]["properties"]).Properties().Select(property => property.Name));
+
+            JObject analyze = Tool(document, "animation_analyze");
+            Assert.That(analyze["outputSchema"]?["properties"]?["picture"], Is.Null);
+            Assert.That(analyze["outputSchema"]?["properties"]?["clip"]?["properties"]?["analysis_schema_version"], Is.Null);
+            Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["title"], Is.Null);
+            Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["header"], Is.Null);
+            Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["headers"], Is.Null);
+
+            JObject error = (JObject)poll["outputSchema"]["properties"]["error"];
+            Assert.That(error.Value<string>("type"), Is.EqualTo("object"));
+            Assert.That(error["oneOf"], Is.Null);
+
+            Assert.That(Tool(document, "pose_set_root_transform").Value<string>("description"), Does.Contain("Compatibility alias"));
+            Assert.That(Tool(document, "pose_set_muscle").Value<string>("description"), Does.Contain("Compatibility alias"));
+        }
+
+        [Test]
+        [Category("Other")]
+        public void PackagedHelpJson_MatchesLiveOutputSchemas()
+        {
+            const string helpPath = "Packages/com.unity.kimodo_unity_motion_tools/Command/help.json";
+            TextAsset help = AssetDatabase.LoadAssetAtPath<TextAsset>(helpPath);
+            Assert.That(help, Is.Not.Null, helpPath);
+            JObject packaged = JObject.Parse(help.text);
+            JObject live = Definitions();
+
+            foreach (JObject command in ((JArray)live["tools"]).Values<JObject>())
+            {
+                JObject packagedCommand = Tool(packaged, command.Value<string>("name"));
+                Assert.That(
+                    JToken.DeepEquals(command["outputSchema"], packagedCommand["outputSchema"]),
+                    Is.True,
+                    command.Value<string>("name"));
+            }
+        }
+
+        [Test]
+        [Category("Generation")]
+        public void AsyncResponseNormalization_RemovesEchoAndUsesOneLifecycleShape()
+        {
+            Type context = typeof(command_dispatcher).Assembly.GetType("KimodoUnityBridge.Command.command_context");
+            MethodInfo installNormalizer = context.GetMethod("NormalizeInstallStatus", BindingFlags.Static | BindingFlags.NonPublic);
+            MethodInfo generationNormalizer = context.GetMethod("NormalizeGenerationStatus", BindingFlags.Static | BindingFlags.NonPublic);
+            MethodInfo cancellationNormalizer = context.GetMethod("BuildCancellationStatus", BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(installNormalizer, Is.Not.Null);
+            Assert.That(generationNormalizer, Is.Not.Null);
+            Assert.That(cancellationNormalizer, Is.Not.Null);
+
+            var installSource = new JObject
+            {
+                ["task_id"] = "install:123",
+                ["status"] = "loading",
+                ["progress"] = "0/0",
+                ["eta_seconds"] = 30
+            };
+            JObject install = (JObject)installNormalizer.Invoke(null, new object[] { installSource, "install:123" });
+            Assert.That(install.Value<string>("request_id"), Is.EqualTo("install:123"));
+            Assert.That(install.Value<string>("status"), Is.EqualTo("running"));
+            Assert.That(install["task_id"], Is.Null);
+            Assert.That(install["progress"], Is.Null);
+
+            var completedSource = new JObject
+            {
+                ["status"] = "completed",
+                ["error"] = string.Empty,
+                ["prompt"] = "walk",
+                ["seed"] = 123,
+                ["path"] = "Assets/Walk.anim",
+                ["animation"] = "Walk",
+                ["character"] = "Ada",
+                ["start_timeline_frame_60"] = 240,
+                ["duration_frames"] = 120,
+                ["inout_sampling"] = new JObject { ["mode"] = "outside" }
+            };
+            JObject completed = (JObject)generationNormalizer.Invoke(null, new object[] { completedSource, "request-123", false });
+            Assert.That(completed.Value<string>("request_id"), Is.EqualTo("request-123"));
+            Assert.That(completed["prompt"], Is.Null);
+            Assert.That(completed.Value<int>("seed"), Is.EqualTo(123));
+            Assert.That(completed["path"], Is.Null);
+            Assert.That(completed["animation"], Is.Null);
+            Assert.That(completed["error"], Is.Null);
+            Assert.That(completed["clip"]?.Value<string>("name"), Is.EqualTo("Walk"));
+            Assert.That(completed["clip"]?.Value<string>("asset_path"), Is.EqualTo("Assets/Walk.anim"));
+            Assert.That(completed["clip"]?.Value<int>("end_timeline_frame_60_exclusive"), Is.EqualTo(360));
+            Assert.That(completed["clip"]?["duration_frames"], Is.Null);
+            Assert.That(completed["inout_sampling"]?["mode"]?.Value<string>(), Is.EqualTo("outside"));
+
+            JObject canceled = (JObject)cancellationNormalizer.Invoke(null, new object[]
+            {
+                completed,
+                "request-123",
+                true
+            });
+            CollectionAssert.AreEquivalent(
+                new[] { "request_id", "status", "stage", "message", "canceled", "clip" },
+                canceled.Properties().Select(property => property.Name));
+            Assert.That(canceled.Value<bool>("canceled"), Is.True);
+            Assert.That(canceled["clip"]?["end_timeline_frame_60_exclusive"]?.Value<int>(), Is.EqualTo(360));
+
+            JObject failed = (JObject)generationNormalizer.Invoke(null, new object[]
+            {
+                new JObject { ["status"] = "failed", ["error"] = "backend unavailable" },
+                "request-456",
+                false
+            });
+            Assert.That(failed["error"]?.Value<string>("code"), Is.EqualTo("generation_failed"));
+            Assert.That(failed["error"]?.Value<string>("message"), Is.EqualTo("backend unavailable"));
         }
 
         private static JObject Definitions()

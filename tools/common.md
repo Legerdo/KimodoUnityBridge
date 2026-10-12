@@ -136,8 +136,12 @@ conflicting action, such as sitting while the requested semantic is standing.
 ## Async tasks
 
 - `kimodo_install_server` 与 `kimodo_generate_animation` 都返回 `request_id`；保存它并按固定间隔轮询 `kimodo_get_generation`。
-- 安装终态为 `done`、`error`；生成终态为 `completed`、`failed`、`canceled`。安装任务当前不能取消，生成任务可用 `kimodo_cancel_generation` 取消。
-- 每次状态查询以 `progress`、`eta_seconds` 和 `message` 为进度依据；不自行重新估算剩余时间。
+- 安装和生成都使用 `accepted`、`running`、`completed`、`failed` 状态；生成任务还可能为 `canceled`。安装任务当前不能取消，生成任务可用 `kimodo_cancel_generation` 取消。
+- 安装受理只返回 `request_id` 和 `status`；生成受理返回这两个字段以及非阻断 `check` 和可选 `warnings`，不会重复回显模型或约束参数。
+- 每次状态查询以 `progress_current`、`progress_total`、`eta_seconds` 和 `message` 为进度依据；后端原始进度只在 `backend_progress` 中保留，不自行重新估算剩余时间。
+- `kimodo_cancel_generation` 只返回取消状态、简短消息和必要的失败信息；要查看完整进度或生成诊断时，再按 `request_id` 调用 `kimodo_get_generation`。
+- 命令失败使用 `ok=false` 和 `error={code,message,details?}`；异步任务失败仍是成功的状态查询响应（`ok=true`），任务状态为 `failed` 并携带同样的 `error` 结构。
+- `kimodo_cancel_generation` 只适用于生成任务，因此不接受安装任务的 `install:` request_id。
 - 超时、过期 request 或未知状态按未验证/失败报告，不无限重试。
 - assembly reload、Editor 退出、切换场景和进入 Play Mode 导致的取消必须如实保留。
 - 自动修正最多一次；修正结果是新的派生 Clip，原完成结果必须保留。
@@ -148,21 +152,25 @@ conflicting action, such as sitting while the requested semantic is standing.
 - `animation_analyze` 返回的 `clip.root_trajectory.path` 是可复用的 `{track,index}` Root Path
   引用；它只在生成约束的起始帧和结束帧生成 Root2D 约束。普通关键帧 Pose 仍必须来自
   `pose_get`，不能把分析结果自动当成生成约束。
-- 生成结果的 `path` 是 Unity 资产元数据，不是场景 Clip handle；若返回中没有派生资产路径，不自行推断。
+- `kimodo_get_generation` 完成后返回一个 `clip` 对象；其中 `asset_path` 是 Unity 资产元数据，不是场景 Clip handle。若返回中没有派生资产路径，不自行推断。
 
 ## Report envelope
 
-每个工具返回统一外壳：
+每个工具返回统一的最小外壳：
 
 ```text
 {
-  result,
-  output,
-  criteria,
-  evidence,
-  unverified,
-  runtime_warnings
+  ok,
+  error?,
+  ...domain_fields
 }
 ```
 
-工具可以附加专属字段，例如 comparison 的候选胜负、generation 的 request_id，或 pose 的 `{track,index}`。
+命令目录的 `outputSchema` 描述各命令的领域字段。命令失败时 `ok=false` 并返回
+`error={code,message,details?}`；异步任务本身仍以 `ok=true` 返回状态，任务失败时状态为
+`failed` 并带有同样的 `error` 对象。工具编排层可以在更外层增加 `result`、`evidence` 和
+`unverified` 报告字段，但这些不是 Command 返回协议的一部分。
+
+`animation_analyze` 的版本号只出现在响应顶层；Clip 时间范围统一使用
+`start_timeline_frame_60` 和 `end_timeline_frame_60_exclusive`。图片请求仍通过输入参数
+`picture` 提交，返回的渲染结果统一放在 `pictures`。

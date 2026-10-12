@@ -82,7 +82,182 @@ namespace KimodoUnityBridge.Command
                 ["name"] = name,
                 ["description"] = description,
                 ["inputSchema"] = inputSchema,
+                ["outputSchema"] = BuildCommandOutputSchema(name),
                 ["examples"] = BuildCommandExamples(name)
+            };
+        }
+
+        private static JObject BuildCommandOutputSchema(string command)
+        {
+            var properties = new JObject
+            {
+                ["ok"] = new JObject { ["type"] = "boolean" },
+                ["error"] = new JObject
+                {
+                    ["description"] = "Optional command error. Command errors use {code, message, details?}; asynchronous job failures include this object while the poll command itself succeeds.",
+                    ["type"] = "object",
+                    ["properties"] = new JObject
+                    {
+                        ["code"] = new JObject { ["type"] = "string" },
+                        ["message"] = new JObject { ["type"] = "string" },
+                        ["details"] = new JObject { ["type"] = "object" }
+                    },
+                    ["required"] = new JArray("code", "message"),
+                    ["additionalProperties"] = true
+                }
+            };
+
+            string[] fields = command switch
+            {
+                HelpCommand => new[] { "manual", "usage", "execution_model", "routing", "handles", "workflow", "commands", "constraints", "constraint_rules", "configs", "count" },
+                SceneContextCommand => new[] { "scene", "scene_name", "director", "directors", "command_context_director", "playable_asset", "playable_asset_path", "duration_frames_60", "frame_rate", "current_frame_60", "characters" },
+                InstallServerCommand => new[] { "request_id", "status" },
+                AnimationAnalyzeCommand => new[] { "analysis_schema_version", "clip", "pictures" },
+                TransformCaptureCommand => new[] { "image_path", "width", "height", "tile_size", "tiles", "source", "targets", "evaluated_joints_world" },
+                RetargetAnimationCommand => new[] { "retargeted", "source_character", "character", "animation" },
+                GenerateAnimationCommand => new[] { "request_id", "status", "check", "warnings" },
+                PoseGetCommand => new[] { "pose", "source", "data" },
+                PoseSetCommand or PoseSetRootTransformCommand or PoseSetMuscleCommand => new[] { "pose", "data" },
+                GetGenerationCommand => new[] { "request_id", "status", "stage", "message", "started_at_utc", "estimated_completion_utc", "eta_seconds", "progress_current", "progress_total", "progress_rate", "backend_progress", "runtime_root", "runtime_version", "install_mode", "server_connected", "clip", "seed", "analysis", "constraint_loss", "inout_sampling", "target_alive", "backend_request_json" },
+                CancelGenerationCommand => new[] { "request_id", "status", "stage", "message", "canceled", "clip" },
+                SessionClearCommand => new[] { "cleared", "name", "destroyed_context_count", "recreated_on_next_command" },
+                _ => Array.Empty<string>()
+            };
+
+            foreach (string field in fields)
+            {
+                if (properties.Property(field) != null) continue;
+                properties[field] = BuildCommandOutputFieldSchema(command, field);
+            }
+
+            return new JObject
+            {
+                ["type"] = "object",
+                ["description"] = "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
+                ["properties"] = properties,
+                ["required"] = new JArray("ok"),
+                ["additionalProperties"] = true
+            };
+        }
+
+        private static JObject BuildCommandOutputFieldSchema(string command, string field)
+        {
+            switch (field)
+            {
+                case "status":
+                    string[] statuses = command == InstallServerCommand || command == GenerateAnimationCommand
+                        ? new[] { "accepted" }
+                        : command == CancelGenerationCommand
+                            ? new[] { "running", "completed", "failed", "canceled" }
+                            : new[] { "accepted", "running", "completed", "failed", "canceled" };
+                    return new JObject { ["type"] = "string", ["enum"] = new JArray(statuses) };
+                case "request_id": case "message": case "usage": case "scene": case "scene_name": case "director":
+                case "command_context_director": case "playable_asset": case "playable_asset_path": case "runtime_root":
+                case "runtime_version": case "install_mode": case "image_path": case "source_character": case "character":
+                case "name": case "asset_path": case "stage": case "started_at_utc": case "estimated_completion_utc":
+                case "backend_progress": case "analysis_schema_version":
+                    return new JObject { ["type"] = "string" };
+                case "width": case "height": case "tile_size": case "duration_frames_60": case "current_frame_60":
+                case "destroyed_context_count": case "duration_frames": case "progress_current": case "progress_total": case "count": case "seed":
+                    return new JObject { ["type"] = "integer" };
+                case "frame_rate":
+                    return new JObject { ["type"] = "number" };
+                case "eta_seconds": case "progress_rate":
+                    return NullableSchema(new JObject { ["type"] = "number" });
+                case "ok": case "retargeted": case "cleared": case "server_connected": case "canceled": case "target_alive":
+                    return new JObject { ["type"] = "boolean" };
+                case "manual":
+                    return new JObject { ["oneOf"] = new JArray(new JObject { ["type"] = "string" }, new JObject { ["type"] = "object" }) };
+                case "animation":
+                    return ObjectSchema("name", "source", "kind", "start_timeline_frame_60", "duration_frames", "segments", "transition");
+                case "clip":
+                    return command == AnimationAnalyzeCommand
+                        ? ObjectSchema("character", "name", "start_timeline_frame_60", "end_timeline_frame_60_exclusive", "analysis_mode", "phase_track_version", "phase_track", "keyframes", "foot_contacts", "root_trajectory", "endpoint_pose_comparison", "motion_profile")
+                        : ObjectSchema("name", "character", "asset_path", "start_timeline_frame_60", "end_timeline_frame_60_exclusive");
+                case "picture": return ObjectSchema("tiles", "output", "environment");
+                case "pictures":
+                {
+                    JObject schema = ObjectSchema("picture", "level", "aspect", "tile_count", "render_version", "image_path", "width", "height", "resolution", "supersample", "images", "tile_paths", "cached", "header_height", "screenshot_generated_at");
+                    schema["properties"]["picture"] = ObjectSchema("tiles", "output", "environment");
+                    return schema;
+                }
+                case "directors": return ArraySchema("object", "object_ref", "hierarchy_path", "name", "enabled", "playable_asset", "timeline_frame_60", "duration_frames_60", "frame_rate");
+                case "characters": return ArraySchema("object", "name", "role", "scene_object", "object_ref", "animator", "timeline_preview", "avatar", "avatar_valid_humanoid", "animations");
+                case "tiles": return ArraySchema("object", "tile", "view", "projection", "transforms", "bounds");
+                case "targets": return ArraySchema("object", "key", "world_position");
+                case "warnings": case "execution_model": case "routing": case "workflow": case "constraints": case "constraint_rules":
+                    return new JObject { ["type"] = "array" };
+                case "world_position": return NumberArraySchema();
+                case "configs": return ArraySchema("object");
+                case "commands": return ArraySchema("object", "name", "description", "required", "outputSchema", "examples");
+                case "backend_request_json":
+                    return new JObject { ["oneOf"] = new JArray(ObjectSchema(), new JObject { ["type"] = "string" }) };
+                case "pose": return ObjectSchema("track", "index");
+                case "source":
+                {
+                    JObject source = ObjectSchema("type", "character", "character_path", "pose", "clip", "frame", "timeline_frame_60", "mode");
+                    source["properties"]["clip"] = NullableSchema(new JObject { ["type"] = "string" });
+                    source["properties"]["frame"] = NullableSchema(new JObject { ["type"] = "integer" });
+                    return source;
+                }
+                case "data": case "check": case "analysis": case "constraint_loss": case "inout_sampling": case "evaluated_joints_world":
+                    return ObjectSchema();
+                default:
+                    return new JObject { ["type"] = "object" };
+            }
+        }
+
+        private static JObject ObjectSchema(params string[] propertyNames)
+        {
+            var properties = new JObject();
+            foreach (string name in propertyNames)
+            {
+                properties[name] = name switch
+                {
+                    "name" or "character" or "source" or "kind" or "asset_path" or "analysis_schema_version" or
+                    "analysis_mode" or "phase_track_version" or "tile" or "view" or "projection" or "key" or "role" or
+                    "scene_object" or "object_ref" or "animator" or "avatar" or "hierarchy_path" or "playable_asset" or
+                    "render_version" or "level" or "aspect" or "image_path" or "output" or "mode" or "path" or "type" or "clip" or "screenshot_generated_at" => new JObject { ["type"] = "string" },
+                    "start_timeline_frame_60" or "end_timeline_frame_60_exclusive" or "duration_frames" or "timeline_frame_60" or
+                    "duration_frames_60" or "tile_count" or "width" or "height" or "resolution" or "supersample" or "header_height" or "index" or "frame" => new JObject { ["type"] = "integer" },
+                    "enabled" or "avatar_valid_humanoid" or "cached" => new JObject { ["type"] = "boolean" },
+                    "frame_rate" => new JObject { ["type"] = "number" },
+                    "segments" or "phase_track" or "keyframes" or "foot_contacts" or "images" or "tile_paths" or "transforms" or "animations" or "tiles" or "headers" => new JObject { ["type"] = "array" },
+                    "root_trajectory" or "endpoint_pose_comparison" or "motion_profile" or "environment" or "bounds" or "timeline_preview" or "outputSchema" or "title" or "header" => new JObject { ["type"] = "object" },
+                    "world_position" => NumberArraySchema(),
+                    "required" or "examples" => new JObject { ["type"] = "array" },
+                    "description" => new JObject { ["type"] = "string" },
+                    _ => new JObject { ["type"] = "object" }
+                };
+            }
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = properties,
+                ["additionalProperties"] = true
+            };
+        }
+
+        private static JObject ArraySchema(string itemType, params string[] itemProperties)
+        {
+            JObject items = itemType == "object" ? ObjectSchema(itemProperties) : new JObject { ["type"] = itemType };
+            return new JObject { ["type"] = "array", ["items"] = items };
+        }
+
+        private static JObject NumberArraySchema()
+        {
+            return new JObject
+            {
+                ["type"] = "array",
+                ["items"] = new JObject { ["type"] = "number" }
+            };
+        }
+
+        private static JObject NullableSchema(JObject schema)
+        {
+            return new JObject
+            {
+                ["oneOf"] = new JArray(schema, new JObject { ["type"] = "null" })
             };
         }
 

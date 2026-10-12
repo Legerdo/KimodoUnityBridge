@@ -5,7 +5,8 @@ description: Create and edit External Pose slots for explicit Humanoid pose cons
 
 # Pose tool / Pose 工具
 
-负责 `pose_get`、`pose_set` 以及按需拆分使用的 `pose_set_root_transform` 和 `pose_set_muscle`。
+负责 `pose_get` 和 `pose_set`。`pose_set_root_transform`、`pose_set_muscle` 仍可兼容调用，
+但它们只是 `pose_set` 的 root-only / muscles-only 别名，新调用统一使用 `pose_set`。
 
 ## Pose loop / Pose 闭环
 

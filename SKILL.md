@@ -66,8 +66,8 @@ if FIRST_USE == YES or UPGRADE == YES or RECOVERY == YES:
     install = kimodo_install_server({})
     install_request_id = install.request_id
     poll kimodo_get_generation({request_id: install_request_id})
-        until status in {"done", "error"}
-    ASSERT status == "done"
+        until status in {"completed", "failed"}
+    ASSERT status == "completed"
 
 # 普通编译、导入或 Editor 重启不重复安装。
 WORKFLOW_READY = (
@@ -156,19 +156,23 @@ function run_kimodo_task(request):
 `analysis_option` 是 generation-time 的轻量关键帧/脚接触分析开关，不是完整
 `animation_analyze`，不参与最终语义判断。
 
+`animation_analyze` 的 `analysis_schema_version` 只在响应顶层出现；时间范围只用 Clip 的
+`start_timeline_frame_60` 与 `end_timeline_frame_60_exclusive`。图片请求放在输入 `picture`，
+返回的渲染证据统一从 `pictures` 读取。
+
 路由至少覆盖 installation、scene context、generation、recognition、comparison、pose 和 retarget；未匹配到能力时才返回 `unsupported` 或 `needs_clarification`。
 
 ## Shared execution rules / 公共执行规则
 
-- 只使用运行时返回的安全角色名、动画名和 `{track,index}` 引用；生成结果的 `path` 是资产元数据，不是场景 Clip handle。
+- 只使用运行时返回的安全角色名、动画名和 `{track,index}` 引用；生成完成结果的 `clip.asset_path` 是资产元数据，不是场景 Clip handle。
 - 不得把伪代码中的能力名称、C# Handler 名称或 Editor pipeline 类型当作 CLI 命令名；命令名必须来自实时 schema。
 - 所有命令都以当前活动场景中用户打开/选中的 `Animator` 所属角色为权威来源；不要从保存的 prefab 路径猜测替代场景对象。
 - 只要生成请求点名动作（例如 walk/run），生成前必须检查当前场景中是否已有语义匹配的角色/动画；修复、改进、替换、续作或变体请求绝不能跳过这一步。请求明确要求沿用、复刻或延续参考 Clip 的路线时，分析后必须传入 `clip.root_trajectory.path` 作为 `root_path`；仅发现同语义 Clip 不代表用户要求复用路径。明确距离/方向的移动任务应使用相应的 path 参数或已知点约束，不能只把它写进 prompt。
 - 视觉结论必须建立在实际打开的返回图像上；静态证据不足时不得报告视觉通过。
 - 已完成 Clip 不覆盖；修正、Retarget 和生成变体均追加派生 Clip。
-- 安装和生成都返回 `request_id`，并通过 `kimodo_get_generation` 轮询。安装终态为 `done` 或 `error`；生成终态为 `completed`、`failed` 或 `canceled`。轮询必须有固定间隔和总超时；过期或未知请求按失败/未验证报告。
+- 安装和生成都返回 `request_id`，并通过 `kimodo_get_generation` 轮询。两者使用 `accepted`、`running`、`completed`、`failed`；生成任务还可能为 `canceled`。轮询必须有固定间隔和总超时；过期或未知请求按失败/未验证报告。
 - assembly reload、Editor 退出、切换场景或进入 Play Mode 导致的取消必须如实报告，不声称自动恢复。
-- 工具报告至少包含 `result`、`output`、`criteria`、`evidence`、`unverified`；工具可附加专属字段。
+- Command 直接返回统一的 `ok`、可选 `error` 和顶层领域字段；工具编排报告才至少包含 `result`、`output`、`criteria`、`evidence`、`unverified`，并可附加专属字段。
 - 请求未声明的 source、target、range、path 或 constraint 不得自行补全；按约束格式决定 `pose` 是否需要提供。
 
 需要 Unity 对象细节时，使用命令返回的路径、角色名、动画名或 `{track,index}` 引用；不读取内部上下文文件。

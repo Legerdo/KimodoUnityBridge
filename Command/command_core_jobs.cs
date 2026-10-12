@@ -228,7 +228,109 @@ namespace KimodoUnityBridge.Command
                 if (reservation.Animation != null)
                 {
                     result["animation"] = reservation.Animation.Name;
+                    result["character"] = reservation.Character != null ? reservation.Character.Name : string.Empty;
                 }
+            }
+            return result;
+        }
+
+        private static JObject NormalizeInstallStatus(JObject source, string requestId)
+        {
+            JObject result = (JObject)source.DeepClone();
+            string status = result.Value<string>("status") ?? string.Empty;
+            string message = result.Value<string>("message") ?? string.Empty;
+            result["request_id"] = requestId;
+            result.Remove("task_id");
+            result.Remove("progress");
+            result["status"] = status.ToLowerInvariant() switch
+            {
+                "queued" => "accepted",
+                "loading" => "running",
+                "done" => "completed",
+                "error" => "failed",
+                _ => status.ToLowerInvariant()
+            };
+            if (string.Equals(status, "error", StringComparison.OrdinalIgnoreCase))
+            {
+                result["error"] = new JObject
+                {
+                    ["code"] = "installation_failed",
+                    ["message"] = message
+                };
+                result.Remove("message");
+            }
+            else
+            {
+                result.Remove("error");
+            }
+            return result;
+        }
+
+        private static JObject NormalizeGenerationStatus(JObject source, string requestId, bool includeRequestJson = false)
+        {
+            JObject result = (JObject)source.DeepClone();
+            result["request_id"] = requestId;
+            result.Remove("task_id");
+            string progress = result.Value<string>("progress") ?? string.Empty;
+            result.Remove("progress");
+            string[] progressParts = progress.Split('/');
+            if (progressParts.Length == 2 &&
+                int.TryParse(progressParts[0], out int progressCurrent) &&
+                int.TryParse(progressParts[1], out int progressTotal))
+            {
+                result["progress_current"] = progressCurrent;
+                result["progress_total"] = progressTotal;
+            }
+            result.Remove("prompt");
+            JToken completedSeed = source["seed"]?.DeepClone();
+            result.Remove("seed");
+            result.Remove("animation");
+            result.Remove("character");
+            result.Remove("path");
+
+            if (!includeRequestJson) result.Remove("backend_request_json");
+
+            if (result["error"] is JValue errorValue && errorValue.Type == JTokenType.String)
+            {
+                string message = errorValue.Value<string>();
+                if (string.IsNullOrWhiteSpace(message))
+                {
+                    result.Remove("error");
+                }
+                else
+                {
+                    result["error"] = new JObject
+                    {
+                        ["code"] = "generation_failed",
+                        ["message"] = message
+                    };
+                }
+            }
+
+            if (string.Equals(result.Value<string>("status"), "completed", StringComparison.OrdinalIgnoreCase))
+            {
+                if (completedSeed != null) result["seed"] = completedSeed;
+                JObject clip = new JObject();
+                if (source.Value<string>("animation") is string name) clip["name"] = name;
+                if (source.Value<string>("character") is string character) clip["character"] = character;
+                if (source.Value<int?>("start_timeline_frame_60") is int startFrame)
+                    clip["start_timeline_frame_60"] = startFrame;
+                if (source.Value<int?>("duration_frames") is int durationFrames)
+                {
+                    if (source.Value<int?>("start_timeline_frame_60") is int clipStart)
+                        clip["end_timeline_frame_60_exclusive"] = clipStart + durationFrames;
+                }
+                string assetPath = source.Value<string>("path");
+                if (!string.IsNullOrWhiteSpace(assetPath)) clip["asset_path"] = assetPath;
+                if (clip.HasValues) result["clip"] = clip;
+            }
+            result.Remove("start_timeline_frame_60");
+            result.Remove("duration_frames");
+            result.Remove("inout_sampling");
+            if (string.Equals(result.Value<string>("status"), "completed", StringComparison.OrdinalIgnoreCase) &&
+                source["inout_sampling"] is JObject inoutSampling)
+            {
+                result["inout_sampling"] = inoutSampling.DeepClone();
             }
             return result;
         }

@@ -24,7 +24,7 @@ namespace KimodoUnityBridge.Command
                 case GenerateAnimationCommand: return new JArray(
                     Example("Generate two seconds and poll the returned request_id.",
                         @"{'character':'<character>','prompt':'Stand still and breathe naturally','duration_frames':120}"),
-                    Example("Continue a source Clip using its final half-second sampled five times. Names must come from the current scene context; the result contains inout_sampling diagnostics.",
+                    Example("Continue a source Clip using its final half-second sampled five times. Names must come from the current scene context; inspect inout_sampling after generation completes.",
                         @"{'character':'<character>','prompt':'Stop walking and stand upright','duration_frames':120,'loop':false,'constraints':[{'inout':{'mode':'outside','in':{'source':{'clip':'<source clip>'},'window_frames':30,'sample_count':5}}}]}"),
                     Example("Use explicit previous/next Clips as context on both sides; crop context from the returned two-second output.",
                         @"{'character':'<character>','prompt':'Reach for the apple and pick it up','duration_frames':120,'loop':false,'constraints':[{'inout':{'in':{'source':{'clip':'<previous clip>'},'window_frames':30,'sample_count':5},'out':{'source':{'clip':'<next clip>'},'window_frames':12,'sample_count':3}}}]}"),

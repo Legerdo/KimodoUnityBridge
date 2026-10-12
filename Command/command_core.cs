@@ -58,10 +58,10 @@ namespace KimodoUnityBridge.Command
                         "Return the current active-scene context JSON. Use this response as the authoritative source for scene characters, Clips, Timeline ranges, and object references.",
                         Properties()),
                     CommandDefinition(InstallServerCommand,
-                        "Start an asynchronous project-local QuickServer installation task. Returns a request_id (install:<guid>) that can be polled with kimodo_get_generation; models and the Python environment are preserved.",
+                        "Start an asynchronous project-local QuickServer installation task. Returns only request_id and status; poll that request with kimodo_get_generation. Models and the Python environment are preserved.",
                         Properties()),
                     CommandDefinition(AnimationAnalyzeCommand,
-                        "Analyze one animation clip at 60 FPS and render graph-space picture evidence. Pass a clips array containing exactly one scene character and one loaded Clip name or Assets/Packages Clip path. The result contains one clip object; temporal positions use absolute Timeline-global 60 FPS frames. External Clips are appended to the character's Kimodo Timeline and never modified.",
+                        "Analyze one animation clip at 60 FPS and render graph-space picture evidence. Pass a clips array containing exactly one scene character and one loaded Clip name or Assets/Packages Clip path. The result contains one clip analysis and one pictures evidence object; temporal positions use absolute Timeline-global 60 FPS frames. External Clips are appended to the character's Kimodo Timeline and never modified.",
                         Properties(
                             RequiredAnalysisClips(),
                             new PropertyDefinition("picture", new JObject
@@ -96,7 +96,7 @@ namespace KimodoUnityBridge.Command
                             Required("target_character", "string", "Target scene character name or object_ref. Session preview objects are rejected."),
                             OptionalOutput())),
                     CommandDefinition(GenerateAnimationCommand,
-                        "Start asynchronous generation for a character in the current scene context. The accepted response includes non-blocking generation checks and must be polled by request_id.",
+                        "Start asynchronous generation for a character in the current scene context. The accepted response contains request_id, status, and non-blocking checks; poll request_id for the completed Clip.",
                         Properties(
                             Required("character", "string", "Scene character name or object_ref. Session preview objects are rejected; use the source scene character."),
                             Required("prompt", "string", "Motion prompt."),
@@ -122,22 +122,22 @@ namespace KimodoUnityBridge.Command
                         "Modify an External Pose slot. Supply root, muscles, effector, or any combination.",
                         PoseSetSchema()),
                     CommandDefinition(PoseSetRootTransformCommand,
-                        "Modify the root transform of an External Pose slot.",
+                        "Compatibility alias for pose_set with a root-only update. Prefer pose_set for new calls.",
                         Properties(
                             RequiredPoseReference("pose"),
                             Required("root", "object", "Root position and rotation."))),
                     CommandDefinition(PoseSetMuscleCommand,
-                        "Modify one or more muscles of an External Pose slot.",
+                        "Compatibility alias for pose_set with a muscles-only update. Prefer pose_set for new calls.",
                         Properties(
                             RequiredPoseReference("pose"),
                             Required("muscles", "object", "Map of muscle channel names to values."))),
                     CommandDefinition(GetGenerationCommand,
-                        "Get status, progress, remaining seconds, and message for an install or generation request. Generated animation metadata and its project-relative asset path are included only after a generation completes.",
+                        "Get status and progress for an install or generation request. A completed generation returns one clip object with its asset_path and Timeline range. include_request_json explicitly opts into the submitted backend payload.",
                         Properties(
                             Required("request_id", "string", "Request id returned by kimodo_install_server or kimodo_generate_animation."),
                             Optional("include_request_json", "boolean", "Include the exact JSON payload sent to QuickServer; defaults to false."))),
                     CommandDefinition(CancelGenerationCommand,
-                        "Cancel an active animation generation request. Installation requests cannot be canceled.",
+                        "Request cancellation of an active animation generation and return its compact lifecycle result. Installation requests cannot be canceled; use kimodo_get_generation for detailed progress and diagnostics.",
                         Properties(
                             Required("request_id", "string", "Generation request id returned by kimodo_generate_animation."),
                             Optional("reason", "string", "Optional cancellation reason."))),
@@ -217,8 +217,8 @@ namespace KimodoUnityBridge.Command
                     {
                         "Commands resolve scene and asset references directly; no public Session lifecycle call is required.",
                         "Pass returned object references to later commands; request_id polls an installation or generation task.",
-                        "Installation and generation are asynchronous: save request_id and poll kimodo_get_generation. Install terminal states are done or error; generation terminal states are completed, failed, or canceled.",
-                        "Generation and analysis return independent asset and evidence references."
+                        "Installation and generation are asynchronous: save request_id and poll kimodo_get_generation. Both operations use accepted, running, completed, and failed states; generation may also be canceled.",
+                        "Generation acceptance returns the request handle, a non-blocking check, and optional warnings. Completion returns the generated Clip metadata and asset path; request details are available only with include_request_json."
                     },
                     ["routing"] = new JArray
                     {
@@ -227,7 +227,7 @@ namespace KimodoUnityBridge.Command
                         Route("install or refresh server", InstallServerCommand, "then " + GetGenerationCommand),
                         Route("generate motion", GenerateAnimationCommand, "then " + GetGenerationCommand),
                         Route("analyze and render motion", AnimationAnalyzeCommand, "returns one composite picture and self-describing tiles"),
-                        Route("materialize or edit a pose", PoseGetCommand, "then pose_set / pose_set_root_transform / pose_set_muscle"),
+                        Route("materialize or edit a pose", PoseGetCommand, "then pose_set"),
                         Route("obtain a reusable root trajectory", AnimationAnalyzeCommand, "then reference root_trajectory.path from a generation root_path constraint"),
                     },
                     ["handles"] = new JObject
@@ -235,12 +235,12 @@ namespace KimodoUnityBridge.Command
                         ["request_id"] = "Returned by kimodo_install_server or kimodo_generate_animation. Pass either to kimodo_get_generation; only generation request ids can be canceled.",
                         ["pictures.image_path"] = "Read the composite PNG returned by animation_analyze.",
                         ["pose"] = "A {track,index} reference returned by pose_get or a pose editing command.",
-                        ["path"] = "A project-relative asset or analysis path returned by a command."
+                        ["clip.asset_path"] = "A project-relative generated animation asset path returned after generation completes."
                     },
                     ["workflow"] = new JArray
                     {
                         new JObject { ["command"] = InstallServerCommand, ["arguments"] = new JObject(), ["save"] = "request_id", ["before"] = "all other Commands" },
-                        new JObject { ["command"] = GetGenerationCommand, ["arguments"] = new JObject { ["request_id"] = "<install_request_id>" }, ["repeat_until"] = "status is done or error" },
+                        new JObject { ["command"] = GetGenerationCommand, ["arguments"] = new JObject { ["request_id"] = "<install_request_id>" }, ["repeat_until"] = "status is completed or failed" },
                         new JObject { ["command"] = GenerateAnimationCommand, ["arguments"] = new JObject { ["character"] = "<character>", ["prompt"] = "stand still and breathe naturally", ["duration_frames"] = 60 }, ["save"] = "request_id" },
                         new JObject { ["command"] = GetGenerationCommand, ["arguments"] = new JObject { ["request_id"] = "<request_id>" }, ["repeat_until"] = "status is completed, failed, or canceled" },
                         new JObject { ["command"] = AnimationAnalyzeCommand, ["arguments"] = new JObject { ["clips"] = new JArray(new JObject { ["character"] = "<character>", ["clip"] = "<completed animation>" }), ["picture"] = new JObject { ["output"] = "both" } }, ["save"] = "pictures.image_path" },
@@ -250,6 +250,7 @@ namespace KimodoUnityBridge.Command
                         ["name"] = item.Value<string>("name"),
                         ["description"] = item.Value<string>("description"),
                         ["required"] = item["inputSchema"]?["required"]?.DeepClone() ?? new JArray(),
+                        ["outputSchema"] = item["outputSchema"]?.DeepClone() ?? new JObject(),
                         ["examples"] = item["examples"]?.DeepClone() ?? new JArray()
                     })),
                     ["constraints"] = constraintManual["constraints"].DeepClone(),
@@ -304,7 +305,7 @@ namespace KimodoUnityBridge.Command
                     "At most one standalone inout entry; in/out each require an explicit completed source Clip. Source character defaults to the generation character and must be the same character.",
                     "In/Out window_frames and source.frame use 60 FPS. Windows round up to model frames; sample_count must fit distinct model frames. One sample uses the seam; multiple samples include both endpoints.",
                     "In/Out rejects short sources, overlapping inside windows, conflicting point samples, unsupported ARDY models, loop generation, and runtime duration above the model limit. It does not silently clamp or downgrade.",
-                    "inout_sampling is returned on acceptance and polling, with source-local and Timeline-global 60 FPS sample frames, output/runtime model frames, model-frame context counts and the exclusive model-frame crop range. Padding/cropping is automatic; the final requested duration is preserved."
+                    "inout_sampling is returned after generation completes, with source-local and Timeline-global 60 FPS sample frames, output/runtime model frames, model-frame context counts and the exclusive model-frame crop range. Padding/cropping is automatic; the final requested duration is preserved."
                 }
             };
         }
@@ -337,8 +338,7 @@ namespace KimodoUnityBridge.Command
                 return Ok(new JObject
                 {
                     ["request_id"] = requestId,
-                    ["status"] = "accepted",
-                    ["message"] = "Server installation accepted."
+                    ["status"] = "accepted"
                 });
             });
         }
@@ -398,7 +398,7 @@ namespace KimodoUnityBridge.Command
                     {
                         if (InstallTasks.TryGetValue(requestValue, out JObject installStatus))
                         {
-                            return Ok(new JObject(installStatus));
+                            return Ok(NormalizeInstallStatus(installStatus, requestValue));
                         }
                     }
                     throw new InvalidOperationException($"Unknown or expired request_id '{requestValue}'.");
@@ -412,7 +412,7 @@ namespace KimodoUnityBridge.Command
                 {
                     JObject persisted = LoadPersistedGenerationJob(session, requestId);
                     persisted["target_alive"] = false;
-                    return Ok(includeRequestJson ? persisted : WithoutBackendRequestJson(persisted));
+                    return Ok(NormalizeGenerationStatus(persisted, requestValue, includeRequestJson));
                 }
                 EnsureGenerationBelongsToSession(record, session);
                 JObject status = BuildStatus(record, includeRequestJson);
@@ -429,17 +429,9 @@ namespace KimodoUnityBridge.Command
                         // Keep the Unity job status as the public lifecycle source of truth.
                         // QuickServer's `done` only means the backend response is ready; the
                         // Unity-side asset write/bake may still be running.
-                        status["task_id"] = serverStatus["task_id"]?.DeepClone() ?? requestValue;
-                        status["progress"] = serverStatus["progress"]?.DeepClone() ?? "0/0";
+                        status["backend_progress"] = serverStatus["progress"]?.DeepClone() ?? "0/0";
                         status["eta_seconds"] = serverStatus["eta_seconds"]?.DeepClone() ?? JValue.CreateNull();
                         status["message"] = serverStatus["message"]?.DeepClone() ?? string.Empty;
-                        status.Remove("stage");
-                        status.Remove("error");
-                        status.Remove("started_at_utc");
-                        status.Remove("estimated_completion_utc");
-                        status.Remove("progress_current");
-                        status.Remove("progress_total");
-                        status.Remove("progress_rate");
                     }
                 }
                 catch
@@ -447,19 +439,8 @@ namespace KimodoUnityBridge.Command
                     // Preserve the local completed result if the server has already exited.
                 }
                 status["target_alive"] = record.Target != null;
-                return Ok(status);
+                return Ok(NormalizeGenerationStatus(status, requestValue, includeRequestJson));
             });
-        }
-
-        private static JObject WithoutBackendRequestJson(JObject status)
-        {
-            var filtered = new JObject();
-            foreach (JProperty property in status.Properties())
-            {
-                if (!string.Equals(property.Name, "backend_request_json", StringComparison.Ordinal))
-                    filtered[property.Name] = property.Value.DeepClone();
-            }
-            return filtered;
         }
 
         public static string CancelGeneration(string argumentsJson)
@@ -472,7 +453,10 @@ namespace KimodoUnityBridge.Command
                 {
                     JObject persisted = LoadPersistedGenerationJob(session, requestId);
                     persisted["canceled"] = false;
-                    return Ok(persisted);
+                    return Ok(BuildCancellationStatus(
+                        NormalizeGenerationStatus(persisted, requestId.ToString("D")),
+                        requestId.ToString("D"),
+                        canceled: false));
                 }
                 EnsureGenerationBelongsToSession(record, session);
                 string reason = arguments.Value<string>("reason")?.Trim();
@@ -482,8 +466,32 @@ namespace KimodoUnityBridge.Command
                 PersistGenerationJobStatus(record.Session);
                 JObject status = BuildStatus(record);
                 status["canceled"] = canceled;
-                return Ok(status);
+                return Ok(BuildCancellationStatus(
+                    NormalizeGenerationStatus(status, requestId.ToString("D")),
+                    requestId.ToString("D"),
+                    canceled));
             });
+        }
+
+        private static JObject BuildCancellationStatus(JObject normalized, string requestId, bool canceled)
+        {
+            var result = new JObject
+            {
+                ["request_id"] = requestId,
+                ["status"] = normalized?.Value<string>("status") ?? string.Empty,
+                ["stage"] = normalized?.Value<string>("stage") ?? string.Empty,
+                ["message"] = normalized?.Value<string>("message") ?? string.Empty,
+                ["canceled"] = canceled
+            };
+            if (normalized?["clip"] != null)
+            {
+                result["clip"] = normalized["clip"].DeepClone();
+            }
+            if (normalized?["error"] != null)
+            {
+                result["error"] = normalized["error"].DeepClone();
+            }
+            return result;
         }
 
         public static string GenerateAnimationAsset(string argumentsJson)
@@ -596,7 +604,6 @@ namespace KimodoUnityBridge.Command
 
                 JObject generationCheck = BuildGenerationCheck(
                     arguments, character, durationFrames, (float)SessionFrameRate, modelName, poseConstraints);
-
                 TimelineGenerationTrace trace = PrepareGenerationTrace(arguments, character, duration);
                 KimodoExternalConstraintRequest inOutConstraints = BuildCommandInOutConstraints(
                     arguments, trace, modelName, frameCount, frameRate, loopRequested, poseConstraints);
@@ -669,62 +676,10 @@ namespace KimodoUnityBridge.Command
 
                 Remember(character.Target, generation, trace);
                 PersistGenerationJobStatus(generation);
-                var startedResponse = new JObject
-                {
-                    ["character"] = trace.Character.Name,
-                    ["animation"] = trace.Animation.Name,
-                    ["output_mode"] = outputMode,
-                    ["model"] = modelName,
-                    ["text_encoder_model"] = KimodoTextEncoderModeProtocol.ToProtocolValue(textEncoderMode),
-                    ["seed"] = seed,
-                    ["check"] = generationCheck
-                };
-                if (trace != null)
-                {
-                    startedResponse["start_timeline_frame_60"] = Mathf.RoundToInt((float)(trace.StartSeconds * SessionFrameRate));
-                    startedResponse["duration_frames"] = Mathf.RoundToInt((float)(trace.DurationSeconds * SessionFrameRate));
-                    if (trace.InOutSampling != null) startedResponse["inout_sampling"] = trace.InOutSampling.DeepClone();
-                }
-                if (loopRequested)
-                {
-                    startedResponse["loop"] = true;
-                    startedResponse["loop_options"] = new JObject
-                    {
-                        ["enabled"] = true,
-                        ["lock_pos"] = new JObject
-                        {
-                            ["x"] = loopLockPositionX,
-                            ["y"] = loopLockPositionY,
-                            ["z"] = loopLockPositionZ
-                        },
-                        ["lock_rot"] = new JObject
-                        {
-                            ["x"] = loopLockRotationX,
-                            ["y"] = loopLockRotationY,
-                            ["z"] = loopLockRotationZ
-                        }
-                    };
-                    startedResponse["loop_source_duration_frames"] = durationFrames;
-                }
-                if (overridePathAngle || overrideHeading)
-                {
-                    var acceptedPath = new JObject();
-                    if (overridePathAngle)
-                    {
-                        acceptedPath["start_angle"] = pathBeginAngleDegrees;
-                        acceptedPath["end_angle"] = pathEndAngleDegrees;
-                    }
-                    if (overridePathDistance) acceptedPath["distance"] = pathDistance;
-                    if (overrideHeading) acceptedPath["heading"] = headingDegrees;
-                    startedResponse["path"] = acceptedPath;
-                }
+                var accepted = new JObject { ["check"] = generationCheck };
                 if (poseWarnings != null && poseWarnings.Count > 0)
-                {
-                    JArray warnings = startedResponse["warnings"] as JArray ?? new JArray();
-                    foreach (string warning in poseWarnings) warnings.Add(warning);
-                    startedResponse["warnings"] = warnings;
-                }
-                return Started(generation, startedResponse);
+                    accepted["warnings"] = new JArray(poseWarnings);
+                return Started(generation, accepted);
             });
         }
 

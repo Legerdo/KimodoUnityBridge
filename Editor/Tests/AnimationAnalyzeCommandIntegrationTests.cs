@@ -80,16 +80,19 @@ namespace KimodoUnityBridge.Command.Tests
                 });
 
                 Assert.That(analysis.Value<string>("analysis_schema_version"), Is.EqualTo("5-command-60-single-clip-v1"));
+                Assert.That(analysis["picture"], Is.Null);
                 Assert.That(analysis["clips"], Is.Null);
                 Assert.That(analysis["pictures"]?.Value<string>("aspect"), Is.EqualTo("16:9"));
                 Assert.That(analysis["pictures"]?.Value<int>("tile_count"), Is.EqualTo(20));
                 Assert.That(analysis["pictures"]?.Value<string>("render_version"), Is.EqualTo("63-height-time-ratio5-dim-hdrp-lights"));
-                Assert.That(analysis["pictures"]?["title"]?["duration_seconds"], Is.Null);
-                Assert.That(analysis["pictures"]?["title"]?["duration_frames"], Is.Not.Null);
+                Assert.That(analysis["pictures"]?["title"], Is.Null);
+                Assert.That(analysis["pictures"]?["header"], Is.Null);
+                Assert.That(analysis["pictures"]?["headers"], Is.Null);
 
                 JObject clipAnalysis = analysis["clip"] as JObject;
                 Assert.That(clipAnalysis?.Value<int>("start_timeline_frame_60"), Is.EqualTo(0));
                 Assert.That(clipAnalysis?.Value<int>("end_timeline_frame_60_exclusive"), Is.GreaterThan(1));
+                Assert.That(clipAnalysis?["analysis_schema_version"], Is.Null);
                 Assert.That(clipAnalysis?.Value<string>("phase_track_version"), Is.EqualTo("1-temporal-cluster-v2-command-60"));
                 JArray phases = clipAnalysis?["phase_track"] as JArray;
                 Assert.That(phases, Is.Not.Null.And.Not.Empty);
