@@ -89,6 +89,17 @@ namespace KimodoUnityBridge.Command.Tests
                 Assert.That(analysis["pictures"]?["header"], Is.Null);
                 Assert.That(analysis["pictures"]?["headers"], Is.Null);
 
+                JObject sceneContext = Require("scene.context", new JObject());
+                Assert.That(sceneContext["session"]?.Value<string>("session_id"), Is.Not.Empty);
+                Assert.That(sceneContext["session"]?.Value<int>("session_revision"), Is.GreaterThan(0));
+                JObject indexedAnalysis = (sceneContext["history"]?["analyses"] as JArray)?.Values<JObject>()
+                    .SingleOrDefault(item => item.Value<string>("analysis_id") == analysis["clip"]?.Value<string>("analysis_id"));
+                Assert.That(indexedAnalysis, Is.Not.Null);
+                Assert.That(indexedAnalysis.Value<string>("animation_id"), Is.Not.Empty);
+                CollectionAssert.Contains(indexedAnalysis["picture_paths"].Values<string>(), analysis["pictures"]?.Value<string>("image_path"));
+                Assert.That((sceneContext["history"]?["animations"] as JArray)?.Values<JObject>()
+                    .Any(item => item.Value<string>("animation_id") == indexedAnalysis.Value<string>("animation_id")), Is.True);
+
                 JObject clipAnalysis = analysis["clip"] as JObject;
                 Assert.That(clipAnalysis?.Value<int>("start_timeline_frame_60"), Is.EqualTo(0));
                 Assert.That(clipAnalysis?.Value<int>("end_timeline_frame_60_exclusive"), Is.GreaterThan(1));

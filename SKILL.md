@@ -1,17 +1,17 @@
 ---
 name: kimodo-unity-bridge
-description: Install KimodoUnityBridge and route Unity animation work through its cooperating capability tools.
+description: Install KimodoUnityBridge and guide Unity animation work through an animation-engineer workflow.
 ---
 
 # KimodoUnityBridge
 
-根 Skill 负责安装门槛、任务入口、命令调用方式、工具编排和统一结果；公共规则见 `tools/common.md`，具体命令参数以实时 schema 为准。
+Use this Skill for animation work in a Unity project with the KimodoUnityBridge package. The root Skill owns the task workflow and shared rules; linked `tools/*.md` files provide detailed procedures. The live command schema and `kimodo_help` own current command parameters and return shapes.
 
-本文件及同目录 `tools/*.md` 是已导入 `com.unity.kimodo_unity_motion_tools` package 的唯一权威 Skill 文档。使用项目入口时，必须先定位该 package 根目录，再按相对路径读取这里的文档；不得使用外部复制的旧工具文档。
+When using a project-installed package, locate its package root and read these documents from that package. Do not rely on stale copied manuals.
 
-## Public command entry / 公共命令入口
+## Command entry
 
-CLI、`exec_editor_script` 和其他外部脚本只使用下面的公共 Editor 入口：
+External scripts and CLI integrations use the public Editor dispatcher:
 
 ```csharp
 using KimodoUnityBridge.Command;
@@ -20,159 +20,66 @@ string schema = command_dispatcher.GetCommandDefinitionsJson();
 string result = command_dispatcher.Invoke(commandName, argumentsJson);
 ```
 
-调用顺序固定为：
+Discover the live schema or call `kimodo_help` before choosing a command. Invoke protocol command names from that schema. Internal handlers, convenience facades, bridge services, and Editor pipelines are not CLI command names. If native capability tools are unavailable, call the dispatcher through `exec_editor_script`.
 
-1. 读取 `GetCommandDefinitionsJson()`，或调用 `kimodo_help` 获取实时命令和 schema。
-2. 使用 schema 中的协议命令名，例如 `kimodo_generate_animation`、`scene.context`。
-3. 将 JSON 参数传给 `command_dispatcher.Invoke(commandName, argumentsJson)`。
-4. 对 JSON 返回值检查 `ok`、`status`、`error` 和 `request_id`。
+## Environment readiness
 
-下面这些名称不是 CLI 的命令入口，不要用它们做命令索引或通过反射调用：
+Before animation work, confirm the package is imported and Unity has completed compilation. Use runtime diagnostics and live model availability to decide whether `kimodo_install_server` is needed; install on first use, upgrade, or a diagnosed broken/missing runtime. Poll its returned request ID to a terminal state. Do not reinstall on every ordinary Editor restart.
 
-- `command_context` 的内部 Handler，例如 `GenerateAnimationAsset`；
-- `command_kimodo` 的便利包装方法；
-- `KimodoBridgeService.GenerateAsync`、`KimodoBridgeCommand.ExecuteAsync`；
-- `KimodoEditorGeneratePipeline.ExecuteAsync` 及其他内部 Editor 管线方法。
+## The four animation-engineer phases
 
-`command_kimodo`、Bridge service 和 Editor pipeline 可以供包内 C# 代码使用，但不替代命令目录，也不保证覆盖全部协议命令。CLI 的稳定标识是 schema 中的命令名，不是 C# 方法名。
+Every animation task is organized into these four phases. Recognition and candidate comparison are supporting methods inside analysis/evaluation, not separate top-level phases.
 
-能力文档中的 `kimodo_generate_animation(args)`、`scene.context(args)` 等写法是协议命令的伪代码表示，不是可直接索引的 C# 方法。若当前环境没有原生能力工具，必须通过 `exec_editor_script` 创建 C# 脚本，并在脚本中调用 `command_dispatcher.Invoke`。
+### 1. Semantic recognition
 
-```pseudo
-# Shared states / 公共状态
-#define YES             1
-#define NO              0
-#define UNKNOWN         -1
-#define NOT_APPLICABLE  -2
+Understand the requested performance before choosing parameters. Identify the action's start state, ordered action beats, transitions, direction, contact or interaction, and ending. Separate explicit requirements from assumptions. Decide whether the task needs travel, a loop, source-Clip continuity, particular body poses, or a target in the environment.
 
-WORKFLOW_READY = UNKNOWN
-```
+Resolve the active scene with `scene.context`. Use its returned character, Clip, Timeline, and object handles as facts. For a named action, or a request to repair, improve, replace, continue, or vary an animation, inspect semantically relevant existing Clips before generation. A matching Clip is evidence, not automatic permission to reuse its path or poses.
 
-## Installation gate / 安装门槛
+Choose a plausible duration from the number and complexity of beats, travel distance, contacts, and requested pacing. Convert duration to `duration_frames` at the public 60 FPS time base. Check average travel speed (`distance / duration`) and whether starts, stops, turns, and contacts have enough time. If a request such as “walk 10 m in 3 seconds” appears implausible, explain the conflict and ask for a decision when it changes the intended result; do not disguise it by silently changing the request. C# performs deterministic range/schema checks and available mechanical warnings, but semantic plausibility remains the AI's responsibility.
 
-```pseudo
-PACKAGE_IMPORTED = project_contains_package()
-UNITY_READY      = unity_import_and_compile_completed()
-FIRST_USE        = project_runtime_has_never_been_initialized()
-UPGRADE          = package_version_changed()
-RECOVERY         = runtime_diagnostics_report_missing_or_broken_components()
+Input combinations are handled without inventing data:
 
-if PACKAGE_IMPORTED != YES:
-    add_package_to_target_unity_project()
+- Prompt only: infer the performance plan from the prompt and confirmed scene facts.
+- Prompt plus Pose source: inspect the Pose and use it only for the requested role.
+- Pose only: clarify the action to animate unless context and the request make it unambiguous.
+- Existing animation only: analyze it and report what it does or what quality question can be answered.
+- Existing animation plus prompt: analyze the source first, then identify the requested change.
+- Existing animation plus Pose and prompt: analyze the source, inspect/confirm the Pose, and use each only for its stated purpose.
 
-wait_until(UNITY_READY == YES)
+For an existing animation, `animation_analyze` accepts exactly one Clip per call. Use `tools/recognition.md` when identifying semantics from evidence; never infer an action from a filename alone.
 
-if FIRST_USE == YES or UPGRADE == YES or RECOVERY == YES:
-    install = kimodo_install_server({})
-    install_request_id = install.request_id
-    poll kimodo_get_generation({request_id: install_request_id})
-        until status in {"completed", "failed"}
-    ASSERT status == "completed"
+### 2. Constraint construction
 
-# 普通编译、导入或 Editor 重启不重复安装。
-WORKFLOW_READY = (
-    PACKAGE_IMPORTED == YES
-    and UNITY_READY == YES
-    and required_project_components_available() == YES
-)
+Translate only explicit requirements and confirmed evidence into constraints. Decide whether the performance needs no constraints, start/end root placement, a path, one or more confirmed Poses, hand/foot effectors, or Clip In/Out context. Do not turn every observation into a constraint.
 
-ASSERT WORKFLOW_READY == YES before animation work
-```
+For existing animations, use analysis to select candidate phase frames. Call `pose_get` at the corresponding absolute Timeline-global 60 FPS frame, inspect the returned Pose, and only then pass its `{track,index}` reference if the user requested that Pose as a generation constraint. A root trajectory is a separate path reference: generation `root_path` creates only start and end root constraints. It does not force the intermediate route. Use [`tools/pose.md`](tools/pose.md) and [`tools/constraints.md`](tools/constraints.md) for exact rules.
 
-## Capability tools / 能力工具
+Before submission, cross-check that the prompt, duration, path, Pose references, and target character agree. Never rely on a model to preserve an omitted structured path or Clip constraint. Never invent a distance, path, source Clip, or Pose.
 
-工具按能力协作，不按单个命令拆分：
+### 3. Animation generation
 
-| Tool | 责任 | 入口文档 |
-|---|---|---|
-| common | 场景上下文、证据、状态和报告公共规则 | `tools/common.md` |
-| scene-context | 记录场景解析与证据边界 | `tools/scene-context.md` |
-| generation | 生成、轮询、取消，以及 Retarget 派生结果 | `tools/generation.md` |
-| recognition | 根据明确语义识别动作 | `tools/recognition.md` |
-| comparison | 在相同证据条件下比较两个候选 | `tools/comparison.md` |
-| pose | 创建、编辑和复用 External Pose | `tools/pose.md` |
-| constraints | 点约束格式、Pose 使用规则、同帧冲突和效应器预检 | `tools/constraints.md` |
+Submit through `kimodo_generate_animation` using live-schema fields. The normal request needs `character` and `prompt`; provide `duration_frames` and structured constraints when the plan requires them. Save the returned `request_id`, poll `kimodo_get_generation` at a fixed interval, and stop at a terminal state or a bounded timeout. Do not resubmit just because a task is still running. Follow [`tools/generation.md`](tools/generation.md) for constraint and Timeline sampling details.
 
-命令目录只在调用边界使用；不要把完整参数结构复制到工具文档中。能力工具负责流程和证据，`Command/help.json` 与实时 `kimodo_help` 负责命令名、参数和返回结构。
+The Command executes the request, records its job state, and performs deterministic validation and non-blocking checks that are implemented. It does not make the full semantic plan on the AI's behalf.
 
-## Orchestration loop / 总编排 Loop
+### 4. Analysis and evaluation
 
-动画任务固定经过“分析提示词 → 构造约束 → 生成动画 → 分析/比较 → 重新构造约束”的
-闭环。第一轮没有参考 Clip 时，分析提示词阶段只解析用户明确写出的动作、阶段、方向、
-接触和结束语义；不能凭经验补写未声明的动作。若请求涉及已有动作，先调用
-`animation_analyze` 分析一个明确的 `character + clip`，再把结构化结果转成候选时序和约束。
+After a generated Clip completes, run the full `animation_analyze` as an AI-orchestrated evaluation step. The command does not automatically run that full analysis. `analysis_option` is only lightweight generation-time keyframe/contact analysis; it is not a substitute. Open returned images before making visual claims, and compare structured evidence against the user's actual requirements.
 
-分析提示词前必须先调用 `scene.context`。该命令返回的 context JSON 是本次 AI 分析的
-唯一场景事实来源：角色、Clip、Timeline 区间、Animator 和对象引用只能使用 JSON 中
-出现的值。不要读取内部 session/context 文件，也不要从保存路径猜测场景对象；若 JSON
-没有足够事实，应报告需要补充场景信息。
+Evaluate action beats, timing, travel, path/heading, contact, pose, ending, and any requested visual quality. Static images cannot prove playback continuity or smooth acceleration; use playback evidence if those criteria matter. Report criteria that cannot be verified. If a specific defect is supported by evidence, make a targeted revision as a new derived Clip, then analyze it again. Preserve completed candidates and use comparison only when choosing among candidates is useful; see [`tools/comparison.md`](tools/comparison.md).
 
-```pseudo
-function run_kimodo_task(request):
-    intent = analyze_prompt_semantics(request)
-    ensure_installation_gate()
+## Session identity and history
 
-    best = NONE
-    no_improvement = 0
-    repeat:
-        # 1. 分析提示词：先确定动作阶段和物理可行的时间预算。
-        # duration_frames 是唯一对外时间单位；没有用户时长时，依据阶段数量、位移
-        # 和接触事件给出保守预算，并检查平均速度/加速度是否可实现。
-        plan = infer_timing_and_feasibility(intent, request.reference_clip)
-        # 2. 构造约束：只把用户明确要求或已确认的分析证据转换为约束。
-        constraints, confirmed_poses = build_confirmed_constraints(plan, request)
-        generated = generate_animation(request, duration_frames=plan.duration_frames,
-                                       constraints=constraints, poses=confirmed_poses)
-        if generated.status != "completed":
-            return unified_report(generated)
+`scene.context` returns the current Session's `session_id`, persisted `session_revision`, and `schema_version`, plus a compact history index of animations, generation requests, and analysis records. Resolving a missing context may initialize and persist a Session; reading an active context does not itself advance the revision. Use these stable IDs and references to distinguish outputs across iterations. `session_revision` is a persisted write counter, not an immutable snapshot, branch, or undo point. Detailed analysis, motion, and image evidence remain in their referenced files; do not copy those payloads into task notes or create another state store.
 
-        # 3. 生成后的首次检查自动执行一次 animation_analyze。
-        analysis = analyze_generated_clip(generated)
-        if best == NONE:
-            best = generated
-            comparison = NOT_APPLICABLE
-        else:
-            # 4. 有候选时在相同证据条件下逐个分析并比较。
-            comparison = compare_candidates(generated, best, request)
-            if comparison.improves_best == YES:
-                best = generated
-                no_improvement = 0
-            else:
-                no_improvement += 1
+Keep only the small working facts needed to coordinate the current task: selected character, source/output Clip IDs, request ID, confirmed Pose/path references, planned duration, and evaluation outcome. These belong to the current AI task orchestration, not to new public command parameters or CLI persistence.
 
-        if analysis_is_acceptable(analysis, request) or no_improvement >= request.max_no_improvement:
-            return unified_report(best, analysis, comparison)
-        # 5. 只根据分析/比较中确认的缺陷重构下一轮约束和时长；不把整份分析
-        # 自动塞回 generation，也不把自由文本当成协议字段。
-        intent, request = revise_plan_from_analysis(analysis, comparison, intent, request)
-```
+## Shared rules
 
-`animation_analyze` 输入使用恰好一个元素的 `clips` 数组，返回单个 `clip`，不是 `clips[]` 输出；时间字段使用全局 60 FPS 帧：
-`start_timeline_frame_60`、`end_timeline_frame_60_exclusive`、
-`anchor_timeline_frame_60` 和 `timeline_frame_60`。`pose_get` 只能接受全局
-`timeline_frame_60`，或无时间的 `scene_pose`／`skeleton_rest_pose`；要采样 Clip 内某一帧，
-先用 Analysis 的 Clip 起始帧加上局部偏移。`clip.root_trajectory.path` 只在生成时形成
-起点和终点 Root2D 约束；关键帧 Pose 必须先经 Pose loop 明确确认。分析输出中的
-`analysis_option` 是 generation-time 的轻量关键帧/脚接触分析开关，不是完整
-`animation_analyze`，不参与最终语义判断。
-
-`animation_analyze` 的 `analysis_schema_version` 只在响应顶层出现；时间范围只用 Clip 的
-`start_timeline_frame_60` 与 `end_timeline_frame_60_exclusive`。图片请求放在输入 `picture`，
-返回的渲染证据统一从 `pictures` 读取。
-
-路由至少覆盖 installation、scene context、generation、recognition、comparison、pose 和 retarget；未匹配到能力时才返回 `unsupported` 或 `needs_clarification`。
-
-## Shared execution rules / 公共执行规则
-
-- 只使用运行时返回的安全角色名、动画名和 `{track,index}` 引用；生成完成结果的 `clip.asset_path` 是资产元数据，不是场景 Clip handle。
-- 不得把伪代码中的能力名称、C# Handler 名称或 Editor pipeline 类型当作 CLI 命令名；命令名必须来自实时 schema。
-- 所有命令都以当前活动场景中用户打开/选中的 `Animator` 所属角色为权威来源；不要从保存的 prefab 路径猜测替代场景对象。
-- 只要生成请求点名动作（例如 walk/run），生成前必须检查当前场景中是否已有语义匹配的角色/动画；修复、改进、替换、续作或变体请求绝不能跳过这一步。请求明确要求沿用、复刻或延续参考 Clip 的路线时，分析后必须传入 `clip.root_trajectory.path` 作为 `root_path`；仅发现同语义 Clip 不代表用户要求复用路径。明确距离/方向的移动任务应使用相应的 path 参数或已知点约束，不能只把它写进 prompt。
-- 视觉结论必须建立在实际打开的返回图像上；静态证据不足时不得报告视觉通过。
-- 已完成 Clip 不覆盖；修正、Retarget 和生成变体均追加派生 Clip。
-- 安装和生成都返回 `request_id`，并通过 `kimodo_get_generation` 轮询。两者使用 `accepted`、`running`、`completed`、`failed`；生成任务还可能为 `canceled`。轮询必须有固定间隔和总超时；过期或未知请求按失败/未验证报告。
-- assembly reload、Editor 退出、切换场景或进入 Play Mode 导致的取消必须如实报告，不声称自动恢复。
-- Command 直接返回统一的 `ok`、可选 `error` 和顶层领域字段；工具编排报告才至少包含 `result`、`output`、`criteria`、`evidence`、`unverified`，并可附加专属字段。
-- 请求未声明的 source、target、range、path 或 constraint 不得自行补全；按约束格式决定 `pose` 是否需要提供。
-
-需要 Unity 对象细节时，使用命令返回的路径、角色名、动画名或 `{track,index}` 引用；不读取内部上下文文件。
+- Trust live schema for names, parameters, and response structure. Check `ok`, `error`, and asynchronous `status`; retain request IDs for polling.
+- Use only handles returned by the current scene context or a command. `clip.asset_path` is asset metadata, not a scene Clip handle.
+- Existing completed Clips are preserved. Corrections, retargets, and variants create derived outputs.
+- Respect command errors and warnings. A warning is evidence to evaluate, not an automatic failure or proof of safety.
+- Be explicit about what was checked and what remains unverified. Do not claim visual or playback success without the corresponding evidence.
+- Read [`tools/common.md`](tools/common.md) for shared evidence and status rules.

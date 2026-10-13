@@ -5,6 +5,10 @@ description: Compare two scene animations under identical visual and structured 
 
 # Comparison tool / Comparison 工具
 
+Comparison is an optional supporting procedure inside phase 4, analysis/evaluation.
+It is not an additional top-level phase and is only useful when multiple candidates
+need to be assessed under the same evidence conditions.
+
 ## Decision program / 决策程序
 
 ```pseudo

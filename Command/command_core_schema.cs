@@ -110,7 +110,7 @@ namespace KimodoUnityBridge.Command
             string[] fields = command switch
             {
                 HelpCommand => new[] { "manual", "usage", "execution_model", "routing", "handles", "workflow", "commands", "constraints", "constraint_rules", "configs", "count" },
-                SceneContextCommand => new[] { "scene", "scene_name", "director", "directors", "command_context_director", "playable_asset", "playable_asset_path", "duration_frames_60", "frame_rate", "current_frame_60", "characters" },
+                SceneContextCommand => new[] { "session", "history", "scene", "scene_name", "director", "directors", "command_context_director", "playable_asset", "playable_asset_path", "duration_frames_60", "frame_rate", "current_frame_60", "characters" },
                 InstallServerCommand => new[] { "request_id", "status" },
                 AnimationAnalyzeCommand => new[] { "analysis_schema_version", "clip", "pictures" },
                 TransformCaptureCommand => new[] { "image_path", "width", "height", "tile_size", "tiles", "source", "targets", "evaluated_joints_world" },
@@ -118,7 +118,7 @@ namespace KimodoUnityBridge.Command
                 GenerateAnimationCommand => new[] { "request_id", "status", "check", "warnings" },
                 PoseGetCommand => new[] { "pose", "source", "data" },
                 PoseSetCommand or PoseSetRootTransformCommand or PoseSetMuscleCommand => new[] { "pose", "data" },
-                GetGenerationCommand => new[] { "request_id", "status", "stage", "message", "started_at_utc", "estimated_completion_utc", "eta_seconds", "progress_current", "progress_total", "progress_rate", "backend_progress", "runtime_root", "runtime_version", "install_mode", "server_connected", "clip", "seed", "analysis", "constraint_loss", "inout_sampling", "target_alive", "backend_request_json" },
+                GetGenerationCommand => new[] { "request_id", "status", "stage", "message", "started_at_utc", "estimated_completion_utc", "eta_seconds", "progress_current", "progress_total", "progress_rate", "backend_progress", "runtime_root", "runtime_version", "install_mode", "server_connected", "clip", "animation_id", "seed", "analysis", "constraint_loss", "inout_sampling", "target_alive", "backend_request_json" },
                 CancelGenerationCommand => new[] { "request_id", "status", "stage", "message", "canceled", "clip" },
                 SessionClearCommand => new[] { "cleared", "name", "destroyed_context_count", "recreated_on_next_command" },
                 _ => Array.Empty<string>()
@@ -168,11 +168,21 @@ namespace KimodoUnityBridge.Command
                     return new JObject { ["type"] = "boolean" };
                 case "manual":
                     return new JObject { ["oneOf"] = new JArray(new JObject { ["type"] = "string" }, new JObject { ["type"] = "object" }) };
+                case "session": return ObjectSchema("session_id", "session_revision", "schema_version");
+                case "history":
+                {
+                    JObject schema = ObjectSchema("animations", "generations", "analyses");
+                    schema["properties"]["animations"] = ArraySchema("object", "animation_id", "name", "character", "source", "kind", "start_timeline_frame_60", "duration_frames", "segments", "transition");
+                    schema["properties"]["generations"] = ArraySchema("object", "request_id", "animation_id", "character", "animation", "status", "stage", "message", "error", "started_at_utc", "updated_at_utc");
+                    schema["properties"]["analyses"] = ArraySchema("object", "analysis_id", "session_id", "character", "animation_id", "animation_name", "input_signature", "created_at_utc", "analysis_path", "picture_paths");
+                    schema["properties"]["analyses"]["items"]["properties"]["picture_paths"] = ArraySchema("string");
+                    return schema;
+                }
                 case "animation":
-                    return ObjectSchema("name", "source", "kind", "start_timeline_frame_60", "duration_frames", "segments", "transition");
+                    return ObjectSchema("animation_id", "name", "character", "source", "kind", "start_timeline_frame_60", "duration_frames", "segments", "transition");
                 case "clip":
                     return command == AnimationAnalyzeCommand
-                        ? ObjectSchema("character", "name", "start_timeline_frame_60", "end_timeline_frame_60_exclusive", "analysis_mode", "phase_track_version", "phase_track", "keyframes", "foot_contacts", "root_trajectory", "endpoint_pose_comparison", "motion_profile")
+                        ? ObjectSchema("analysis_id", "session_id", "character", "name", "start_timeline_frame_60", "end_timeline_frame_60_exclusive", "analysis_mode", "phase_track_version", "phase_track", "keyframes", "foot_contacts", "root_trajectory", "endpoint_pose_comparison", "motion_profile")
                         : ObjectSchema("name", "character", "asset_path", "start_timeline_frame_60", "end_timeline_frame_60_exclusive");
                 case "picture": return ObjectSchema("tiles", "output", "environment");
                 case "pictures":
@@ -181,8 +191,17 @@ namespace KimodoUnityBridge.Command
                     schema["properties"]["picture"] = ObjectSchema("tiles", "output", "environment");
                     return schema;
                 }
+                case "animations": return ArraySchema("object", "animation_id", "name", "character", "source", "kind", "start_timeline_frame_60", "duration_frames", "segments", "transition");
+                case "generations": return ArraySchema("object", "request_id", "animation_id", "character", "animation", "status", "stage", "message", "error", "started_at_utc", "updated_at_utc");
+                case "analyses": return ArraySchema("object", "analysis_id", "session_id", "character", "animation_id", "animation_name", "input_signature", "created_at_utc", "analysis_path", "picture_paths");
+                case "picture_paths": return ArraySchema("string");
                 case "directors": return ArraySchema("object", "object_ref", "hierarchy_path", "name", "enabled", "playable_asset", "timeline_frame_60", "duration_frames_60", "frame_rate");
-                case "characters": return ArraySchema("object", "name", "role", "scene_object", "object_ref", "animator", "timeline_preview", "avatar", "avatar_valid_humanoid", "animations");
+                case "characters":
+                {
+                    JObject schema = ArraySchema("object", "name", "role", "scene_object", "object_ref", "animator", "timeline_preview", "avatar", "avatar_valid_humanoid", "animations");
+                    schema["items"]["properties"]["animations"] = ArraySchema("object", "animation_id", "name", "source", "kind", "start_timeline_frame_60", "duration_frames", "segments", "transition");
+                    return schema;
+                }
                 case "tiles": return ArraySchema("object", "tile", "view", "projection", "transforms", "bounds");
                 case "targets": return ArraySchema("object", "key", "world_position");
                 case "warnings": case "execution_model": case "routing": case "workflow": case "constraints": case "constraint_rules":
@@ -218,12 +237,13 @@ namespace KimodoUnityBridge.Command
                     "analysis_mode" or "phase_track_version" or "tile" or "view" or "projection" or "key" or "role" or
                     "scene_object" or "object_ref" or "animator" or "avatar" or "hierarchy_path" or "playable_asset" or
                     "render_version" or "level" or "aspect" or "image_path" or "output" or "mode" or "path" or "type" or "clip" or "screenshot_generated_at" => new JObject { ["type"] = "string" },
-                    "start_timeline_frame_60" or "end_timeline_frame_60_exclusive" or "duration_frames" or "timeline_frame_60" or
+                    "session_id" or "schema_version" or "animation_id" or "analysis_id" or "animation_name" or "input_signature" or "created_at_utc" or "analysis_path" or "request_id" or "status" or "stage" or "message" or "error" or "started_at_utc" or "updated_at_utc" => new JObject { ["type"] = "string" },
+                    "session_revision" or "start_timeline_frame_60" or "end_timeline_frame_60_exclusive" or "duration_frames" or "timeline_frame_60" or
                     "duration_frames_60" or "tile_count" or "width" or "height" or "resolution" or "supersample" or "header_height" or "index" or "frame" => new JObject { ["type"] = "integer" },
                     "enabled" or "avatar_valid_humanoid" or "cached" => new JObject { ["type"] = "boolean" },
                     "frame_rate" => new JObject { ["type"] = "number" },
-                    "segments" or "phase_track" or "keyframes" or "foot_contacts" or "images" or "tile_paths" or "transforms" or "animations" or "tiles" or "headers" => new JObject { ["type"] = "array" },
-                    "root_trajectory" or "endpoint_pose_comparison" or "motion_profile" or "environment" or "bounds" or "timeline_preview" or "outputSchema" or "title" or "header" => new JObject { ["type"] = "object" },
+                    "segments" or "phase_track" or "keyframes" or "foot_contacts" or "images" or "tile_paths" or "picture_paths" or "transforms" or "animations" or "generations" or "analyses" or "tiles" or "headers" => new JObject { ["type"] = "array" },
+                    "session" or "history" or "root_trajectory" or "endpoint_pose_comparison" or "motion_profile" or "environment" or "bounds" or "timeline_preview" or "outputSchema" or "title" or "header" => new JObject { ["type"] = "object" },
                     "world_position" => NumberArraySchema(),
                     "required" or "examples" => new JObject { ["type"] = "array" },
                     "description" => new JObject { ["type"] = "string" },

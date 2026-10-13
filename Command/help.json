@@ -263,11 +263,176 @@
                   "type": "boolean"
                 },
                 "animations": {
-                  "type": "array"
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "animation_id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "start_timeline_frame_60": {
+                        "type": "integer"
+                      },
+                      "duration_frames": {
+                        "type": "integer"
+                      },
+                      "segments": {
+                        "type": "array"
+                      },
+                      "transition": {
+                        "type": "object"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": true
             }
+          },
+          "session": {
+            "type": "object",
+            "properties": {
+              "session_id": {
+                "type": "string"
+              },
+              "session_revision": {
+                "type": "integer"
+              },
+              "schema_version": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          },
+          "history": {
+            "type": "object",
+            "properties": {
+              "animations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "animation_id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "character": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "start_timeline_frame_60": {
+                      "type": "integer"
+                    },
+                    "duration_frames": {
+                      "type": "integer"
+                    },
+                    "segments": {
+                      "type": "array"
+                    },
+                    "transition": {
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "generations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "character": {
+                      "type": "string"
+                    },
+                    "animation": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "stage": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "started_at_utc": {
+                      "type": "string"
+                    },
+                    "updated_at_utc": {
+                      "type": "string"
+                    },
+                    "animation_id": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "analyses": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "analysis_id": {
+                      "type": "string"
+                    },
+                    "session_id": {
+                      "type": "string"
+                    },
+                    "character": {
+                      "type": "string"
+                    },
+                    "animation_id": {
+                      "type": "string"
+                    },
+                    "animation_name": {
+                      "type": "string"
+                    },
+                    "input_signature": {
+                      "type": "string"
+                    },
+                    "created_at_utc": {
+                      "type": "string"
+                    },
+                    "analysis_path": {
+                      "type": "string"
+                    },
+                    "picture_paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            },
+            "additionalProperties": true
           }
         },
         "required": [
@@ -463,6 +628,12 @@
               },
               "motion_profile": {
                 "type": "object"
+              },
+              "analysis_id": {
+                "type": "string"
+              },
+              "session_id": {
+                "type": "string"
               }
             },
             "additionalProperties": true
@@ -2497,6 +2668,9 @@
                 "type": "string"
               }
             ]
+          },
+          "animation_id": {
+            "type": "string"
           }
         },
         "required": [

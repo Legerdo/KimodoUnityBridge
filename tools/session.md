@@ -1,25 +1,27 @@
 ---
-name: kimodo-scene-context
-description: Resolve and inspect the automatic context shared by Kimodo commands.
+name: kimodo-session-history
+description: Read the current Kimodo Session identity and its compact artifact history.
 ---
 
-# Scene context / 场景上下文
+# Session identity and history
 
-Kimodo commands resolve the active Unity scene through one automatically managed temporary
-session shared by Timeline evaluation, generation, analysis, and Pose sampling. There is
-no separate public context command.
+`scene.context` is the public entry for current scene facts and Session history. It returns `session.session_id`, `session.session_revision`, and `session.schema_version`. Resolving a missing context can initialize and persist a Session; later reads of an existing context do not themselves advance its revision. The revision advances when persisted Session metadata is written. It identifies the current persisted write revision; it does not identify an immutable snapshot or support checkout/rollback.
 
-- Scene characters are resolved from the active scene and the selected/open `Animator` when available.
-- Protocol character entries use `role: "scene"`; their nested `timeline_preview` entry refers to that same original character and is diagnostic only.
-- Timeline preview binds the original scene Animator. Session preview objects are not valid character handles; pass the scene character `name` or `object_ref`.
-- Existing clips remain immutable; generation, analysis, retargeting, and corrections append derived assets.
-- Returned character and animation names, `{track,index}` pose references, and project-relative paths are the only handles passed between commands.
-- Use the character and animation references returned by the command that resolved them;
-  all subsequent commands use the same session context.
-- Scene changes, Editor reloads, and Play Mode transitions can cancel active generation requests and must be reported.
+The `history` object is a compact index:
 
-`session.clear` destroys the active temporary context GameObjects while retaining saved Timeline and animation assets. It takes no session-name argument; the next command creates exactly one new active context when needed.
+- `animations` identifies Timeline outputs with `animation_id`, character, name, source, and timing.
+- `generations` records request IDs, status, stage, timestamps, and the output `animation_id` when available.
+- `analyses` identifies analysis runs by `analysis_id`, input signature, creation time, animation reference, analysis path, and stored picture paths. The full `animation_analyze` result returns its `analysis_id` and `session_id` in `clip`.
 
-Kimodo rejects every command when more than one active `KimodoSession_*` context exists in a scene. Call `session.clear` to destroy the duplicate contexts before retrying.
+Use the IDs to distinguish candidates and retrieve evidence through existing handles. The index does not copy full analysis payloads, motion data, or image bytes. The persisted `session.json` remains an internal navigation/index artifact under the existing Session storage; it is not a new CLI state layer or a public command argument.
 
-When a session is hydrated, Kimodo binds the saved Timeline track directly to the original scene Animator. Legacy Ghost objects are deactivated and moved under the session's `Archive_GhostPreviews` object; they are not used for preview. Temporary context objects are not cached in the scene.
+Generation status is also written to the existing per-request JSON file under `Generations`. Analysis records and picture evidence are retained by the existing analysis persistence. A context refresh is read-only; it does not create a revision.
+
+`session.clear` destroys transient context GameObjects while retaining saved Timeline and animation assets and their history. When more than one active `KimodoSession_*` exists, commands reject the ambiguous context; use the public help/schema and clear operation according to the current command contract.
+
+## Using history during an animation task
+
+1. Read `scene.context` and record the session identity and current revision for task coordination.
+2. Before revising a result, identify its `animation_id` and relevant generation/analysis IDs. Do not infer parentage from a display name.
+3. After generation and evaluation, read the updated context and compare the new IDs/status with the earlier task facts.
+4. Report the revision and evidence references when useful. Do not treat a higher revision as proof that the animation improved.

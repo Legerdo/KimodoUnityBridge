@@ -980,6 +980,8 @@ namespace KimodoUnityBridge.Command
             bool humanoid = IsHumanoidCharacter(subject.Character);
             var result = new JObject
             {
+                ["analysis_id"] = subject.Record?.Id ?? string.Empty,
+                ["session_id"] = subject.Record?.SessionId ?? string.Empty,
                 ["character"] = subject.Character.Name,
                 ["name"] = subject.Animation.Name,
                 ["start_timeline_frame_60"] = subject.StartFrame,
@@ -1859,6 +1861,12 @@ namespace KimodoUnityBridge.Command
                 ?? authoredDirectors.FirstOrDefault();
             var result = new JObject
             {
+                ["session"] = new JObject
+                {
+                    ["session_id"] = session.Metadata?.sessionId ?? session.Id.ToString("D"),
+                    ["session_revision"] = session.Metadata?.sessionRevision ?? 0,
+                    ["schema_version"] = session.Metadata?.schemaVersion ?? string.Empty
+                },
                 ["scene"] = scene.IsValid() ? scene.path : string.Empty,
                 ["scene_name"] = scene.IsValid() ? scene.name : string.Empty,
                 ["director"] = activeAuthoredDirector != null ? GetSceneHierarchyPath(activeAuthoredDirector.gameObject) : string.Empty,
@@ -1873,7 +1881,18 @@ namespace KimodoUnityBridge.Command
                 ["current_frame_60"] = activeAuthoredDirector != null
                     ? Mathf.RoundToInt((float)(activeAuthoredDirector.time * SessionFrameRate))
                     : 0,
-                ["characters"] = characters
+                ["characters"] = characters,
+                ["history"] = new JObject
+                {
+                    ["animations"] = new JArray(session.Characters.SelectMany(character => character.Animations.Select(animation =>
+                    {
+                        JObject item = DescribeAnimation(animation);
+                        item["character"] = character.Name;
+                        return item;
+                    }))),
+                    ["generations"] = new JArray((session.Metadata?.generations ?? new List<KimodoCommandGenerationMetadata>()).Select(DescribeGeneration)),
+                    ["analyses"] = GetAnalysisHistoryIndex(session)
+                }
             };
             return Ok(result);
         });
@@ -1891,6 +1910,7 @@ namespace KimodoUnityBridge.Command
         {
             var result = new JObject
             {
+                ["animation_id"] = animation.Id.ToString("D"),
                 ["name"] = animation.Name,
                 ["source"] = animation.Source,
                 ["kind"] = animation.Kind,

@@ -10,6 +10,11 @@ opens the returned composite image, and returns one semantic choice plus a
 machine-readable motion profile. Never infer semantics from an asset filename,
 candidate order, clip id, or saliency alone.
 
+In the four-phase Skill, this is a supporting procedure inside analysis/evaluation
+when an existing Clip needs evidence-based classification. Phase 1 interprets the
+user's intent from the request and confirmed scene facts; this file does not create
+an additional top-level workflow phase.
+
 ## Fixed recognition program / 固定识别程序
 
 Recognition uses a closed task set. The caller supplies the semantic alternatives;

@@ -58,6 +58,7 @@ string response = command_dispatcher.Invoke(
 - 只要生成请求指定了动作，先检查当前活动场景中的语义匹配动画；“修复/改进/替换/续作/变体 + 指定动作”绝不能跳过这一步。检查结果要记录为上下文证据，不能把发现的动画自动升级为生成约束。
 - 输入按需绑定当前活动场景中的 `Animator` 或可渲染 Mesh；角色来源不得从保存的 prefab 路径猜测替代。
 - 后续命令只使用运行时返回的安全名称和 `{track,index}` 引用。
+- `scene.context` provides Session identity and a compact history index. Retain `animation_id`, `request_id`, and `analysis_id` to distinguish work across iterations; use `analysis_path`/`picture_paths` as evidence references and avoid copying full payloads into task state.
 - 场景切换、Editor reload 或进入 Play Mode 可能取消活动生成；报告中必须保留该副作用。
 
 ## Evidence

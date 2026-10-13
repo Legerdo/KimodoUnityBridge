@@ -228,6 +228,7 @@ namespace KimodoUnityBridge.Command
                 if (reservation.Animation != null)
                 {
                     result["animation"] = reservation.Animation.Name;
+                    result["animation_id"] = reservation.Animation.Id.ToString("D");
                     result["character"] = reservation.Character != null ? reservation.Character.Name : string.Empty;
                 }
             }
@@ -520,6 +521,7 @@ namespace KimodoUnityBridge.Command
             }
             history.character = status.Value<string>("character") ?? history.character ?? string.Empty;
             history.animation = status.Value<string>("animation") ?? history.animation ?? string.Empty;
+            history.animationId = status.Value<string>("animation_id") ?? history.animationId ?? string.Empty;
             history.status = status.Value<string>("status") ?? string.Empty;
             history.stage = status.Value<string>("stage") ?? string.Empty;
             history.message = status.Value<string>("message") ?? string.Empty;
