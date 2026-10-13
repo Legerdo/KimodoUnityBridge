@@ -24,6 +24,8 @@ namespace KimodoUnityBridge.Command
         public const string InstallServerCommand = "kimodo_install_server";
         public const string GenerateAnimationCommand = "kimodo_generate_animation";
         public const string AnimationAnalyzeCommand = "animation_analyze";
+        public const string MocapVideoAnalysisCommand = "analysis.video";
+        public const string MocapPictureAnalysisCommand = "analysis.picture";
         public const string TransformCaptureCommand = "transform_capture";
         public const string RetargetAnimationCommand = "kimodo_retarget_animation";
         public const string PoseGetCommand = "pose_get";
@@ -38,6 +40,7 @@ namespace KimodoUnityBridge.Command
         private const int MaxRememberedJobs = 128;
         private static readonly Dictionary<Guid, JobRecord> Jobs = new Dictionary<Guid, JobRecord>();
         private static readonly Dictionary<string, JObject> InstallTasks = new Dictionary<string, JObject>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, JObject> MocapAnalysisTasks = new Dictionary<string, JObject>(StringComparer.OrdinalIgnoreCase);
         private static readonly object JobsLock = new object();
         private static readonly Lazy<CommandCatalog> Commands = new Lazy<CommandCatalog>(BuildCommandCatalog, LazyThreadSafetyMode.ExecutionAndPublication);
 
@@ -76,6 +79,20 @@ namespace KimodoUnityBridge.Command
                                 ["maximum"] = 4096,
                                 ["description"] = "Final picture tile resolution in pixels; accepts 64 through 4096. Rendering uses a 2x supersample and downsamples to this size. Defaults to 1920."
                             }, false))),
+                    CommandDefinition(MocapVideoAnalysisCommand,
+                        "Start asynchronous SMPL-X pose estimation for a local video. Poll kimodo_get_generation with the returned request_id; completed analysis returns the raw pose array and coordinate metadata.",
+                        Properties(
+                            Required("video_path", "string", "Absolute path to a local video readable by QuickServer."),
+                            new PropertyDefinition("person", new JObject
+                            {
+                                ["type"] = "string",
+                                ["enum"] = new JArray("left", "right"),
+                                ["description"] = "Select one performer by screen side in a two-person video."
+                            }, false))),
+                    CommandDefinition(MocapPictureAnalysisCommand,
+                        "Start asynchronous SMPL-X pose estimation for a local still image. Poll kimodo_get_generation with the returned request_id; completed analysis returns one pose sample.",
+                        Properties(
+                            Required("image_path", "string", "Absolute path to a local PNG or JPEG readable by QuickServer."))),
                     CommandDefinition(TransformCaptureCommand,
                         "Capture the current scene or an External Pose returned by pose_get together with scene objects, in world space. Returns a four-view image and evaluated joint positions; does not change scene poses.",
                         Properties(
@@ -132,9 +149,9 @@ namespace KimodoUnityBridge.Command
                             RequiredPoseReference("pose"),
                             Required("muscles", "object", "Map of muscle channel names to values."))),
                     CommandDefinition(GetGenerationCommand,
-                        "Get status and progress for an install or generation request. A completed generation returns one clip object with its asset_path and Timeline range. include_request_json explicitly opts into the submitted backend payload.",
+                        "Get status and results for install, generation, or Mocap analysis requests. A completed Mocap analysis returns poses and SMPL-X coordinate metadata at the top level. include_request_json explicitly opts into the submitted generation payload.",
                         Properties(
-                            Required("request_id", "string", "Request id returned by kimodo_install_server or kimodo_generate_animation."),
+                            Required("request_id", "string", "Request id returned by kimodo_install_server, kimodo_generate_animation, analysis.video, or analysis.picture."),
                             Optional("include_request_json", "boolean", "Include the exact JSON payload sent to QuickServer; defaults to false."))),
                     CommandDefinition(CancelGenerationCommand,
                         "Request cancellation of an active animation generation and return its compact lifecycle result. Installation requests cannot be canceled; use kimodo_get_generation for detailed progress and diagnostics.",
@@ -216,23 +233,25 @@ namespace KimodoUnityBridge.Command
                     ["execution_model"] = new JArray
                     {
                         "Commands resolve scene and asset references directly; no public Session lifecycle call is required.",
-                        "Pass returned object references to later commands; request_id polls an installation or generation task.",
-                        "Installation and generation are asynchronous: save request_id and poll kimodo_get_generation. Both operations use accepted, running, completed, and failed states; generation may also be canceled.",
+                        "Pass returned object references to later commands; request_id polls installation, generation, or Mocap analysis tasks.",
+                        "Installation, generation, and Mocap analysis are asynchronous: save request_id and poll kimodo_get_generation. Tasks use accepted, running, completed, and failed states; generation may also be canceled.",
                         "Generation acceptance returns the request handle, a non-blocking check, and optional warnings. Completion returns the generated Clip metadata and asset path; request details are available only with include_request_json."
                     },
                     ["routing"] = new JArray
                     {
                         Route("discover schema or models", HelpCommand),
                         Route("read active scene context", SceneContextCommand),
-                        Route("install or refresh server", InstallServerCommand, "then " + GetGenerationCommand),
+                        Route("reinstall the local server", InstallServerCommand, "then " + GetGenerationCommand),
                         Route("generate motion", GenerateAnimationCommand, "then " + GetGenerationCommand),
+                        Route("analyze a video for SMPL-X poses", MocapVideoAnalysisCommand, "then " + GetGenerationCommand),
+                        Route("analyze a picture for one SMPL-X pose", MocapPictureAnalysisCommand, "then " + GetGenerationCommand),
                         Route("analyze and render motion", AnimationAnalyzeCommand, "returns one composite picture and self-describing tiles"),
                         Route("materialize or edit a pose", PoseGetCommand, "then pose_set"),
                         Route("obtain a reusable root trajectory", AnimationAnalyzeCommand, "then reference root_trajectory.path from a generation root_path constraint"),
                     },
                     ["handles"] = new JObject
                     {
-                        ["request_id"] = "Returned by kimodo_install_server or kimodo_generate_animation. Pass either to kimodo_get_generation; only generation request ids can be canceled.",
+                        ["request_id"] = "Returned by kimodo_install_server, kimodo_generate_animation, analysis.video, or analysis.picture. Pass it to kimodo_get_generation; only generation request ids can be canceled.",
                         ["pictures.image_path"] = "Read the composite PNG returned by animation_analyze.",
                         ["pose"] = "A {track,index} reference returned by pose_get or a pose editing command.",
                         ["clip.asset_path"] = "A project-relative generated animation asset path returned after generation completes."
@@ -352,9 +371,15 @@ namespace KimodoUnityBridge.Command
                 using (KimodoBridgeServerTool.EnterRuntimeMaintenanceScope())
                 {
                     await KimodoBridgeService.Shared.StopAsync(CancellationToken.None);
-                    if (!KimodoBridgeServerTool.RefreshRuntimeRoot())
+                    // Installation is an explicit recovery/bootstrap boundary.  A
+                    // refresh leaves stale setup sentinels and venv paths in a
+                    // copied project runtime, which can make the launcher resolve
+                    // Python from a different project.  Reinstall clears the
+                    // runtime while preserving its models and copies a clean
+                    // package template before warmup.
+                    if (!KimodoBridgeServerTool.ReinstallRuntimeRoot())
                     {
-                        throw new InvalidOperationException("Failed to incrementally install runtime root from package template.");
+                        throw new InvalidOperationException("Failed to reinstall runtime root from package template.");
                     }
                 }
 
@@ -380,7 +405,7 @@ namespace KimodoUnityBridge.Command
                 {
                     task["runtime_root"] = runtimeRoot;
                     task["runtime_version"] = KimodoServerRuntimeUtil.ReadQuickServerVersion(runtimeRoot);
-                    task["install_mode"] = "incremental";
+                    task["install_mode"] = "reinstall";
                     task["server_connected"] = KimodoBridgeService.Shared.IsConnected;
                 }
             }
@@ -402,6 +427,10 @@ namespace KimodoUnityBridge.Command
                         }
                     }
                     throw new InvalidOperationException($"Unknown or expired request_id '{requestValue}'.");
+                }
+                if (requestValue.StartsWith("mocap:", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Ok(GetMocapAnalysisTask(requestValue));
                 }
                 TimelineSessionRecord session = RequireCurrentTimelineSession();
                 if (!Guid.TryParse(requestValue, out Guid requestId))

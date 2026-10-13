@@ -175,6 +175,31 @@ namespace KimodoBridge
                 reconnect: true);
         }
 
+        internal Task<BridgeProtocolResponse> AnalyzeMocapAsync(
+            string host,
+            int port,
+            string kind,
+            string mediaPath,
+            string person,
+            CancellationToken token)
+        {
+            string normalizedKind = (kind ?? string.Empty).Trim().ToLowerInvariant();
+            if (normalizedKind != "video" && normalizedKind != "picture")
+            {
+                throw new ArgumentException("Mocap analysis kind must be video or picture.", nameof(kind));
+            }
+            var request = new JObject
+            {
+                ["cmd"] = normalizedKind == "video" ? "analysis.video" : "analysis.picture",
+                ["media_path"] = mediaPath ?? string.Empty
+            };
+            if (normalizedKind == "video" && !string.IsNullOrWhiteSpace(person))
+            {
+                request["person"] = person;
+            }
+            return SendRequestAsync(host, port, request, null, null, token, reconnect: true);
+        }
+
         internal Task<BridgeProtocolResponse> GenerateAsync(
             string host,
             int port,
@@ -237,6 +262,10 @@ namespace KimodoBridge
                 payload["output_format"] = string.IsNullOrWhiteSpace(request.output_format)
                     ? "kmb_v1"
                     : request.output_format.Trim();
+                if (request.output_mp4)
+                {
+                    payload["output_mp4"] = true;
+                }
                 if (request.duration.HasValue)
                 {
                     float duration = request.duration.Value;

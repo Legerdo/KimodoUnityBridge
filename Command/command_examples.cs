@@ -15,6 +15,10 @@ namespace KimodoUnityBridge.Command
                     @"{'command':'kimodo_generate_animation'}");
                 case SceneContextCommand: return Examples("Read the authoritative active-scene context before choosing characters, Clips, or Timeline references.", @"{}");
                 case InstallServerCommand: return Examples("Install the local server, then poll the returned request_id.", @"{}");
+                case MocapVideoAnalysisCommand: return Examples("Estimate SMPL-X poses from a video, then poll for the pose array.",
+                    @"{'video_path':'C:/data/mocap.mp4','person':'left'}");
+                case MocapPictureAnalysisCommand: return Examples("Estimate one SMPL-X pose from a still image, then poll for the pose array.",
+                    @"{'image_path':'C:/data/pose.jpg'}");
                 case AnimationAnalyzeCommand: return Examples("Analyze one returned Clip; open the returned image to inspect it.",
                     @"{'clips':[{'character':'<character>','clip':'<clip>'}],'picture':{'output':'composite'},'resolution':512}");
                 case RetargetAnimationCommand: return Examples("Retarget a loaded Clip to another scene character.",

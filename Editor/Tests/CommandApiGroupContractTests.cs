@@ -59,6 +59,8 @@ namespace KimodoUnityBridge.Command.Tests
             JObject get = Tool(document, "kimodo_get_generation");
             JObject cancel = Tool(document, "kimodo_cancel_generation");
             JObject analyze = Tool(document, "animation_analyze");
+            JObject videoAnalysis = Tool(document, "analysis.video");
+            JObject pictureAnalysis = Tool(document, "analysis.picture");
             JObject retarget = Tool(document, "kimodo_retarget_animation");
 
             Assert.That(generate["description"]?.Value<string>(), Does.Contain("request_id"));
@@ -72,6 +74,11 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(analyzeClips?["items"]?["properties"]?["clip"], Is.Not.Null);
             Assert.That(analyze["description"]?.Value<string>(), Does.Contain("one scene character"));
             Assert.That(analyze["description"]?.Value<string>(), Does.Contain("Timeline-global 60 FPS frames"));
+            Assert.That(videoAnalysis["inputSchema"]?["properties"]?["video_path"], Is.Not.Null);
+            Assert.That(pictureAnalysis["inputSchema"]?["properties"]?["image_path"], Is.Not.Null);
+            Assert.That(videoAnalysis["inputSchema"]?["properties"]?["person"]?["enum"], Is.Not.Null);
+            Assert.That(videoAnalysis["outputSchema"]?["properties"]?["request_id"], Is.Not.Null);
+            Assert.That(get["outputSchema"]?["properties"]?["poses"]?["items"]?["properties"]?["body_pose_axis_angle"], Is.Not.Null);
             JObject duration = (JObject)generate["inputSchema"]?["properties"]?["duration_frames"];
             Assert.That(duration?.Value<int>("minimum"), Is.EqualTo(1));
             Assert.That(duration?.Value<int>("default"), Is.EqualTo(300));

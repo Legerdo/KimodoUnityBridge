@@ -45,6 +45,7 @@ namespace KimodoBridge
             public string RuntimeRoot = string.Empty;
             public string LauncherPath = string.Empty;
             public bool? EnableKimodoStaticGraph;
+            public string MocapRepositoryPath = string.Empty;
         }
 
         private enum ExistingServerProbeResult
@@ -157,6 +158,19 @@ namespace KimodoBridge
             return RequireDoneResponse(response, "Bridge model list returned no response.", "Bridge model list request failed.");
         }
 
+        internal async Task<JObject> AnalyzeMocapAsync(
+            string kind,
+            string mediaPath,
+            string person,
+            CancellationToken token)
+        {
+            ThrowIfStopRequested();
+            await EnsureConnectedAsync(null, token).ConfigureAwait(false);
+            BridgeProtocolResponse response = await protocolClient.AnalyzeMocapAsync(
+                currentHost, currentPort, kind, mediaPath, person, token).ConfigureAwait(false);
+            return RequireDoneResponse(response, "QuickServer returned no Mocap analysis.", "Mocap analysis failed.");
+        }
+
         public async Task<JObject> GetStatusAsync(string taskId, CancellationToken token = default)
         {
             ThrowIfStopRequested();
@@ -165,7 +179,6 @@ namespace KimodoBridge
                 currentHost, currentPort, taskId, token).ConfigureAwait(false);
             return response?.Header ?? new JObject { ["status"] = "idle" };
         }
-
         internal async Task<KimodoBridgeGenerationResult> GenerateAsync(
             KimodoGenerationRequestDto request,
             Action<string> progress,
@@ -247,9 +260,10 @@ namespace KimodoBridge
                 if (string.Equals(outputFormat, "kmb_v1", StringComparison.OrdinalIgnoreCase))
                 {
                     byte[] payload = response.BinaryPayload ?? Array.Empty<byte>();
+                    byte[] motionPayload = payload;
                     KimodoRawMotionData motionData = null;
-                    if (payload.Length > 0 &&
-                        !KimodoRawMotionUtility.TryParseFlatBuffer(payload, out motionData, out string parseError))
+                    if (motionPayload.Length > 0 &&
+                        !KimodoRawMotionUtility.TryParseFlatBuffer(motionPayload, out motionData, out string parseError))
                     {
                         throw new Exception($"Failed to parse bridge KMB: {parseError}");
                     }
@@ -257,7 +271,8 @@ namespace KimodoBridge
                     return new KimodoBridgeGenerationResult
                     {
                         MotionData = motionData,
-                        MotionBytes = payload,
+                        MotionBytes = motionPayload,
+                        Mp4Path = header?.Value<string>("mp4_path"),
                         MotionFormat = outputFormat,
                         RawStatus = status,
                         Message = string.IsNullOrWhiteSpace(responseMessage) ? "Bridge generation complete." : responseMessage,
@@ -289,6 +304,7 @@ namespace KimodoBridge
                         StartFrame = first?.StartFrame ?? 0,
                         EndFrameExclusive = first?.EndFrameExclusive ?? 0,
                         AnalysisJson = analysisJson,
+                        Mp4Path = header?.Value<string>("mp4_path"),
                         KmbAttachments = attachments
                     };
                 }
@@ -302,6 +318,7 @@ namespace KimodoBridge
                 return new KimodoBridgeGenerationResult
                 {
                     MotionJsonCompact = motionJson,
+                    Mp4Path = header?.Value<string>("mp4_path"),
                     MotionFormat = string.IsNullOrWhiteSpace(outputFormat) ? "json_compact" : outputFormat,
                     RawStatus = status,
                     Message = string.IsNullOrWhiteSpace(responseMessage) ? "Bridge generation complete." : responseMessage,
@@ -503,7 +520,8 @@ namespace KimodoBridge
                         processManager.Start(
                             context.LauncherPath,
                             ownerProcessId: Process.GetCurrentProcess().Id,
-                            enableKimodoStaticGraph: context.EnableKimodoStaticGraph);
+                            enableKimodoStaticGraph: context.EnableKimodoStaticGraph,
+                            mocapRepositoryPath: context.MocapRepositoryPath);
                         ReportProgress(progress, "Bridge process launched.");
                     }
                     else
@@ -1100,9 +1118,11 @@ namespace KimodoBridge
         {
             string runtimeRoot;
             bool? enableKimodoStaticGraph = null;
+            string mocapRepositoryPath = string.Empty;
 #if UNITY_EDITOR
             runtimeRoot = ResolveEditorRuntimeRootOrThrow();
             enableKimodoStaticGraph = ResolveEditorKimodoStaticGraphEnabled();
+            mocapRepositoryPath = KimodoEditorRuntimeHooks.ResolveMocapRepositoryPath();
 #else
             runtimeRoot = KimodoRuntimeBootstrapUtility.EnsureRuntimeRootForCurrentMode(
                 Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "NvlabKimodoQuickServer~")));
@@ -1123,7 +1143,8 @@ namespace KimodoBridge
             {
                 RuntimeRoot = Path.GetFullPath(runtimeRoot),
                 LauncherPath = Path.GetFullPath(launcherPath),
-                EnableKimodoStaticGraph = enableKimodoStaticGraph
+                EnableKimodoStaticGraph = enableKimodoStaticGraph,
+                MocapRepositoryPath = mocapRepositoryPath
             };
         }
 
@@ -1156,3 +1177,4 @@ namespace KimodoBridge
 #endif
     }
 }
+
