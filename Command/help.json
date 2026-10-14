@@ -850,6 +850,157 @@
       ]
     },
     {
+      "name": "analysis.video",
+      "description": "Start asynchronous SMPL-X pose estimation for a local video. Poll kimodo_get_generation with the returned request_id; completed analysis returns the raw pose array and coordinate metadata.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "video_path": {
+            "type": "string",
+            "description": "Absolute path to a local video readable by QuickServer."
+          },
+          "person": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right"
+            ],
+            "description": "Select one performer by screen side in a two-person video."
+          }
+        },
+        "required": [
+          "video_path"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "description": "Estimate SMPL-X poses from a video, then poll for the pose array.",
+          "arguments": {
+            "video_path": "C:/data/mocap.mp4",
+            "person": "left"
+          }
+        }
+      ],
+      "outputSchema": {
+        "type": "object",
+        "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "description": "Optional command error. Command errors use {code, message, details?}; asynchronous job failures include this object while the poll command itself succeeds.",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": true
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "running",
+              "completed",
+              "failed",
+              "canceled"
+            ]
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "analysis.picture",
+      "description": "Start asynchronous SMPL-X pose estimation for a local still image. Poll kimodo_get_generation with the returned request_id; completed analysis returns one pose sample.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "image_path": {
+            "type": "string",
+            "description": "Absolute path to a local PNG or JPEG readable by QuickServer."
+          }
+        },
+        "required": [
+          "image_path"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "description": "Estimate one SMPL-X pose from a still image, then poll for the pose array.",
+          "arguments": {
+            "image_path": "C:/data/pose.jpg"
+          }
+        }
+      ],
+      "outputSchema": {
+        "type": "object",
+        "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "description": "Optional command error. Command errors use {code, message, details?}; asynchronous job failures include this object while the poll command itself succeeds.",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": true
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "running",
+              "completed",
+              "failed",
+              "canceled"
+            ]
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
       "name": "transform_capture",
       "description": "Capture the current scene or an External Pose returned by pose_get together with scene objects, in world space. Returns a four-view image and evaluated joint positions; does not change scene poses.",
       "documentation": {
@@ -2869,7 +3020,7 @@
     },
     {
       "name": "kimodo_get_generation",
-      "description": "Get status and progress for an install or generation request. A completed generation returns one clip object with its asset_path and Timeline range. include_request_json explicitly opts into the submitted backend payload.",
+      "description": "Get status and results for install, generation, or Mocap analysis requests. A completed Mocap analysis returns poses and SMPL-X coordinate metadata at the top level. include_request_json explicitly opts into the submitted generation payload.",
       "documentation": {
         "when_to_use": "Read progress, terminal status, and results for an installation or generation request.",
         "behavior": [
@@ -2897,7 +3048,7 @@
         "properties": {
           "request_id": {
             "type": "string",
-            "description": "Request id returned by kimodo_install_server or kimodo_generate_animation."
+            "description": "Request id returned by kimodo_install_server, kimodo_generate_animation, analysis.video, or analysis.picture."
           },
           "include_request_json": {
             "type": "boolean",
@@ -3058,6 +3209,88 @@
                 "type": "string"
               }
             ]
+          },
+          "analysis_schema_version": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string"
+          },
+          "skeleton": {
+            "type": "string"
+          },
+          "person": {
+            "type": "string"
+          },
+          "fps": {
+            "type": "number"
+          },
+          "source_frame_count": {
+            "type": "integer"
+          },
+          "frame_count": {
+            "type": "integer"
+          },
+          "joint_names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pose_parameterization": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "coordinate_spaces": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "betas": {
+            "type": "array"
+          },
+          "rest_joints_m": {
+            "type": "array"
+          },
+          "poses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "frame": {
+                  "type": "integer"
+                },
+                "source_frame": {
+                  "type": "integer"
+                },
+                "timestamp_seconds": {
+                  "type": "number"
+                },
+                "global_orient_axis_angle": {
+                  "type": "array"
+                },
+                "body_pose_axis_angle": {
+                  "type": "array"
+                },
+                "translation_m": {
+                  "type": "array"
+                },
+                "incam_global_orient_axis_angle": {
+                  "type": "array"
+                },
+                "incam_body_pose_axis_angle": {
+                  "type": "array"
+                },
+                "incam_translation_m": {
+                  "type": "array"
+                },
+                "static_confidence": {
+                  "type": "array"
+                }
+              },
+              "additionalProperties": true
+            }
           }
         },
         "required": [

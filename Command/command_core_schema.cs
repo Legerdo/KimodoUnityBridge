@@ -28,6 +28,8 @@ namespace KimodoUnityBridge.Command
                 [HelpCommand] = GetCommandHelp,
                 [SceneContextCommand] = SceneContextGet,
                 [InstallServerCommand] = InstallServer,
+                [MocapVideoAnalysisCommand] = AnalyzeMocapVideo,
+                [MocapPictureAnalysisCommand] = AnalyzeMocapPicture,
                 [AnimationAnalyzeCommand] = AnimationAnalyze,
                 [TransformCaptureCommand] = TransformCapture,
                 [RetargetAnimationCommand] = RetargetAnimation,
@@ -237,13 +239,14 @@ namespace KimodoUnityBridge.Command
                 HelpCommand => new[] { "manual", "usage", "execution_model", "routing", "handles", "workflow", "commands", "constraints", "constraint_rules", "configs", "count" },
                 SceneContextCommand => new[] { "session", "history", "scene", "scene_name", "director", "directors", "command_context_director", "playable_asset", "playable_asset_path", "duration_frames_60", "frame_rate", "current_frame_60", "characters" },
                 InstallServerCommand => new[] { "request_id", "status" },
+                MocapVideoAnalysisCommand or MocapPictureAnalysisCommand => new[] { "request_id", "status" },
                 AnimationAnalyzeCommand => new[] { "analysis_schema_version", "clip", "pictures" },
                 TransformCaptureCommand => new[] { "image_path", "width", "height", "tile_size", "tiles", "source", "targets", "evaluated_joints_world" },
                 RetargetAnimationCommand => new[] { "retargeted", "source_character", "character", "animation" },
                 GenerateAnimationCommand => new[] { "request_id", "status", "check", "warnings" },
                 PoseGetCommand => new[] { "pose", "source", "character_root", "data" },
                 PoseSetCommand or PoseSetRootTransformCommand or PoseSetMuscleCommand => new[] { "pose", "data" },
-                GetGenerationCommand => new[] { "request_id", "status", "stage", "message", "started_at_utc", "estimated_completion_utc", "eta_seconds", "progress_current", "progress_total", "progress_rate", "backend_progress", "runtime_root", "runtime_version", "install_mode", "server_connected", "clip", "animation_id", "seed", "analysis", "constraint_loss", "inout_sampling", "target_alive", "backend_request_json" },
+                GetGenerationCommand => new[] { "request_id", "status", "stage", "message", "started_at_utc", "estimated_completion_utc", "eta_seconds", "progress_current", "progress_total", "progress_rate", "backend_progress", "runtime_root", "runtime_version", "install_mode", "server_connected", "clip", "animation_id", "seed", "analysis", "analysis_schema_version", "source_type", "skeleton", "person", "fps", "source_frame_count", "frame_count", "joint_names", "pose_parameterization", "coordinate_spaces", "betas", "rest_joints_m", "poses", "constraint_loss", "inout_sampling", "target_alive", "backend_request_json" },
                 CancelGenerationCommand => new[] { "request_id", "status", "stage", "message", "canceled", "clip" },
                 SessionClearCommand => new[] { "cleared", "name", "destroyed_context_count", "recreated_on_next_command" },
                 _ => Array.Empty<string>()
@@ -281,11 +284,13 @@ namespace KimodoUnityBridge.Command
                 case "runtime_version": case "install_mode": case "image_path": case "source_character": case "character":
                 case "name": case "asset_path": case "stage": case "started_at_utc": case "estimated_completion_utc":
                 case "backend_progress": case "analysis_schema_version":
+                case "source_type": case "skeleton": case "person":
                     return new JObject { ["type"] = "string" };
                 case "width": case "height": case "tile_size": case "duration_frames_60": case "current_frame_60":
                 case "destroyed_context_count": case "duration_frames": case "progress_current": case "progress_total": case "count": case "seed":
+                case "source_frame_count": case "frame_count": case "source_frame":
                     return new JObject { ["type"] = "integer" };
-                case "frame_rate":
+                case "frame_rate": case "fps":
                     return new JObject { ["type"] = "number" };
                 case "eta_seconds": case "progress_rate":
                     return NullableSchema(new JObject { ["type"] = "number" });
@@ -332,6 +337,9 @@ namespace KimodoUnityBridge.Command
                 case "warnings": case "execution_model": case "routing": case "workflow": case "constraints": case "constraint_rules":
                     return new JObject { ["type"] = "array" };
                 case "world_position": return NumberArraySchema();
+                case "poses": return ArraySchema("object", "frame", "source_frame", "timestamp_seconds", "global_orient_axis_angle", "body_pose_axis_angle", "translation_m", "incam_global_orient_axis_angle", "incam_body_pose_axis_angle", "incam_translation_m", "static_confidence");
+                case "joint_names": return new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" } };
+                case "betas": case "rest_joints_m": return new JObject { ["type"] = "array" };
                 case "configs": return ArraySchema("object");
                 case "commands":
                 {
@@ -341,6 +349,8 @@ namespace KimodoUnityBridge.Command
                 }
                 case "backend_request_json":
                     return new JObject { ["oneOf"] = new JArray(ObjectSchema(), new JObject { ["type"] = "string" }) };
+                case "pose_parameterization": case "coordinate_spaces":
+                    return ObjectSchema();
                 case "pose": return ObjectSchema("track", "index");
                 case "character_root":
                     return new JObject
@@ -381,12 +391,12 @@ namespace KimodoUnityBridge.Command
                     "analysis_mode" or "phase_track_version" or "tile" or "view" or "projection" or "key" or "role" or
                     "scene_object" or "object_ref" or "animator" or "avatar" or "hierarchy_path" or "playable_asset" or
                     "render_version" or "level" or "aspect" or "image_path" or "output" or "mode" or "path" or "type" or "clip" or "screenshot_generated_at" => new JObject { ["type"] = "string" },
-                    "session_id" or "schema_version" or "animation_id" or "analysis_id" or "animation_name" or "input_signature" or "created_at_utc" or "analysis_path" or "request_id" or "status" or "stage" or "message" or "error" or "started_at_utc" or "updated_at_utc" => new JObject { ["type"] = "string" },
+                    "session_id" or "schema_version" or "animation_id" or "analysis_id" or "animation_name" or "input_signature" or "created_at_utc" or "analysis_path" or "request_id" or "status" or "stage" or "message" or "error" or "started_at_utc" or "updated_at_utc" or "source_type" or "skeleton" or "person" or "pose_parameterization" => new JObject { ["type"] = "string" },
                     "session_revision" or "start_timeline_frame_60" or "end_timeline_frame_60_exclusive" or "duration_frames" or "timeline_frame_60" or
-                    "duration_frames_60" or "tile_count" or "width" or "height" or "resolution" or "supersample" or "header_height" or "index" or "frame" => new JObject { ["type"] = "integer" },
+                    "duration_frames_60" or "tile_count" or "width" or "height" or "resolution" or "supersample" or "header_height" or "index" or "frame" or "source_frame" or "source_frame_count" or "frame_count" => new JObject { ["type"] = "integer" },
                     "enabled" or "avatar_valid_humanoid" or "cached" => new JObject { ["type"] = "boolean" },
-                    "frame_rate" => new JObject { ["type"] = "number" },
-                    "segments" or "phase_track" or "keyframes" or "foot_contacts" or "images" or "tile_paths" or "picture_paths" or "transforms" or "animations" or "generations" or "analyses" or "tiles" or "headers" => new JObject { ["type"] = "array" },
+                    "frame_rate" or "fps" or "timestamp_seconds" => new JObject { ["type"] = "number" },
+                    "segments" or "phase_track" or "keyframes" or "foot_contacts" or "images" or "tile_paths" or "picture_paths" or "transforms" or "animations" or "generations" or "analyses" or "tiles" or "headers" or "global_orient_axis_angle" or "body_pose_axis_angle" or "translation_m" or "incam_global_orient_axis_angle" or "incam_body_pose_axis_angle" or "incam_translation_m" or "static_confidence" or "joint_names" or "coordinate_spaces" or "betas" or "rest_joints_m" or "poses" => new JObject { ["type"] = "array" },
                     "session" or "history" or "root_trajectory" or "endpoint_pose_comparison" or "motion_profile" or "environment" or "bounds" or "timeline_preview" or "outputSchema" or "title" or "header" => new JObject { ["type"] = "object" },
                     "world_position" => NumberArraySchema(),
                     "required" or "examples" => new JObject { ["type"] = "array" },
