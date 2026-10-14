@@ -49,7 +49,9 @@ namespace KimodoUnityBridge.Command.Tests
             Animator animator = source.AddComponent<Animator>();
             animator.applyRootMotion = true;
             source.transform.position = new Vector3(3f, 1f, 7f);
+            source.transform.rotation = Quaternion.Euler(0f, 31f, 0f);
             Vector3 sourcePosition = source.transform.position;
+            Quaternion sourceRotation = source.transform.rotation;
             GameObject oldGhost = new GameObject("Ghost_TestCharacter");
             oldGhost.transform.SetParent(sessionRoot.transform, false);
             TimelineAsset timeline = ScriptableObject.CreateInstance<TimelineAsset>();
@@ -57,6 +59,7 @@ namespace KimodoUnityBridge.Command.Tests
             var directorObject = new GameObject("Kimodo_CommandSession_Test");
             directorObject.transform.SetParent(sessionRoot.transform, false);
             PlayableDirector director = directorObject.AddComponent<PlayableDirector>();
+            director.playableAsset = timeline;
             object session = CreateSessionRecord(sessionType, timeline, metadata, director, sessionRoot);
             AnimationTrack track = timeline.CreateTrack<AnimationTrack>(null, "TestCharacter");
             track.trackOffset = TrackOffset.ApplySceneOffsets;
@@ -69,6 +72,15 @@ namespace KimodoUnityBridge.Command.Tests
                 Assert.That(director.GetGenericBinding(track), Is.SameAs(animator));
                 Assert.That(animator.applyRootMotion, Is.True);
                 Assert.That(source.transform.position, Is.EqualTo(sourcePosition));
+                Assert.That(source.transform.rotation, Is.EqualTo(sourceRotation));
+
+                director.RebuildGraph();
+                director.time = 0.5d;
+                director.Evaluate();
+                Assert.That(source.transform.position, Is.EqualTo(sourcePosition),
+                    "Evaluating a newly bound Timeline must preserve the character's scene position.");
+                Assert.That(Quaternion.Angle(source.transform.rotation, sourceRotation), Is.LessThan(0.01f),
+                    "Evaluating a newly bound Timeline must preserve the character's scene rotation.");
                 Assert.That(oldGhost.activeSelf, Is.False);
                 Assert.That(oldGhost.transform.parent.name, Is.EqualTo("Archive_GhostPreviews"));
             }

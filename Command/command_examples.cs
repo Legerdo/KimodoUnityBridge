@@ -13,7 +13,9 @@ namespace KimodoUnityBridge.Command
             {
                 case HelpCommand: return Examples("Inspect generation parameters and examples.",
                     @"{'command':'kimodo_generate_animation'}");
-                case SceneContextCommand: return Examples("Read the authoritative active-scene context before choosing characters, Clips, or Timeline references.", @"{}");
+                case SceneContextCommand: return new JArray(
+                    Example("Read the scene and current Session identity.", @"{}"),
+                    Example("Include the compact Session artifact history when needed.", @"{'include_history':true}"));
                 case InstallServerCommand: return Examples("Install the local server, then poll the returned request_id.", @"{}");
                 case AnimationAnalyzeCommand: return Examples("Analyze one returned Clip; open the returned image to inspect it.",
                     @"{'clips':[{'character':'<character>','clip':'<clip>'}],'picture':{'output':'composite'},'resolution':512}");

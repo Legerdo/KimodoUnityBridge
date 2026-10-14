@@ -15,7 +15,7 @@ These rules apply to repository maintenance. Animation task execution is defined
 
 - `../README.md` / `../README.zh-CN.md`: human-facing package entry and installation overview.
 - `../SKILL.md`: installation gate, task entry, capability-tool orchestration, and shared execution rules.
-- `../tools/*.md`: capability-tool procedures for scene context, generation, recognition, comparison, Pose, and derived outputs.
+- `../tools/common.md` and `../tools/phase-*.md`: the shared contract and the four active animation-engineer phase procedures. Superseded capability manuals are retained under `../archive/` and are not active instructions.
 - `../Command/help.json`: generated command and parameter schema; keep it aligned with the dispatcher.
 - `DEVELOPMENT.md`: temporary development snapshot, not an execution contract.
 - `README.md`: development and handoff navigation page.

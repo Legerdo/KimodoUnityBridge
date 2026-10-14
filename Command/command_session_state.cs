@@ -146,8 +146,8 @@ namespace KimodoUnityBridge.Command
             if (timelineCharacter != source) throw new InvalidOperationException("Timeline preview must bind the original scene character directly.");
             ArchiveLegacyGhostPreviews(session, source);
             if (animator == null || track == null || session?.Director == null) return;
-            session.Director.SetGenericBinding(track, animator);
             KimodoTimelinePreviewRefreshUtility.InitializeSceneOffset(track, animator);
+            session.Director.SetGenericBinding(track, animator);
         }
 
         private static void ArchiveLegacyGhostPreviews(TimelineSessionRecord session, GameObject source)
@@ -1808,8 +1808,9 @@ namespace KimodoUnityBridge.Command
             };
         }
 
-        private static string SceneContextGet(string argumentsJson) => Execute(argumentsJson, _ =>
+        private static string SceneContextGet(string argumentsJson) => Execute(argumentsJson, arguments =>
         {
+            bool includeHistory = arguments.Value<bool?>("include_history") ?? false;
             TimelineSessionRecord session = RequireCurrentTimelineSession();
             PlayableDirector commandDirector = session.Director;
             TimelineAsset timeline = session.TimelineAsset;
@@ -1884,8 +1885,11 @@ namespace KimodoUnityBridge.Command
                 ["current_frame_60"] = activeAuthoredDirector != null
                     ? Mathf.RoundToInt((float)(activeAuthoredDirector.time * SessionFrameRate))
                     : 0,
-                ["characters"] = characters,
-                ["history"] = new JObject
+                ["characters"] = characters
+            };
+            if (includeHistory)
+            {
+                result["history"] = new JObject
                 {
                     ["animations"] = new JArray(session.Characters.SelectMany(character => character.Animations.Select(animation =>
                     {
@@ -1895,8 +1899,8 @@ namespace KimodoUnityBridge.Command
                     }))),
                     ["generations"] = new JArray((session.Metadata?.generations ?? new List<KimodoCommandGenerationMetadata>()).Select(DescribeGeneration)),
                     ["analyses"] = GetAnalysisHistoryIndex(session)
-                }
-            };
+                };
+            }
             return Ok(result);
         });
 

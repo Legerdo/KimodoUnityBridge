@@ -76,7 +76,8 @@ namespace KimodoUnityBridge.Command
             JObject result = new JObject
             {
                 ["pose"] = PoseReferenceJson(character.PoseCacheTrack.name, index),
-                ["source"] = new JObject { ["character"] = character.Name }
+                ["source"] = new JObject { ["character"] = character.Name },
+                ["character_root"] = CharacterRootTransformJson(character.Root)
             };
             JObject resultSource = (JObject)result["source"];
             if (hasTimelineFrame) resultSource["timeline_frame_60"] = timelineFrame;
@@ -92,36 +93,29 @@ namespace KimodoUnityBridge.Command
         {
             GameObject sourceRoot = ResolveSourceCharacterRoot(character);
             Animator sourceAnimator = sourceRoot != null ? sourceRoot.GetComponentInChildren<Animator>(true) : null;
-            Avatar avatar = sourceAnimator != null && KimodoRetargetCoreUtility.IsValidHumanoid(sourceAnimator.avatar)
-                ? sourceAnimator.avatar : character.Avatar;
-            if (sourceAnimator == null || !KimodoRetargetCoreUtility.IsValidHumanoid(avatar))
-                throw new InvalidOperationException($"Character '{character.Name}' requires a scene Humanoid Animator and valid Avatar for this pose source.");
-
-            RetargetSkeleton cache = null;
-            try
+            KimodoLocalAvatarUtility.AvatarResolveResult avatarResult =
+                KimodoLocalAvatarUtility.ResolveTimelineSourceAvatar(character?.Track, sourceAnimator);
+            Avatar avatar = avatarResult.Avatar;
+            if (!avatarResult.IsHumanoid || !KimodoRetargetCoreUtility.IsValidHumanoid(avatar))
             {
-                if (!KimodoRetargetAvatarUtility.TryBuildRetargetSkeleton(avatar, "KimodoPoseGetSceneSource", out cache, out string error))
-                    throw new InvalidOperationException($"Pose sampling failed: {error}");
-                if (!restPose)
-                {
-                    cache.root.transform.SetPositionAndRotation(sourceRoot.transform.position, sourceRoot.transform.rotation);
-                    foreach (HumanBodyBones bone in System.Enum.GetValues(typeof(HumanBodyBones)).Cast<HumanBodyBones>())
-                    {
-                        if (bone == HumanBodyBones.LastBone) continue;
-                        Transform sourceBone = sourceAnimator.GetBoneTransform(bone);
-                        if (sourceBone != null && cache.animator.GetBoneTransform(bone) is Transform targetBone)
-                        {
-                            targetBone.localPosition = sourceBone.localPosition;
-                            targetBone.localRotation = sourceBone.localRotation;
-                            targetBone.localScale = sourceBone.localScale;
-                        }
-                    }
-                }
-                if (!KimodoRetargetSamplingUtility.TryCaptureMuscleSample(cache, out MuscleSample sample, out string captureError))
-                    throw new InvalidOperationException($"Pose sampling failed: {captureError}");
-                return BuildCapturedSampleResult(sample, cache, 0.0);
+                string avatarError = string.IsNullOrWhiteSpace(avatarResult.Error)
+                    ? "A valid Humanoid Avatar is required."
+                    : avatarResult.Error;
+                throw new InvalidOperationException(
+                    $"Pose sampling failed: {avatarError}");
             }
-            finally { cache?.Dispose(); }
+            if (!KimodoInOutConstraintTools.TryCaptureOriginalScenePose(
+                    sourceRoot,
+                    sourceAnimator,
+                    avatar,
+                    restPose,
+                    character?.Name,
+                    out KimodoMarkerSampleResult sample,
+                    out string error))
+            {
+                throw new InvalidOperationException($"Pose sampling failed: {error}");
+            }
+            return sample;
         }
 
         public static string PoseSetRootTransform(string argumentsJson) => Execute(argumentsJson, arguments =>
@@ -845,6 +839,19 @@ namespace KimodoUnityBridge.Command
                 ["enable_rotation"] = transform.enableRotation
             };
             return result;
+        }
+
+        private static JObject CharacterRootTransformJson(GameObject characterRoot)
+        {
+            if (characterRoot == null)
+                throw new InvalidOperationException("Pose character has no scene root Transform.");
+            Transform root = characterRoot.transform;
+            return new JObject
+            {
+                ["position"] = new JArray(root.position.x, root.position.y, root.position.z),
+                ["rotation"] = new JArray(root.rotation.x, root.rotation.y, root.rotation.z, root.rotation.w),
+                ["space"] = "world"
+            };
         }
 
         private static JObject CompactTransformJson(KimodoRigidTransform transform)

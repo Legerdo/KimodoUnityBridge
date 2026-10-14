@@ -11,10 +11,8 @@ namespace KimodoBridge.Editor
 {
     internal static class KimodoTimelineTrackOffsetUtility
     {
-        // Capture the track's effective world-space origin without evaluating
-        // Timeline. TimelineInject resolves ApplySceneOffsets from the
-        // AnimationTrack.sceneOffset fields, so Preview cannot overwrite the
-        // source pose while an Auto Begin anchor is being built.
+        // Keep the world-space track offset independent of Timeline preview;
+        // projection later uses this snapshot for world-to-track conversion.
         internal static void CaptureWorldOffset(
             TrackAsset track,
             Animator animator,

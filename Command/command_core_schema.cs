@@ -116,7 +116,7 @@ namespace KimodoUnityBridge.Command
                 TransformCaptureCommand => new[] { "image_path", "width", "height", "tile_size", "tiles", "source", "targets", "evaluated_joints_world" },
                 RetargetAnimationCommand => new[] { "retargeted", "source_character", "character", "animation" },
                 GenerateAnimationCommand => new[] { "request_id", "status", "check", "warnings" },
-                PoseGetCommand => new[] { "pose", "source", "data" },
+                PoseGetCommand => new[] { "pose", "source", "character_root", "data" },
                 PoseSetCommand or PoseSetRootTransformCommand or PoseSetMuscleCommand => new[] { "pose", "data" },
                 GetGenerationCommand => new[] { "request_id", "status", "stage", "message", "started_at_utc", "estimated_completion_utc", "eta_seconds", "progress_current", "progress_total", "progress_rate", "backend_progress", "runtime_root", "runtime_version", "install_mode", "server_connected", "clip", "animation_id", "seed", "analysis", "constraint_loss", "inout_sampling", "target_alive", "backend_request_json" },
                 CancelGenerationCommand => new[] { "request_id", "status", "stage", "message", "canceled", "clip" },
@@ -151,7 +151,7 @@ namespace KimodoUnityBridge.Command
                             ? new[] { "running", "completed", "failed", "canceled" }
                             : new[] { "accepted", "running", "completed", "failed", "canceled" };
                     return new JObject { ["type"] = "string", ["enum"] = new JArray(statuses) };
-                case "request_id": case "message": case "usage": case "scene": case "scene_name": case "director":
+                case "request_id": case "message": case "usage": case "scene": case "scene_name": case "director": case "animation_id":
                 case "command_context_director": case "playable_asset": case "playable_asset_path": case "runtime_root":
                 case "runtime_version": case "install_mode": case "image_path": case "source_character": case "character":
                 case "name": case "asset_path": case "stage": case "started_at_utc": case "estimated_completion_utc":
@@ -212,6 +212,20 @@ namespace KimodoUnityBridge.Command
                 case "backend_request_json":
                     return new JObject { ["oneOf"] = new JArray(ObjectSchema(), new JObject { ["type"] = "string" }) };
                 case "pose": return ObjectSchema("track", "index");
+                case "character_root":
+                    return new JObject
+                    {
+                        ["type"] = "object",
+                        ["description"] = "The bound scene character GameObject root Transform in Unity world space. This is distinct from data.root, which is the sampled Pose root channel (Hips).",
+                        ["properties"] = new JObject
+                        {
+                            ["position"] = NumberArraySchema(),
+                            ["rotation"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "number" }, ["minItems"] = 4, ["maxItems"] = 4, ["description"] = "World-space quaternion [x,y,z,w]." },
+                            ["space"] = new JObject { ["type"] = "string", ["enum"] = new JArray("world") }
+                        },
+                        ["required"] = new JArray("position", "rotation", "space"),
+                        ["additionalProperties"] = false
+                    };
                 case "source":
                 {
                     JObject source = ObjectSchema("type", "character", "character_path", "pose", "clip", "frame", "timeline_frame_60", "mode");

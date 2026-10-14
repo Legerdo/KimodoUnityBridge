@@ -22,12 +22,12 @@
 | `../README.zh-CN.md` | `README.md` 的简体中文版本 |
 | `../SKILL.md` | 安装门槛、任务入口、能力工具编排和公共执行规则 |
 | `../Command/help.json` | 维护命令、参数、必选关系和嵌套 schema |
-| `../tools/common.md` | 场景上下文、证据、状态和报告公共规则 |
-| `../tools/scene-context.md` | 场景输入与证据边界 |
-| `../tools/recognition.md` | 语义动作识别工作流和证据决策 |
-| `../tools/comparison.md` | 动画质量比较工作流和证据决策 |
-| `../tools/generation.md` | 动画生成、验证、约束和派生修正工作流 |
-| `../tools/pose.md` | External Pose 创建与编辑 |
+| `../tools/common.md` | 命令入口、响应、异步状态、history 与证据公共规则 |
+| `../tools/phase-1-semantic-recognition.md` | 意图、动作阶段、输入组合、旅行与时长判断 |
+| `../tools/phase-2-constraint-construction.md` | 由已确认证据构造最小 Pose、路径和 Clip 约束 |
+| `../tools/phase-3-animation-generation.md` | 生成提交、轮询、状态、警告和派生输出 |
+| `../tools/phase-4-analysis-evaluation.md` | 分析、图片识别、候选比较、评价和修正决策 |
+| `../archive/skill-legacy-20261013/` | 被新阶段手册替换的历史说明，仅供追溯 |
 | `DEVELOPMENT.md` | 临时开发快照，不是执行契约 |
 | `README.md` | 面向维护者的文档导航页 |
 

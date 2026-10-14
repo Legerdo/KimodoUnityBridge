@@ -140,6 +140,7 @@ namespace KimodoUnityBridge.Command.Tests
 
             JObject sceneContext = Tool(document, "scene.context");
             Assert.That(sceneContext["inputSchema"]?["additionalProperties"]?.Value<bool>(), Is.False);
+            Assert.That(sceneContext["inputSchema"]?["properties"]?["include_history"]?["type"]?.Value<string>(), Is.EqualTo("boolean"));
             Assert.That(sceneContext["description"]?.Value<string>(), Does.Contain("authoritative source"));
             Assert.That(sceneContext["outputSchema"]?["properties"]?["session"]?["properties"]?["session_id"]?.Value<string>("type"), Is.EqualTo("string"));
             Assert.That(sceneContext["outputSchema"]?["properties"]?["session"]?["properties"]?["session_revision"]?.Value<string>("type"), Is.EqualTo("integer"));
@@ -147,6 +148,11 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(sceneContext["outputSchema"]?["properties"]?["history"]?["properties"]?["animations"]?["items"]?["properties"]?["animation_id"], Is.Not.Null);
             Assert.That(sceneContext["outputSchema"]?["properties"]?["history"]?["properties"]?["generations"]?["items"]?["properties"]?["animation_id"], Is.Not.Null);
             Assert.That(Tool(document, "session.clear")["inputSchema"]["required"], Is.Null.Or.Empty);
+
+            JObject poseGet = Tool(document, "pose_get");
+            Assert.That(poseGet["outputSchema"]?["properties"]?["character_root"]?["properties"]?["position"]?["type"]?.Value<string>(), Is.EqualTo("array"));
+            Assert.That(poseGet["outputSchema"]?["properties"]?["character_root"]?["properties"]?["rotation"]?["maxItems"]?.Value<int>(), Is.EqualTo(4));
+            Assert.That(poseGet["description"]?.Value<string>(), Does.Contain("data.root is the sampled Pose root channel"));
         }
 
         [Test]
@@ -195,11 +201,11 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["title"], Is.Null);
             Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["header"], Is.Null);
 
-            JObject poll = Tool(document, "kimodo_get_generation");
-            Assert.That(poll["outputSchema"]?["properties"]?["animation_id"]?.Value<string>("type"), Is.EqualTo("string"));
+            JObject poll2 = Tool(document, "kimodo_get_generation");
+            Assert.That(poll2["outputSchema"]?["properties"]?["animation_id"]?.Value<string>("type"), Is.EqualTo("string"));
             Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["headers"], Is.Null);
 
-            JObject error = (JObject)poll["outputSchema"]["properties"]["error"];
+            JObject error = (JObject)poll2["outputSchema"]["properties"]["error"];
             Assert.That(error.Value<string>("type"), Is.EqualTo("object"));
             Assert.That(error["oneOf"], Is.Null);
 

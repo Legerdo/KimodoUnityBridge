@@ -157,9 +157,9 @@ namespace KimodoUnityBridge.Command.Tests
                 var output = (TimelineClip)traceType.GetProperty("TimelineClip").GetValue(trace);
                 playable.bridgeModelName = model;
                 Assert.That(playable.enableInConstraint || playable.enableOutConstraint, Is.False,
+                    "Explicit sources must not mix with automatically inferred Session boundaries.");
                 Assert.That(playable.autoBeginAnchor, Is.True,
                     "Command-created clips must retain the automatic begin anchor; real explicit samples take precedence during normalization.");
-                    "Explicit sources must not mix with automatically inferred Session boundaries.");
                 var request = KimodoPlayableClipGenerationHostService.BuildRequest(playable, "stand", external, CancellationToken.None, timelineClipOverride: output);
                 Assert.That(request.TargetFrameCount, Is.EqualTo(60));
                 Assert.That(request.RuntimeFrameCount, Is.EqualTo(inside ? 60 : 81));
@@ -300,6 +300,42 @@ namespace KimodoUnityBridge.Command.Tests
                 {
                     Assert.That(Vector3.Distance(pair.Item1.t, pair.Item2.t), Is.LessThan(0.1f), pair.Item3 + " world position");
                 }
+
+                Vector3 sceneRootPosition = new Vector3(8f, 1.5f, -4f);
+                Quaternion sceneRootRotation = Quaternion.Euler(0f, 27f, 0f);
+                skeleton.root.transform.SetPositionAndRotation(sceneRootPosition, sceneRootRotation);
+                JObject scenePoseResponse = JObject.Parse(command_context.PoseGet(
+                    "{'source':{'character':'PoseGetCharacter','timeline_frame_60':60}}"));
+                Assert.That(scenePoseResponse.Value<bool>("ok"), Is.True, scenePoseResponse.ToString());
+                JToken characterRoot = scenePoseResponse["character_root"];
+                Assert.That(characterRoot["space"]?.Value<string>(), Is.EqualTo("world"));
+                Assert.That(characterRoot["position"].Values<float>().ToArray(), Is.EqualTo(new[]
+                {
+                    sceneRootPosition.x, sceneRootPosition.y, sceneRootPosition.z
+                }));
+                Assert.That(characterRoot["rotation"].Values<float>().ToArray(), Is.EqualTo(new[]
+                {
+                    sceneRootRotation.x, sceneRootRotation.y, sceneRootRotation.z, sceneRootRotation.w
+                }));
+
+                JObject scenePoseCapture = JObject.Parse(command_context.PoseGet(
+                    "{'source':{'character':'PoseGetCharacter','mode':'scene_pose'},'full_data':true}"));
+                Assert.That(scenePoseCapture.Value<bool>("ok"), Is.True, scenePoseCapture.ToString());
+                Assert.That(scenePoseCapture["source"]?["mode"]?.Value<string>(), Is.EqualTo("scene_pose"));
+                Assert.That(scenePoseCapture["pose"]?["track"]?.Value<string>(), Is.EqualTo(poseTrack.name));
+                JToken capturedRoot = scenePoseCapture["character_root"];
+                Assert.That(capturedRoot["position"].Values<float>().ToArray(), Is.EqualTo(new[]
+                {
+                    sceneRootPosition.x, sceneRootPosition.y, sceneRootPosition.z
+                }));
+                Assert.That(capturedRoot["rotation"].Values<float>().ToArray(), Is.EqualTo(new[]
+                {
+                    sceneRootRotation.x, sceneRootRotation.y, sceneRootRotation.z, sceneRootRotation.w
+                }));
+                JArray sampledRootPosition = (JArray)scenePoseCapture["data"]?["root"]?["t"];
+                Assert.That(sampledRootPosition[0].Value<float>(), Is.EqualTo(sceneRootPosition.x).Within(0.1f));
+                Assert.That(sampledRootPosition[1].Value<float>(), Is.EqualTo(sceneRootPosition.y).Within(0.1f));
+                Assert.That(sampledRootPosition[2].Value<float>(), Is.EqualTo(sceneRootPosition.z).Within(0.1f));
             }
             finally
             {

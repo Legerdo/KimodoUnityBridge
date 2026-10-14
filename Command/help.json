@@ -23,14 +23,6 @@
         "required": [],
         "additionalProperties": false
       },
-      "examples": [
-        {
-          "description": "Inspect generation parameters and examples.",
-          "arguments": {
-            "command": "kimodo_generate_animation"
-          }
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -129,23 +121,30 @@
           "ok"
         ],
         "additionalProperties": true
-      }
-    },
-    {
-      "name": "scene.context",
-      "description": "Return the current active-scene context JSON. Use this response as the authoritative source for scene characters, Clips, Timeline ranges, and object references.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {},
-        "required": [],
-        "additionalProperties": false
       },
       "examples": [
         {
-          "description": "Read the authoritative active-scene context before choosing characters, Clips, or Timeline references.",
-          "arguments": {}
+          "description": "Inspect generation parameters and examples.",
+          "arguments": {
+            "command": "kimodo_generate_animation"
+          }
         }
-      ],
+      ]
+    },
+    {
+      "name": "scene.context",
+      "description": "Return the current active-scene context JSON. Use this response as the authoritative source for scene characters, Clips, Timeline ranges, and object references. Set include_history=true to include the compact Session artifact index.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "include_history": {
+            "type": "boolean",
+            "description": "Include compact animation, generation, and analysis history; defaults to false."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -171,6 +170,141 @@
               "code",
               "message"
             ],
+            "additionalProperties": true
+          },
+          "session": {
+            "type": "object",
+            "properties": {
+              "session_id": {
+                "type": "string"
+              },
+              "session_revision": {
+                "type": "integer"
+              },
+              "schema_version": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          },
+          "history": {
+            "type": "object",
+            "properties": {
+              "animations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "animation_id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "character": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "start_timeline_frame_60": {
+                      "type": "integer"
+                    },
+                    "duration_frames": {
+                      "type": "integer"
+                    },
+                    "segments": {
+                      "type": "array"
+                    },
+                    "transition": {
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "generations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "animation_id": {
+                      "type": "string"
+                    },
+                    "character": {
+                      "type": "string"
+                    },
+                    "animation": {
+                      "type": "object"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "stage": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "started_at_utc": {
+                      "type": "string"
+                    },
+                    "updated_at_utc": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "analyses": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "analysis_id": {
+                      "type": "string"
+                    },
+                    "session_id": {
+                      "type": "string"
+                    },
+                    "character": {
+                      "type": "string"
+                    },
+                    "animation_id": {
+                      "type": "string"
+                    },
+                    "animation_name": {
+                      "type": "string"
+                    },
+                    "input_signature": {
+                      "type": "string"
+                    },
+                    "created_at_utc": {
+                      "type": "string"
+                    },
+                    "analysis_path": {
+                      "type": "string"
+                    },
+                    "picture_paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            },
             "additionalProperties": true
           },
           "scene": {
@@ -298,148 +432,25 @@
               },
               "additionalProperties": true
             }
-          },
-          "session": {
-            "type": "object",
-            "properties": {
-              "session_id": {
-                "type": "string"
-              },
-              "session_revision": {
-                "type": "integer"
-              },
-              "schema_version": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": true
-          },
-          "history": {
-            "type": "object",
-            "properties": {
-              "animations": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "animation_id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "character": {
-                      "type": "string"
-                    },
-                    "source": {
-                      "type": "string"
-                    },
-                    "kind": {
-                      "type": "string"
-                    },
-                    "start_timeline_frame_60": {
-                      "type": "integer"
-                    },
-                    "duration_frames": {
-                      "type": "integer"
-                    },
-                    "segments": {
-                      "type": "array"
-                    },
-                    "transition": {
-                      "type": "object"
-                    }
-                  },
-                  "additionalProperties": true
-                }
-              },
-              "generations": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "request_id": {
-                      "type": "string"
-                    },
-                    "character": {
-                      "type": "string"
-                    },
-                    "animation": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    },
-                    "stage": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "started_at_utc": {
-                      "type": "string"
-                    },
-                    "updated_at_utc": {
-                      "type": "string"
-                    },
-                    "animation_id": {
-                      "type": "string"
-                    }
-                  },
-                  "additionalProperties": true
-                }
-              },
-              "analyses": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "analysis_id": {
-                      "type": "string"
-                    },
-                    "session_id": {
-                      "type": "string"
-                    },
-                    "character": {
-                      "type": "string"
-                    },
-                    "animation_id": {
-                      "type": "string"
-                    },
-                    "animation_name": {
-                      "type": "string"
-                    },
-                    "input_signature": {
-                      "type": "string"
-                    },
-                    "created_at_utc": {
-                      "type": "string"
-                    },
-                    "analysis_path": {
-                      "type": "string"
-                    },
-                    "picture_paths": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  "additionalProperties": true
-                }
-              }
-            },
-            "additionalProperties": true
           }
         },
         "required": [
           "ok"
         ],
         "additionalProperties": true
-      }
+      },
+      "examples": [
+        {
+          "description": "Read the scene and current Session identity.",
+          "arguments": {}
+        },
+        {
+          "description": "Include the compact Session artifact history when needed.",
+          "arguments": {
+            "include_history": true
+          }
+        }
+      ]
     },
     {
       "name": "kimodo_install_server",
@@ -450,12 +461,6 @@
         "required": [],
         "additionalProperties": false
       },
-      "examples": [
-        {
-          "description": "Install the local server, then poll the returned request_id.",
-          "arguments": {}
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -497,7 +502,13 @@
           "ok"
         ],
         "additionalProperties": true
-      }
+      },
+      "examples": [
+        {
+          "description": "Install the local server, then poll the returned request_id.",
+          "arguments": {}
+        }
+      ]
     },
     {
       "name": "animation_analyze",
@@ -505,16 +516,6 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "picture": {
-            "type": "object",
-            "description": "Unified graph-space picture request with tiles and output mode."
-          },
-          "resolution": {
-            "type": "integer",
-            "minimum": 64,
-            "maximum": 4096,
-            "description": "Final picture tile resolution in pixels; accepts 64 through 4096. Rendering uses a 2x supersample and downsamples to this size. Defaults to 1920."
-          },
           "clips": {
             "type": "array",
             "description": "Exactly one animation clip reference. Use a loaded Clip name or an Assets/Packages path; an external asset is appended to the character's Kimodo Timeline before analysis and is never modified.",
@@ -536,6 +537,16 @@
                 "clip"
               ]
             }
+          },
+          "picture": {
+            "type": "object",
+            "description": "Unified graph-space picture request with tiles and output mode."
+          },
+          "resolution": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 4096,
+            "description": "Final picture tile resolution in pixels; accepts 64 through 4096. Rendering uses a 2x supersample and downsamples to this size. Defaults to 1920."
           }
         },
         "required": [
@@ -543,23 +554,6 @@
         ],
         "additionalProperties": false
       },
-      "examples": [
-        {
-          "description": "Analyze one returned Clip; open the returned image to inspect it.",
-          "arguments": {
-            "picture": {
-              "output": "composite"
-            },
-            "resolution": 512,
-            "clips": [
-              {
-                "character": "<character>",
-                "clip": "<clip>"
-              }
-            ]
-          }
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -593,6 +587,12 @@
           "clip": {
             "type": "object",
             "properties": {
+              "analysis_id": {
+                "type": "string"
+              },
+              "session_id": {
+                "type": "string"
+              },
               "character": {
                 "type": "string"
               },
@@ -628,12 +628,6 @@
               },
               "motion_profile": {
                 "type": "object"
-              },
-              "analysis_id": {
-                "type": "string"
-              },
-              "session_id": {
-                "type": "string"
               }
             },
             "additionalProperties": true
@@ -706,7 +700,24 @@
           "ok"
         ],
         "additionalProperties": true
-      }
+      },
+      "examples": [
+        {
+          "description": "Analyze one returned Clip; open the returned image to inspect it.",
+          "arguments": {
+            "clips": [
+              {
+                "character": "<character>",
+                "clip": "<clip>"
+              }
+            ],
+            "picture": {
+              "output": "composite"
+            },
+            "resolution": 512
+          }
+        }
+      ]
     },
     {
       "name": "transform_capture",
@@ -754,23 +765,6 @@
         ],
         "additionalProperties": false
       },
-      "examples": [
-        {
-          "description": "Capture the External Pose returned by pose_get together with scene objects, without moving the scene character.",
-          "arguments": {
-            "pose": {
-              "track": "<returned pose track>",
-              "index": 0
-            },
-            "transforms": [
-              "@pose",
-              "<table hierarchy path>",
-              "<apple hierarchy path>"
-            ],
-            "resolution": 768
-          }
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -906,7 +900,24 @@
           "ok"
         ],
         "additionalProperties": true
-      }
+      },
+      "examples": [
+        {
+          "description": "Capture the External Pose returned by pose_get together with scene objects, without moving the scene character.",
+          "arguments": {
+            "pose": {
+              "track": "<returned pose track>",
+              "index": 0
+            },
+            "transforms": [
+              "@pose",
+              "<table hierarchy path>",
+              "<apple hierarchy path>"
+            ],
+            "resolution": 768
+          }
+        }
+      ]
     },
     {
       "name": "kimodo_retarget_animation",
@@ -955,19 +966,6 @@
         ],
         "additionalProperties": false
       },
-      "examples": [
-        {
-          "description": "Retarget a loaded Clip to another scene character.",
-          "arguments": {
-            "source_character": "<source character>",
-            "animation": "<clip>",
-            "target_character": "<target character>",
-            "output": {
-              "name": "RetargetedMotion"
-            }
-          }
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -1007,7 +1005,13 @@
           "animation": {
             "type": "object",
             "properties": {
+              "animation_id": {
+                "type": "string"
+              },
               "name": {
+                "type": "string"
+              },
+              "character": {
                 "type": "string"
               },
               "source": {
@@ -1036,11 +1040,24 @@
           "ok"
         ],
         "additionalProperties": true
-      }
+      },
+      "examples": [
+        {
+          "description": "Retarget a loaded Clip to another scene character.",
+          "arguments": {
+            "source_character": "<source character>",
+            "animation": "<clip>",
+            "target_character": "<target character>",
+            "output": {
+              "name": "RetargetedMotion"
+            }
+          }
+        }
+      ]
     },
     {
       "name": "kimodo_generate_animation",
-      "description": "Start asynchronous generation for a character in the current scene context. The accepted response contains request_id, status, and non-blocking checks; poll request_id for the completed Clip.",
+      "description": "Start asynchronous generation for a character in the current scene context. Command-created Timeline Clips enable AutoBegin anchoring automatically; explicit first-frame or In/Out samples take precedence. The accepted response contains request_id, status, and non-blocking checks; poll request_id for the completed Clip. Supply trajectory settings only when the requested path is known from explicit requirements or confirmed scene/analysis evidence; prompt wording never selects path options.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1124,7 +1141,7 @@
                 "type": "number"
               }
             },
-            "description": "Optional Root2D path override. Any angle enables path override; distance replaces the measured path length; heading is applied after path composition."
+            "description": "Optional Root2D path override. Use only when the trajectory is known from an explicit requirement or confirmed scene/analysis evidence; never infer these fields from prompt keywords. Any angle enables path override; distance replaces the measured path length; heading is applied after path composition."
           },
           "generation": {
             "type": "object",
@@ -1425,7 +1442,7 @@
                       "type": "integer",
                       "minimum": 0,
                       "default": 0,
-                      "description": "First path frame; defaults to the clip start."
+                      "description": "First path frame; defaults to the clip start. Use a confirmed path for the intended character and motion; root_path generates only start and end Root2D constraints, not intermediate route enforcement."
                     },
                     "root_path": {
                       "type": "object",
@@ -1433,7 +1450,7 @@
                       "properties": {
                         "path": {
                           "type": "object",
-                          "description": "Analyzed Root Path slot returned by animation_analyze at clip.root_trajectory.path.",
+                          "description": "Confirmed analyzed Root Path slot for the intended character and motion, returned by animation_analyze at clip.root_trajectory.path.",
                           "additionalProperties": false,
                           "properties": {
                             "track": {
@@ -1592,6 +1609,56 @@
         ],
         "additionalProperties": false
       },
+      "outputSchema": {
+        "type": "object",
+        "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "description": "Optional command error. Command errors use {code, message, details?}; asynchronous job failures include this object while the poll command itself succeeds.",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": true
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted"
+            ]
+          },
+          "check": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "warnings": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "additionalProperties": true
+      },
       "examples": [
         {
           "description": "Generate two seconds and poll the returned request_id.",
@@ -1744,61 +1811,11 @@
             ]
           }
         }
-      ],
-      "outputSchema": {
-        "type": "object",
-        "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          },
-          "error": {
-            "description": "Optional command error. Command errors use {code, message, details?}; asynchronous job failures include this object while the poll command itself succeeds.",
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              },
-              "details": {
-                "type": "object"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "additionalProperties": true
-          },
-          "request_id": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "accepted"
-            ]
-          },
-          "check": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": true
-          },
-          "warnings": {
-            "type": "array"
-          }
-        },
-        "required": [
-          "ok"
-        ],
-        "additionalProperties": true
-      }
+      ]
     },
     {
       "name": "pose_get",
-      "description": "Sample one absolute Timeline-global frame at 60 FPS, or select mode scene_pose / skeleton_rest_pose to read the original scene Animator or Avatar rest pose. Every call creates an External Pose slot and returns {track,index}.",
+      "description": "Sample one absolute Timeline-global frame at 60 FPS, or select mode scene_pose / skeleton_rest_pose to read the original scene Animator or Avatar rest pose. Every response includes character_root, the bound scene GameObject root Transform in world space; data.root is the sampled Pose root channel. Every call creates an External Pose slot and returns {track,index}.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1886,38 +1903,6 @@
         ],
         "additionalProperties": false
       },
-      "examples": [
-        {
-          "description": "Capture a pose at an absolute Timeline-global frame. Analyze the Clip first, then add its local frame offset to start_frame.",
-          "arguments": {
-            "source": {
-              "character": "<character>",
-              "timeline_frame_60": 90
-            },
-            "full_data": true
-          }
-        },
-        {
-          "description": "Capture the original scene Animator's currently evaluated pose, independent of Timeline preview time.",
-          "arguments": {
-            "source": {
-              "character": "<character>",
-              "mode": "scene_pose"
-            },
-            "full_data": true
-          }
-        },
-        {
-          "description": "Capture the Humanoid Avatar's stored skeleton rest pose.",
-          "arguments": {
-            "source": {
-              "character": "<character>",
-              "mode": "skeleton_rest_pose"
-            },
-            "full_data": true
-          }
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -2001,6 +1986,39 @@
             },
             "additionalProperties": true
           },
+          "character_root": {
+            "type": "object",
+            "description": "The bound scene character GameObject root Transform in Unity world space. This is distinct from data.root, which is the sampled Pose root channel (Hips).",
+            "properties": {
+              "position": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "rotation": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 4,
+                "maxItems": 4,
+                "description": "World-space quaternion [x,y,z,w]."
+              },
+              "space": {
+                "type": "string",
+                "enum": [
+                  "world"
+                ]
+              }
+            },
+            "required": [
+              "position",
+              "rotation",
+              "space"
+            ],
+            "additionalProperties": false
+          },
           "data": {
             "type": "object",
             "properties": {},
@@ -2011,7 +2029,39 @@
           "ok"
         ],
         "additionalProperties": true
-      }
+      },
+      "examples": [
+        {
+          "description": "Capture a pose at an absolute Timeline-global frame. Analyze the Clip first, then add its local frame offset to start_timeline_frame_60.",
+          "arguments": {
+            "source": {
+              "character": "<character>",
+              "timeline_frame_60": 90
+            },
+            "full_data": true
+          }
+        },
+        {
+          "description": "Capture the original scene Animator's currently evaluated pose, independent of Timeline preview time.",
+          "arguments": {
+            "source": {
+              "character": "<character>",
+              "mode": "scene_pose"
+            },
+            "full_data": true
+          }
+        },
+        {
+          "description": "Capture the Humanoid Avatar's stored skeleton rest pose.",
+          "arguments": {
+            "source": {
+              "character": "<character>",
+              "mode": "skeleton_rest_pose"
+            },
+            "full_data": true
+          }
+        }
+      ]
     },
     {
       "name": "pose_set",
@@ -2215,30 +2265,6 @@
         ],
         "additionalProperties": false
       },
-      "examples": [
-        {
-          "description": "Edit the root of the Pose slot returned by pose_get; position is in Character world space.",
-          "arguments": {
-            "pose": {
-              "track": "<returned pose track>",
-              "index": 0
-            },
-            "root": {
-              "position": [
-                0,
-                1,
-                0
-              ],
-              "rotation": [
-                0,
-                0,
-                0,
-                1
-              ]
-            }
-          }
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -2288,7 +2314,31 @@
           "ok"
         ],
         "additionalProperties": true
-      }
+      },
+      "examples": [
+        {
+          "description": "Edit the root of the Pose slot returned by pose_get; position is in Character world space.",
+          "arguments": {
+            "pose": {
+              "track": "<returned pose track>",
+              "index": 0
+            },
+            "root": {
+              "position": [
+                0,
+                1,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ]
     },
     {
       "name": "pose_set_root_transform",
@@ -2325,24 +2375,6 @@
         ],
         "additionalProperties": false
       },
-      "examples": [
-        {
-          "description": "Set a returned Pose slot's root position.",
-          "arguments": {
-            "pose": {
-              "track": "<returned pose track>",
-              "index": 0
-            },
-            "root": {
-              "position": [
-                0,
-                1,
-                0
-              ]
-            }
-          }
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -2392,7 +2424,25 @@
           "ok"
         ],
         "additionalProperties": true
-      }
+      },
+      "examples": [
+        {
+          "description": "Set a returned Pose slot's root position.",
+          "arguments": {
+            "pose": {
+              "track": "<returned pose track>",
+              "index": 0
+            },
+            "root": {
+              "position": [
+                0,
+                1,
+                0
+              ]
+            }
+          }
+        }
+      ]
     },
     {
       "name": "pose_set_muscle",
@@ -2429,20 +2479,6 @@
         ],
         "additionalProperties": false
       },
-      "examples": [
-        {
-          "description": "Edit the Spine Front-Back muscle of a returned Pose slot.",
-          "arguments": {
-            "pose": {
-              "track": "<returned pose track>",
-              "index": 0
-            },
-            "muscles": {
-              "Spine Front-Back": 0.1
-            }
-          }
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -2492,7 +2528,21 @@
           "ok"
         ],
         "additionalProperties": true
-      }
+      },
+      "examples": [
+        {
+          "description": "Edit the Spine Front-Back muscle of a returned Pose slot.",
+          "arguments": {
+            "pose": {
+              "track": "<returned pose track>",
+              "index": 0
+            },
+            "muscles": {
+              "Spine Front-Back": 0.1
+            }
+          }
+        }
+      ]
     },
     {
       "name": "kimodo_get_generation",
@@ -2514,14 +2564,6 @@
         ],
         "additionalProperties": false
       },
-      "examples": [
-        {
-          "description": "Poll using the exact request_id returned by generation or installation.",
-          "arguments": {
-            "request_id": "11111111-1111-1111-1111-111111111111"
-          }
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -2636,6 +2678,9 @@
             },
             "additionalProperties": true
           },
+          "animation_id": {
+            "type": "string"
+          },
           "seed": {
             "type": "integer"
           },
@@ -2668,16 +2713,21 @@
                 "type": "string"
               }
             ]
-          },
-          "animation_id": {
-            "type": "string"
           }
         },
         "required": [
           "ok"
         ],
         "additionalProperties": true
-      }
+      },
+      "examples": [
+        {
+          "description": "Poll using the exact request_id returned by generation or installation.",
+          "arguments": {
+            "request_id": "11111111-1111-1111-1111-111111111111"
+          }
+        }
+      ]
     },
     {
       "name": "kimodo_cancel_generation",
@@ -2699,15 +2749,6 @@
         ],
         "additionalProperties": false
       },
-      "examples": [
-        {
-          "description": "Cancel using the exact active generation request_id.",
-          "arguments": {
-            "request_id": "11111111-1111-1111-1111-111111111111",
-            "reason": "User requested cancellation"
-          }
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -2782,7 +2823,16 @@
           "ok"
         ],
         "additionalProperties": true
-      }
+      },
+      "examples": [
+        {
+          "description": "Cancel using the exact active generation request_id.",
+          "arguments": {
+            "request_id": "11111111-1111-1111-1111-111111111111",
+            "reason": "User requested cancellation"
+          }
+        }
+      ]
     },
     {
       "name": "session.clear",
@@ -2793,12 +2843,6 @@
         "required": [],
         "additionalProperties": false
       },
-      "examples": [
-        {
-          "description": "Clear the current runtime session while retaining persisted assets.",
-          "arguments": {}
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -2843,7 +2887,13 @@
           "ok"
         ],
         "additionalProperties": true
-      }
+      },
+      "examples": [
+        {
+          "description": "Clear the current runtime session while retaining persisted assets.",
+          "arguments": {}
+        }
+      ]
     }
   ]
 }
