@@ -851,7 +851,33 @@
     },
     {
       "name": "analysis.video",
-      "description": "Start asynchronous SMPL-X pose estimation for a local video. Poll kimodo_get_generation with the returned request_id; completed analysis returns the raw pose array and coordinate metadata.",
+      "description": "Estimate a per-frame SMPL-X pose sequence from a local video. This starts an asynchronous analysis job; poll kimodo_get_generation with its request_id. It returns pose data only and does not create or apply a Unity animation.",
+      "documentation": {
+        "when_to_use": "Use when a video file should be converted into a time-ordered SMPL-X pose array for downstream retargeting or analysis.",
+        "behavior": [
+          "Pass an absolute video_path that the QuickServer machine can read. Supported formats are MP4, MOV, M4V, AVI, and MKV; the file must not exceed 2 GiB.",
+          "The command returns immediately with status=accepted and a request_id. Poll kimodo_get_generation using that exact id until status is completed, failed, or canceled; do not submit the video again just to check progress.",
+          "For a two-person video, optionally set person to left or right to select the performer by screen position. Omit person for the default selection."
+        ],
+        "result_notes": [
+          "A completed request returns poses in source-video order plus fps, frame_count, source_frame_count, joint_names, betas, and rest_joints_m.",
+          "Each pose contains global_orient_axis_angle, body_pose_axis_angle, and translation_m. Rotations are axis-angle radians; translation and rest joints are in meters.",
+          "The global coordinate space is gravity-aligned Y-up. Optional incam_* fields use OpenCV camera coordinates: X-right, Y-down, Z-forward.",
+          "The result is raw SMPL-X pose data. It does not create a clip, Playable track, character binding, or timeline edit."
+        ],
+        "scene_effects": [
+          "Read-only; does not create, modify, or clear Unity scene objects or animation assets."
+        ],
+        "limits": [
+          "This estimates body pose only; it does not return a rendered animation or automatically convert poses into a Unity Humanoid muscle track.",
+          "The request can fail if QuickServer's GVHMR runtime, checkpoints, or required assets are unavailable."
+        ],
+        "related_commands": [
+          "analysis.picture",
+          "kimodo_get_generation",
+          "kimodo_retarget_animation"
+        ]
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -931,7 +957,33 @@
     },
     {
       "name": "analysis.picture",
-      "description": "Start asynchronous SMPL-X pose estimation for a local still image. Poll kimodo_get_generation with the returned request_id; completed analysis returns one pose sample.",
+      "description": "Estimate one SMPL-X pose from a local still image. This starts an asynchronous analysis job; poll kimodo_get_generation with its request_id. It returns pose data only and does not create or apply a Unity animation.",
+      "documentation": {
+        "when_to_use": "Use when a still image should be converted into a single SMPL-X pose sample for downstream retargeting or analysis.",
+        "behavior": [
+          "Pass an absolute image_path for a PNG, JPG, or JPEG file that the QuickServer machine can read. The file must not exceed 2 GiB.",
+          "The command returns immediately with status=accepted and a request_id. Poll kimodo_get_generation using that exact id until status is completed, failed, or canceled; do not submit the image again just to check progress.",
+          "The estimator temporarily treats the still image as a one-second clip and returns one pose sample from it."
+        ],
+        "result_notes": [
+          "A completed request returns a poses array with one item, plus joint_names, betas, and rest_joints_m.",
+          "The pose contains global_orient_axis_angle, body_pose_axis_angle, and translation_m. Rotations are axis-angle radians; translation and rest joints are in meters.",
+          "The global coordinate space is gravity-aligned Y-up. Optional incam_* fields use OpenCV camera coordinates: X-right, Y-down, Z-forward.",
+          "The result is raw SMPL-X pose data. It does not create a clip, Playable track, character binding, or timeline edit."
+        ],
+        "scene_effects": [
+          "Read-only; does not create, modify, or clear Unity scene objects or animation assets."
+        ],
+        "limits": [
+          "This estimates body pose only; it does not return a rendered animation or automatically convert poses into a Unity Humanoid muscle track.",
+          "The request can fail if QuickServer's GVHMR runtime, checkpoints, or required assets are unavailable."
+        ],
+        "related_commands": [
+          "analysis.video",
+          "kimodo_get_generation",
+          "kimodo_retarget_animation"
+        ]
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
