@@ -368,7 +368,7 @@ namespace KimodoUnityBridge.Command
                 ["end_angle"] = new JObject { ["type"] = "number" },
                 ["distance"] = new JObject { ["type"] = "number", ["minimum"] = 0 },
                 ["heading"] = new JObject { ["type"] = "number" }
-            }, "Optional Root2D path override. Any angle enables path override; distance replaces the measured path length; heading is applied after path composition.");
+            }, "Optional Root2D path override. Use only when the trajectory is known from an explicit requirement or confirmed scene/analysis evidence; never infer these fields from prompt keywords. Any angle enables path override; distance replaces the measured path length; heading is applied after path composition.");
         }
 
         private static PropertyDefinition OptionalGeneration()
@@ -540,7 +540,7 @@ namespace KimodoUnityBridge.Command
                         ["type"] = "integer",
                         ["minimum"] = 0,
                         ["default"] = 0,
-                        ["description"] = "First path frame; defaults to the clip start. root_path generates only start and end Root2D constraints."
+                        ["description"] = "First path frame; defaults to the clip start. Use a confirmed path for the intended character and motion; root_path generates only start and end Root2D constraints, not intermediate route enforcement."
                     },
                     ["root_path"] = new JObject
                     {
@@ -556,7 +556,7 @@ namespace KimodoUnityBridge.Command
                 ["required"] = new JArray("root_path")
             };
             ((JObject)rootPathItem["properties"]?["root_path"]?["properties"]?["path"])["description"] =
-                "Analyzed Root Path slot returned by animation_analyze at clip.root_trajectory.path.";
+                "Confirmed analyzed Root Path slot for the intended character and motion, returned by animation_analyze at clip.root_trajectory.path.";
             return new PropertyDefinition(name, new JObject
             {
                 ["type"] = "array",

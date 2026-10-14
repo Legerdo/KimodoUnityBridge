@@ -96,7 +96,7 @@ namespace KimodoUnityBridge.Command
                             Required("target_character", "string", "Target scene character name or object_ref. Session preview objects are rejected."),
                             OptionalOutput())),
                     CommandDefinition(GenerateAnimationCommand,
-                        "Start asynchronous generation for a character in the current scene context. The accepted response contains request_id, status, and non-blocking checks; poll request_id for the completed Clip.",
+                        "Start asynchronous generation for a character in the current scene context. Command-created Timeline Clips enable AutoBegin anchoring automatically; explicit first-frame or In/Out samples take precedence. The accepted response contains request_id, status, and non-blocking checks; poll request_id for the completed Clip. Supply trajectory settings only when the requested path is known from explicit requirements or confirmed scene/analysis evidence; prompt wording never selects path options.",
                         Properties(
                             Required("character", "string", "Scene character name or object_ref. Session preview objects are rejected; use the source scene character."),
                             Required("prompt", "string", "Motion prompt."),
@@ -300,7 +300,9 @@ namespace KimodoUnityBridge.Command
                 {
                     "Point constraint family is inferred from the presence of pose, root2d, and effect data. Any non-empty combination composes by channel; Root2D overlays planar root channels and effect data overlays the named end effectors.",
                     "A point constraint must contain at least one of pose, root2d, or effect. Put mixed data in one point object; separate point objects at a duplicate frame are rejected.",
-                    "Use animation_analyze, then reference clip.root_trajectory.path from root_path.",
+                    "Use animation_analyze, confirm that the returned Root Path belongs to the intended character and motion, then reference clip.root_trajectory.path from root_path.",
+                    "Use path angles, distance, or heading only for a known trajectory backed by an explicit requirement or confirmed evidence. Do not infer any trajectory setting from prompt keywords; omit path when the route is unknown.",
+                    "Use root_path only with a confirmed animation_analyze Root Path reference for the intended character and motion. It creates only start and end Root2D constraints, so it does not prove an intermediate route.",
                     "An explicit point frame cannot overlap a root_path sample frame; the command rejects the collision.",
                     "At most one standalone inout entry; in/out each require an explicit completed source Clip. Source character defaults to the generation character and must be the same character.",
                     "In/Out window_frames and source.frame use 60 FPS. Windows round up to model frames; sample_count must fit distinct model frames. One sample uses the seam; multiple samples include both endpoints.",
@@ -550,20 +552,7 @@ namespace KimodoUnityBridge.Command
                 {
                     throw new InvalidOperationException("path.distance must be non-negative.");
                 }
-                // Directional language is part of the generation contract,
-                // not merely prompt decoration. When callers omit explicit
-                // PathAngle values, resolve the character's current planar
-                // yaw and use it for both path endpoints. Explicit values
-                // always take precedence.
-                if (!overridePathAngle && TryResolvePromptPathAngles(
-                        prompt,
-                        character.Root,
-                        out float inferredPathAngle))
-                {
-                    pathBeginAngleDegrees = inferredPathAngle;
-                    pathEndAngleDegrees = inferredPathAngle;
-                    overridePathAngle = true;
-                }
+
                 if (overridePathDistance && !overridePathAngle)
                 {
                     throw new InvalidOperationException("path.distance requires a path angle override.");
@@ -683,34 +672,7 @@ namespace KimodoUnityBridge.Command
             });
         }
 
-        private static bool TryResolvePromptPathAngles(
-            string prompt,
-            GameObject characterRoot,
-            out float yawDegrees)
-        {
-            yawDegrees = 0f;
-            string text = (prompt ?? string.Empty).Trim().ToLowerInvariant();
-            if (text.Length == 0 || characterRoot == null)
-            {
-                return false;
-            }
-            bool hasMotion = text.Contains("walk") || text.Contains("run") ||
-                text.Contains("move") || text.Contains("step") || text.Contains("jog");
-            bool hasDirection = text.Contains("forward") || text.Contains("backward") ||
-                text.Contains("backwards") || text.Contains("straight") ||
-                text.Contains("left") || text.Contains("right");
-            if (!hasMotion || !hasDirection)
-            {
-                return false;
-            }
 
-            float offset = 0f;
-            if (text.Contains("backward") || text.Contains("backwards")) offset = 180f;
-            else if (text.Contains("left")) offset = -90f;
-            else if (text.Contains("right")) offset = 90f;
-            yawDegrees = Mathf.Repeat(characterRoot.transform.eulerAngles.y + offset + 180f, 360f) - 180f;
-            return true;
-        }
 
         private static async Task<KimodoEditorGenerationResult> ExecutePlayableClipGenerationAsync(
             KimodoPlayableClip playableClip,

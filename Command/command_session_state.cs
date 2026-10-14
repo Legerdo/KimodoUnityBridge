@@ -452,12 +452,15 @@ namespace KimodoUnityBridge.Command
                 throw new InvalidOperationException("Timeline could not create a KimodoPlayableClip.");
             }
             playableClip.name = timelineClip.displayName;
+            // Command-created clips always retain AutoBegin. Explicit In/Out
+            // samples still take precedence during constraint normalization;
+            // the synthetic anchor is removed when a real boundary exists.
+            playableClip.autoBeginAnchor = true;
             if (useExplicitInOut)
             {
                 // Explicit sources own the boundaries; retain point markers
                 // without inferring extra neighbors from Session layout.
                 playableClip.enableInConstraint = playableClip.enableOutConstraint = false;
-                playableClip.autoBeginAnchor = false;
             }
             trace.TimelineClip = timelineClip;
             trace.PlayableClip = playableClip;

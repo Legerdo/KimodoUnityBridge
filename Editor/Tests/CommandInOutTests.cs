@@ -156,7 +156,9 @@ namespace KimodoUnityBridge.Command.Tests
                     .Invoke(null, new object[] { trace, "CommandOutput", true });
                 var output = (TimelineClip)traceType.GetProperty("TimelineClip").GetValue(trace);
                 playable.bridgeModelName = model;
-                Assert.That(playable.enableInConstraint || playable.enableOutConstraint || playable.autoBeginAnchor, Is.False,
+                Assert.That(playable.enableInConstraint || playable.enableOutConstraint, Is.False,
+                Assert.That(playable.autoBeginAnchor, Is.True,
+                    "Command-created clips must retain the automatic begin anchor; real explicit samples take precedence during normalization.");
                     "Explicit sources must not mix with automatically inferred Session boundaries.");
                 var request = KimodoPlayableClipGenerationHostService.BuildRequest(playable, "stand", external, CancellationToken.None, timelineClipOverride: output);
                 Assert.That(request.TargetFrameCount, Is.EqualTo(60));
