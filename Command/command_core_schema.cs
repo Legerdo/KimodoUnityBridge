@@ -81,9 +81,134 @@ namespace KimodoUnityBridge.Command
             {
                 ["name"] = name,
                 ["description"] = description,
+                ["documentation"] = BuildCommandDocumentation(name),
                 ["inputSchema"] = inputSchema,
                 ["outputSchema"] = BuildCommandOutputSchema(name),
                 ["examples"] = BuildCommandExamples(name)
+            };
+        }
+
+        private static JObject BuildCommandDocumentation(string command)
+        {
+            return command switch
+            {
+                HelpCommand => CommandDocumentation(
+                    "Discover the public command contract, inspect one command, list viable models, or review constraint rules.",
+                    new[] { "Pass command to return its complete definition; otherwise section selects the command overview, model list, or constraint reference." },
+                    new[] { "The command-specific form returns the full input and output schemas with usage examples." },
+                    new[] { "Read-only, except section=models queries the configured local generation service." },
+                    new[] { "The models section reports current availability and may change with runtime configuration." },
+                    SceneContextCommand, GenerateAnimationCommand),
+                SceneContextCommand => CommandDocumentation(
+                    "Read the active Unity scene, its Kimodo Timeline, character handles, and current Session identity.",
+                    new[] { "Use returned scene object references for later commands instead of guessing from names or asset paths.", "Set include_history only when the Session-wide animation, generation, and analysis index is needed." },
+                    new[] { "Returns current scene and director details, character/Clip references, frame-rate metadata, and Session identifiers.", "When requested, history includes compact animation, generation, and analysis records." },
+                    new[] { "Read-only; does not create, modify, or clear scene objects or animation assets." },
+                    new[] { "Context reflects the active loaded scene and current Session; history is omitted by default.", "A Clip asset path is asset metadata and is not itself a scene Clip handle." },
+                    GenerateAnimationCommand, AnimationAnalyzeCommand, PoseGetCommand),
+                InstallServerCommand => CommandDocumentation(
+                    "Install or refresh the project-local QuickServer runtime before generation when it is unavailable or needs updating.",
+                    new[] { "Starts an asynchronous install task; save the returned request_id and poll it with kimodo_get_generation." },
+                    new[] { "The accepted response contains request_id and status; terminal progress and failure details come from polling." },
+                    new[] { "Changes project-local runtime files; existing model files and the Python environment are preserved." },
+                    new[] { "Installation requests cannot be canceled with kimodo_cancel_generation." },
+                    GetGenerationCommand),
+                AnimationAnalyzeCommand => CommandDocumentation(
+                    "Analyze one loaded animation Clip and produce structured motion data with renderable image evidence.",
+                    new[] { "Use the scene character and a loaded Clip name or an Assets/Packages asset path.", "Open returned pictures before making visual claims; use structured fields for measurements and temporal positions." },
+                    new[] { "Returns one clip analysis and one pictures object; analysis frame positions use Timeline-global 60 FPS coordinates." },
+                    new[] { "An external Clip asset is appended to the character's Kimodo Timeline for analysis; the source asset is not modified." },
+                    new[] { "The clips array must contain exactly one Clip.", "Static pictures do not establish playback continuity, velocity smoothness, foot sliding, or other time-continuous properties." },
+                    SceneContextCommand, PoseGetCommand, TransformCaptureCommand),
+                TransformCaptureCommand => CommandDocumentation(
+                    "Render a four-view image and world-space joint measurements for a scene character or a sampled External Pose, optionally framed with scene objects.",
+                    new[] { "Use character_path for the current scene character or a Pose reference returned by pose_get.", "Use @pose or @pose/<relative bone path> to include the evaluated Pose in the capture." },
+                    new[] { "Returns image_path, view/tile metadata, target references, and evaluated joint positions in world space." },
+                    new[] { "Creates image evidence but does not change scene poses." },
+                    new[] { "To capture a Clip frame, sample it first with pose_get; transforms must resolve in the current scene or Pose." },
+                    PoseGetCommand, SceneContextCommand),
+                RetargetAnimationCommand => CommandDocumentation(
+                    "Retarget one loaded source Clip to another character in the current scene context.",
+                    new[] { "Resolve both characters and the source Clip from current scene context before submission." },
+                    new[] { "Returns the source character, target character, and the newly retargeted animation reference." },
+                    new[] { "Appends a derived animation to the target character; the source Clip remains available." },
+                    new[] { "Source and target must be supported scene characters; Session preview objects are rejected." },
+                    SceneContextCommand, AnimationAnalyzeCommand),
+                GenerateAnimationCommand => CommandDocumentation(
+                    "Submit one animation generation request for a character in the current scene context.",
+                    new[] { "Describe one simple semantic action in prompt; aim for 25 words or fewer.", "Represent exact body pose, root position, effector targets, duration, path, loop, and Clip windows in their explicit fields when required.", "Save request_id and use kimodo_get_generation to poll; do not resubmit a running request." },
+                    new[] { "The accepted response contains request_id, status, non-blocking check results, and warnings.", "On completion, kimodo_get_generation returns the generated Clip metadata, asset path, animation_id, and available generation diagnostics." },
+                    new[] { "A completed result is appended as a Timeline Clip; existing completed Clips are retained.", "The first scene pose is used as the automatic starting anchor unless explicit first-frame or In/Out samples take precedence." },
+                    new[] { "Trajectory overrides require an explicit requirement or confirmed scene/analysis evidence; prompt words do not select path options.", "analysis_option is lightweight generation-time analysis, not the full animation_analyze command.", "Command checks validate supported request boundaries; they do not judge semantic or artistic quality." },
+                    SceneContextCommand, PoseGetCommand, GetGenerationCommand, CancelGenerationCommand, AnimationAnalyzeCommand),
+                PoseGetCommand => CommandDocumentation(
+                    "Materialize an External Pose from a Timeline frame, the current scene Animator pose, or the Avatar skeleton rest pose.",
+                    new[] { "For an animation frame, pass its absolute Timeline-global frame at 60 FPS.", "Inspect the returned Pose and confirm its role before using its {track,index} reference as a generation constraint." },
+                    new[] { "Returns an External Pose reference, source details, character_root world Transform, and sampled Pose data.", "character_root is the bound scene GameObject root; data.root is the sampled Pose root channel." },
+                    new[] { "Every call creates an External Pose slot in the current scene context." },
+                    new[] { "A Timeline frame and scene_pose/skeleton_rest_pose mode are alternative source forms.", "Use full_data only when all muscle and TQ channels are needed." },
+                    SceneContextCommand, AnimationAnalyzeCommand, TransformCaptureCommand, PoseSetCommand),
+                PoseSetCommand => CommandDocumentation(
+                    "Update the root transform, muscle channels, or effector targets of an existing External Pose slot.",
+                    new[] { "Use only a {track,index} reference returned by pose_get or another Pose editing command.", "Supply at least one of root, muscles, or effector; multiple supplied channels are updated together." },
+                    new[] { "Returns the Pose reference and the updated Pose data." },
+                    new[] { "Mutates the referenced External Pose slot in the current scene context." },
+                    new[] { "This edits Pose data; it does not generate an animation Clip." },
+                    PoseGetCommand, PoseSetRootTransformCommand, PoseSetMuscleCommand),
+                PoseSetRootTransformCommand => CommandDocumentation(
+                    "Compatibility alias for a root-only pose_set update.",
+                    new[] { "Use pose_set for new calls; this command accepts one Pose reference and root transform." },
+                    new[] { "Returns the updated Pose reference and data." },
+                    new[] { "Mutates the referenced External Pose slot." },
+                    new[] { "Only the root transform is accepted by this alias." },
+                    PoseSetCommand, PoseGetCommand),
+                PoseSetMuscleCommand => CommandDocumentation(
+                    "Compatibility alias for a muscles-only pose_set update.",
+                    new[] { "Use pose_set for new calls; this command accepts one Pose reference and a muscle-value map." },
+                    new[] { "Returns the updated Pose reference and data." },
+                    new[] { "Mutates the referenced External Pose slot." },
+                    new[] { "Only muscle channels are accepted by this alias." },
+                    PoseSetCommand, PoseGetCommand),
+                GetGenerationCommand => CommandDocumentation(
+                    "Read progress, terminal status, and results for an installation or generation request.",
+                    new[] { "Pass the exact request_id returned by kimodo_install_server or kimodo_generate_animation.", "Poll until a terminal status; a successful command response can still report task status failed or canceled." },
+                    new[] { "Returns lifecycle status, stage, progress, and error details; completed generation includes Clip metadata and available diagnostics.", "Set include_request_json=true only when the exact backend payload is needed." },
+                    new[] { "Read-only; does not resubmit or alter the task." },
+                    new[] { "Request records are retained for a bounded number of recent jobs; an unknown or expired id returns an error." },
+                    InstallServerCommand, GenerateAnimationCommand, CancelGenerationCommand),
+                CancelGenerationCommand => CommandDocumentation(
+                    "Request cancellation of an active animation generation.",
+                    new[] { "Pass the exact generation request_id, then poll with kimodo_get_generation to confirm its terminal state." },
+                    new[] { "Returns the compact cancellation/lifecycle result and any completed Clip metadata." },
+                    new[] { "May stop generation work that has not already completed; it does not undo a completed Clip." },
+                    new[] { "Installation tasks cannot be canceled with this command.", "A cancellation request is not proof of a canceled terminal state; check the returned status." },
+                    GetGenerationCommand, GenerateAnimationCommand),
+                SessionClearCommand => CommandDocumentation(
+                    "Clear transient Kimodo context objects from the active scene Session.",
+                    new[] { "Use when the current transient Session context must be reset." },
+                    new[] { "Returns whether the context was cleared, how many context objects were destroyed, and lazy recreation information." },
+                    new[] { "Destroys transient context GameObjects; persisted Timeline and animation assets are retained." },
+                    new[] { "References to transient Session objects may no longer resolve after clearing; the next command recreates context lazily." },
+                    SceneContextCommand)
+            };
+        }
+
+        private static JObject CommandDocumentation(
+            string whenToUse,
+            string[] behavior,
+            string[] resultNotes,
+            string[] sceneEffects,
+            string[] limits,
+            params string[] relatedCommands)
+        {
+            return new JObject
+            {
+                ["when_to_use"] = whenToUse,
+                ["behavior"] = new JArray(behavior),
+                ["result_notes"] = new JArray(resultNotes),
+                ["scene_effects"] = new JArray(sceneEffects),
+                ["limits"] = new JArray(limits),
+                ["related_commands"] = new JArray(relatedCommands)
             };
         }
 
@@ -208,7 +333,12 @@ namespace KimodoUnityBridge.Command
                     return new JObject { ["type"] = "array" };
                 case "world_position": return NumberArraySchema();
                 case "configs": return ArraySchema("object");
-                case "commands": return ArraySchema("object", "name", "description", "required", "outputSchema", "examples");
+                case "commands":
+                {
+                    JObject commands = ArraySchema("object", "name", "description", "documentation", "required", "outputSchema", "examples");
+                    commands["items"]["properties"]["documentation"] = CommandDocumentationSchema();
+                    return commands;
+                }
                 case "backend_request_json":
                     return new JObject { ["oneOf"] = new JArray(ObjectSchema(), new JObject { ["type"] = "string" }) };
                 case "pose": return ObjectSchema("track", "index");
@@ -269,6 +399,25 @@ namespace KimodoUnityBridge.Command
                 ["type"] = "object",
                 ["properties"] = properties,
                 ["additionalProperties"] = true
+            };
+        }
+
+        private static JObject CommandDocumentationSchema()
+        {
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JObject
+                {
+                    ["when_to_use"] = new JObject { ["type"] = "string" },
+                    ["behavior"] = ArraySchema("string"),
+                    ["result_notes"] = ArraySchema("string"),
+                    ["scene_effects"] = ArraySchema("string"),
+                    ["limits"] = ArraySchema("string"),
+                    ["related_commands"] = ArraySchema("string")
+                },
+                ["required"] = new JArray("when_to_use", "behavior", "result_notes", "scene_effects", "limits", "related_commands"),
+                ["additionalProperties"] = false
             };
         }
 
@@ -474,12 +623,14 @@ namespace KimodoUnityBridge.Command
                     ["position"] = new JObject
                     {
                         ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3,
-                        ["items"] = new JObject { ["type"] = "number" }
+                        ["items"] = new JObject { ["type"] = "number" },
+                        ["description"] = "World-space target position [x,y,z]."
                     },
                     ["rotation"] = new JObject
                     {
                         ["type"] = "array", ["minItems"] = 4, ["maxItems"] = 4,
-                        ["items"] = new JObject { ["type"] = "number" }
+                        ["items"] = new JObject { ["type"] = "number" },
+                        ["description"] = "Target rotation quaternion [x,y,z,w]."
                     }
                 },
                 ["anyOf"] = new JArray(
@@ -520,6 +671,10 @@ namespace KimodoUnityBridge.Command
                 ["additionalProperties"] = new JObject { ["type"] = "number" },
                 ["minProperties"] = 1
             };
+            JObject root2dPosition = (JObject)vector2.DeepClone();
+            root2dPosition["description"] = "Planar root position [x,z].";
+            JObject root2dHeading = (JObject)vector2.DeepClone();
+            root2dHeading["description"] = "Planar heading direction [x,z].";
             var pointItem = new JObject
             {
                 ["type"] = "object",
@@ -531,8 +686,13 @@ namespace KimodoUnityBridge.Command
                     ["root2d"] = new JObject
                     {
                         ["type"] = "object",
+                        ["description"] = "Planar root position and heading constraint; supply both channels together.",
                         ["additionalProperties"] = false,
-                        ["properties"] = new JObject { ["position"] = vector2.DeepClone(), ["heading"] = vector2.DeepClone() },
+                        ["properties"] = new JObject
+                        {
+                            ["position"] = root2dPosition,
+                            ["heading"] = root2dHeading
+                        },
                         ["required"] = new JArray("position", "heading")
                     },
                     ["effect"] = effectors.DeepClone()
@@ -606,10 +766,11 @@ namespace KimodoUnityBridge.Command
             JObject schema = new JObject
             {
                 ["type"] = "object",
+                ["description"] = "Select exactly one source form: a Timeline-global frame, the current scene Animator pose, or the Avatar skeleton rest pose.",
                 ["additionalProperties"] = false,
                 ["properties"] = new JObject
                 {
-                    ["character"] = new JObject { ["type"] = "string" },
+                    ["character"] = new JObject { ["type"] = "string", ["description"] = "Current scene character name or object_ref." },
                     ["mode"] = new JObject { ["type"] = "string", ["enum"] = new JArray("scene_pose", "skeleton_rest_pose"), ["description"] = "Sample the original scene Animator's currently evaluated pose, or the Avatar's stored skeleton rest pose." },
                     ["timeline_frame_60"] = new JObject
                     {
@@ -678,14 +839,32 @@ namespace KimodoUnityBridge.Command
                 JObject value = (JObject)effectors["properties"][key];
                 value["description"] = "Effector target position and/or rotation.";
             }
+            effectors["description"] = "World-space targets for one or more hands or feet. Supply position and/or rotation for each target.";
             return new JObject
             {
                 ["type"] = "object",
                 ["properties"] = new JObject
                 {
                     ["pose"] = PoseReferenceSchema(),
-                    ["root"] = new JObject { ["type"] = "object", ["description"] = "Root position and rotation." },
-                    ["muscles"] = new JObject { ["type"] = "object", ["description"] = "Map of muscle channel names to values." },
+                    ["root"] = new JObject
+                    {
+                        ["type"] = "object",
+                        ["description"] = "Root position [x,y,z] and/or rotation quaternion [x,y,z,w]. A rotation update requires an existing or supplied root position.",
+                        ["properties"] = new JObject
+                        {
+                            ["position"] = new JObject { ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3, ["items"] = new JObject { ["type"] = "number" } },
+                            ["rotation"] = new JObject { ["type"] = "array", ["minItems"] = 4, ["maxItems"] = 4, ["items"] = new JObject { ["type"] = "number" } }
+                        },
+                        ["additionalProperties"] = false,
+                        ["minProperties"] = 1
+                    },
+                    ["muscles"] = new JObject
+                    {
+                        ["type"] = "object",
+                        ["description"] = "Non-empty map of canonical Humanoid muscle channel names to finite numeric values.",
+                        ["additionalProperties"] = new JObject { ["type"] = "number" },
+                        ["minProperties"] = 1
+                    },
                     ["effector"] = effectors
                 },
                 ["required"] = new JArray("pose"),

@@ -53,7 +53,13 @@ namespace KimodoUnityBridge.Command
                         "Return the command manual, detailed parameter documentation for one command, or currently viable model configurations.",
                         Properties(
                             Optional("command", "string", "Command name whose full manual entry should be returned."),
-                            Enum("section", "commands", "models", "constraints"))),
+                            new PropertyDefinition("section", new JObject
+                            {
+                                ["type"] = "string",
+                                ["enum"] = new JArray("commands", "models", "constraints"),
+                                ["default"] = "commands",
+                                ["description"] = "Select the command overview, currently viable models, or generation constraint reference; ignored when command is supplied."
+                            }, false))),
                     CommandDefinition(SceneContextCommand,
                         "Return the current active-scene context JSON. Use this response as the authoritative source for scene characters, Clips, Timeline ranges, and object references. Set include_history=true to include the compact Session artifact index.",
                         Properties(Optional("include_history", "boolean", "Include compact animation, generation, and analysis history; defaults to false."))),
@@ -99,7 +105,7 @@ namespace KimodoUnityBridge.Command
                         "Start asynchronous generation for a character in the current scene context. Command-created Timeline Clips enable AutoBegin anchoring automatically; explicit first-frame or In/Out samples take precedence. The accepted response contains request_id, status, and non-blocking checks; poll request_id for the completed Clip. Supply trajectory settings only when the requested path is known from explicit requirements or confirmed scene/analysis evidence; prompt wording never selects path options.",
                         Properties(
                             Required("character", "string", "Scene character name or object_ref. Session preview objects are rejected; use the source scene character."),
-                            Required("prompt", "string", "Motion prompt."),
+                            Required("prompt", "string", "Short semantic description of the current Clip's action; aim for 25 words or fewer. Express exact FullBody, position, and effector anchors through structured constraints."),
                             new PropertyDefinition("duration_frames", new JObject
                             {
                                 ["type"] = "integer",
@@ -241,7 +247,7 @@ namespace KimodoUnityBridge.Command
                     {
                         new JObject { ["command"] = InstallServerCommand, ["arguments"] = new JObject(), ["save"] = "request_id", ["before"] = "all other Commands" },
                         new JObject { ["command"] = GetGenerationCommand, ["arguments"] = new JObject { ["request_id"] = "<install_request_id>" }, ["repeat_until"] = "status is completed or failed" },
-                        new JObject { ["command"] = GenerateAnimationCommand, ["arguments"] = new JObject { ["character"] = "<character>", ["prompt"] = "stand still and breathe naturally", ["duration_frames"] = 60 }, ["save"] = "request_id" },
+                        new JObject { ["command"] = GenerateAnimationCommand, ["arguments"] = new JObject { ["character"] = "<character>", ["prompt"] = "<short action for one Clip>", ["duration_frames"] = 60 }, ["save"] = "request_id" },
                         new JObject { ["command"] = GetGenerationCommand, ["arguments"] = new JObject { ["request_id"] = "<request_id>" }, ["repeat_until"] = "status is completed, failed, or canceled" },
                         new JObject { ["command"] = AnimationAnalyzeCommand, ["arguments"] = new JObject { ["clips"] = new JArray(new JObject { ["character"] = "<character>", ["clip"] = "<completed animation>" }), ["picture"] = new JObject { ["output"] = "both" } }, ["save"] = "pictures.image_path" },
                     },
@@ -249,6 +255,7 @@ namespace KimodoUnityBridge.Command
                     {
                         ["name"] = item.Value<string>("name"),
                         ["description"] = item.Value<string>("description"),
+                        ["documentation"] = item["documentation"]?.DeepClone() ?? new JObject(),
                         ["required"] = item["inputSchema"]?["required"]?.DeepClone() ?? new JArray(),
                         ["outputSchema"] = item["outputSchema"]?.DeepClone() ?? new JObject(),
                         ["examples"] = item["examples"]?.DeepClone() ?? new JArray()

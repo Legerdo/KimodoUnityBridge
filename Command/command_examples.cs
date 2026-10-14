@@ -24,18 +24,18 @@ namespace KimodoUnityBridge.Command
                 case TransformCaptureCommand: return Examples("Capture the External Pose returned by pose_get together with scene objects, without moving the scene character.",
                     @"{'pose':{'track':'<returned pose track>','index':0},'transforms':['@pose','<table hierarchy path>','<apple hierarchy path>'],'resolution':768}");
                 case GenerateAnimationCommand: return new JArray(
-                    Example("Generate two seconds and poll the returned request_id.",
-                        @"{'character':'<character>','prompt':'Stand still and breathe naturally','duration_frames':120}"),
+                    Example("Submit one Clip request; use the returned request_id with kimodo_get_generation.",
+                        @"{'character':'<character>','prompt':'<short action for one Clip>','duration_frames':120}"),
                     Example("Continue a source Clip using its final half-second sampled five times. Names must come from the current scene context; inspect inout_sampling after generation completes.",
-                        @"{'character':'<character>','prompt':'Stop walking and stand upright','duration_frames':120,'loop':false,'constraints':[{'inout':{'mode':'outside','in':{'source':{'clip':'<source clip>'},'window_frames':30,'sample_count':5}}}]}"),
+                        @"{'character':'<character>','prompt':'<short action for one Clip>','duration_frames':120,'loop':false,'constraints':[{'inout':{'mode':'outside','in':{'source':{'clip':'<source clip>'},'window_frames':30,'sample_count':5}}}]}"),
                     Example("Use explicit previous/next Clips as context on both sides; crop context from the returned two-second output.",
-                        @"{'character':'<character>','prompt':'Reach for the apple and pick it up','duration_frames':120,'loop':false,'constraints':[{'inout':{'in':{'source':{'clip':'<previous clip>'},'window_frames':30,'sample_count':5},'out':{'source':{'clip':'<next clip>'},'window_frames':12,'sample_count':3}}}]}"),
+                        @"{'character':'<character>','prompt':'<short action for one Clip>','duration_frames':120,'loop':false,'constraints':[{'inout':{'in':{'source':{'clip':'<previous clip>'},'window_frames':30,'sample_count':5},'out':{'source':{'clip':'<next clip>'},'window_frames':12,'sample_count':3}}}]}"),
                     Example("Keep sampled opening and closing windows inside the returned Clip.",
-                        @"{'character':'<character>','prompt':'Bend down then stand up','duration_frames':120,'loop':false,'constraints':[{'inout':{'mode':'inside','in':{'source':{'clip':'<reference clip>','frame':0},'window_frames':12,'sample_count':3},'out':{'source':{'clip':'<reference clip>'},'window_frames':12,'sample_count':3}}}]}"),
+                        @"{'character':'<character>','prompt':'<short action for one Clip>','duration_frames':120,'loop':false,'constraints':[{'inout':{'mode':'inside','in':{'source':{'clip':'<reference clip>','frame':0},'window_frames':12,'sample_count':3},'out':{'source':{'clip':'<reference clip>'},'window_frames':12,'sample_count':3}}}]}"),
                     Example("Set one Root2D point. The selected data fields determine the constraint family; no type tag is needed.",
-                        @"{'character':'<character>','prompt':'Walk to the target','duration_frames':120,'constraints':[{'frame':60,'root2d':{'position':[2.4,5.0],'heading':[0,1]}}]}"),
+                        @"{'character':'<character>','prompt':'<short action for one Clip>','duration_frames':120,'constraints':[{'frame':60,'root2d':{'position':[2.4,5.0],'heading':[0,1]}}]}"),
                     Example("Mix a FullBody pose, Root2D root override, and hand target at one frame. Root2D overlays the pose root channels and effect overlays the named hand target.",
-                        @"{'character':'<character>','prompt':'Reach to the apple','duration_frames':180,'loop':false,'constraints':[{'frame':90,'pose':{'track':'<pose track>','index':0},'root2d':{'position':[2.4,5.0],'heading':[0,1]},'effect':{'right_hand':{'position':[2.55,0.95,5.35]}}}]}"));
+                        @"{'character':'<character>','prompt':'<short action for one Clip>','duration_frames':180,'loop':false,'constraints':[{'frame':90,'pose':{'track':'<pose track>','index':0},'root2d':{'position':[2.4,5.0],'heading':[0,1]},'effect':{'right_hand':{'position':[2.55,0.95,5.35]}}}]}"));
                 case PoseGetCommand: return new JArray(
                     Example("Capture a pose at an absolute Timeline-global frame. Analyze the Clip first, then add its local frame offset to start_timeline_frame_60.",
                         @"{'source':{'character':'<character>','timeline_frame_60':90},'full_data':true}"),

@@ -364,10 +364,21 @@ namespace KimodoUnityBridge.Command.Tests
             {
                 string name = command.Value<string>("name");
                 Assert.That(command["examples"] is JArray examples && examples.Count > 0, Is.True, name);
+                JObject documentation = command["documentation"] as JObject;
+                Assert.That(documentation, Is.Not.Null, name);
+                Assert.That(documentation.Value<string>("when_to_use"), Is.Not.Null.And.Not.Empty, name);
+                foreach (string section in new[] { "behavior", "result_notes", "scene_effects", "limits", "related_commands" })
+                    Assert.That(documentation[section] is JArray values && values.Count > 0, Is.True, $"{name}.{section}");
                 var detail = JObject.Parse(command_dispatcher.Invoke("kimodo_help", new JObject { ["command"] = name }.ToString()));
+                Assert.That(JToken.DeepEquals(detail["manual"]?["documentation"], documentation), Is.True, name);
                 Assert.That(JToken.DeepEquals(detail["manual"]["examples"], command["examples"]), Is.True, name);
-                Assert.That(overview["commands"].Values<JObject>().Single(c => c.Value<string>("name") == name)["examples"].Count(), Is.GreaterThan(0), name);
+                JObject overviewCommand = overview["commands"].Values<JObject>().Single(c => c.Value<string>("name") == name);
+                Assert.That(overviewCommand["examples"].Count(), Is.GreaterThan(0), name);
+                Assert.That(JToken.DeepEquals(overviewCommand["documentation"], documentation), Is.True, name);
             }
+
+            JObject generate = definitions["tools"].Values<JObject>().Single(c => c.Value<string>("name") == "kimodo_generate_animation");
+            Assert.That(generate["inputSchema"]?["properties"]?["prompt"]?.Value<string>("description"), Does.Contain("25 words or fewer"));
         }
     }
 }
