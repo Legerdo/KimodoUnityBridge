@@ -1,43 +1,111 @@
 ---
-name: kimodo-common
-description: Shared command, evidence, asynchronous status, and history rules for all animation phases.
+name: kimodo-animation-loop-common
+description: Shared execution, evidence, recognition, comparison, revision, and handoff contract for reusable Kimodo animation tasks.
 ---
 
-# Common rules
+# Common execution contract
 
-The root `SKILL.md` is the task entry point. The four phase documents describe animation work from intent through evaluation. This page contains only rules shared by those phases.
+This file is the active shared contract for the root Skill. It replaces the former four phase manuals with one loop and keeps the useful evidence rules from the historical recognition and comparison procedures.
 
-## Command entry and schema
+## Command entry and state
 
-The public Editor entry is `KimodoUnityBridge.Command.command_dispatcher`:
+The public Editor entry is:
 
 ```csharp
-string schema = command_dispatcher.GetCommandDefinitionsJson();
-string result = command_dispatcher.Invoke(commandName, argumentsJson);
+string schema = KimodoUnityBridge.Command.command_dispatcher.GetCommandDefinitionsJson();
+string result = KimodoUnityBridge.Command.command_dispatcher.Invoke(commandName, argumentsJson);
 ```
 
-Read the live schema or `kimodo_help` before choosing a command or parameter. Use protocol command names from the schema; internal C# handler names are not public commands. Route calls through the current host's tools, or through `exec_editor_script` when needed.
+Read the live schema or `kimodo_help` before choosing a command or parameter. Use protocol command names, not internal C# handler names. With Unity CLI, execute the dispatcher in the connected Editor. Command frames use 60 FPS; use the documented Clip-relative or Timeline-global origin for each field.
 
-## Responses and asynchronous jobs
+At the start of a task, keep a compact loop state:
 
-- Check the top-level `ok` before reading domain fields.
-- A command error uses `ok=false` and `error={code,message,details?}`.
-- An asynchronous task can return a successful poll response (`ok=true`) whose task `status` is `failed` or `canceled`; report the task status and returned error.
-- Save the exact returned `request_id`. Poll at a fixed interval until a terminal state or bounded timeout. Do not duplicate a request because it is still running.
-- Respect warnings and errors as returned evidence. A warning is neither proof of failure nor proof that the output is safe.
+```text
+intent and explicit requirements
+scene character/object references
+planned Clips and dependencies
+acceptance criteria and allowed semantic alternatives
+confirmed Pose, root, effector, path, and object evidence
+candidates: request_id, animation_id, seed, prompt, constraints, analysis_id
+criterion results: verified, failed, or unknown
+revision history and no-improvement count
+```
 
-## Scene handles and history
+Do not create another public state protocol or copy complete scene/analysis payloads. Use the persisted Session history and returned IDs to navigate candidates.
 
-Use character, Clip, Pose, and object references returned by `scene.context` or the relevant command. Treat `clip.asset_path` as asset metadata, not as a scene Clip handle. Resolve stale or ambiguous references again through the public commands; do not infer a handle from display names or file paths.
+## Response and asynchronous rules
 
-`scene.context` exposes the current `session_id`, persisted `session_revision`, schema version, characters, and their Timeline Clips by default. Pass `include_history=true` only when the Session-wide generation and analysis index is needed. Each generation and analysis also has its own persisted JSON record, so that index should not be fetched on every scene lookup. Keep `animation_id`, `request_id`, and `analysis_id` distinct when coordinating iterations; use `analysis_path` and `picture_paths` as evidence references. `session_revision` is a persisted write counter, not a snapshot, branch, undo point, or rollback command.
+- Check top-level `ok` before reading domain fields.
+- Command errors use `ok=false` and `error={code,message,details?}`.
+- A successful poll can still have task `status` `failed` or `canceled`; report that terminal state and its error.
+- Save the exact `request_id`; poll at a fixed interval until a terminal state or bounded timeout.
+- Never duplicate a request that is still running. Cancel only when the task should stop.
+- Treat warnings and non-blocking checks as evidence to inspect.
+- Preserve completed Clips and use derived outputs for revisions.
 
-Keep only the small facts needed during the current task in working context. Do not create another public state format, persistent CLI state, or copied scene/analysis payload.
+## Intent-to-criteria loop
 
-## Evidence and reporting
+For each request:
 
-- Open returned images before making visual claims.
-- Separate visible observations, structured measurements, and playback observations.
-- Static images do not establish playback continuity, acceleration, velocity smoothness, foot sliding, or popping.
-- Missing or conflicting evidence remains unknown; state what could not be checked.
-- Preserve completed Clips and make supported corrections as derived outputs.
+1. Resolve participating characters and objects from the current scene. Identify the visible result, action order, contact points, duration, and ending state. State assumptions.
+2. Split independent goals or target interactions into Clips. Keep one continuous semantic action together. Record dependencies between Clips.
+3. Select only criteria relevant to the request. Criteria may be semantic, spatial, temporal, contact-related, structural, visual, or playback-related.
+4. Gather the smallest evidence needed: `scene.context`, `pose_get`, `transform_capture`, an existing Clip analysis, or a confirmed object Transform. Do not turn every observation into a constraint.
+5. Construct a short semantic prompt and structured constraints. Exact root position, heading, Pose, hand/foot target, loop, duration, and continuation belong in fields supported by the live schema.
+6. Generate candidates, poll each request, and retain the IDs and submitted settings.
+7. Analyze each candidate under the criteria. Open returned images before visual claims and map each claim to its tile or structured field.
+8. Compare candidates only when there are multiple candidates or the user requests a comparison. Use identical conditions and decide each criterion independently.
+9. If a criterion fails with evidence, change only the relevant input and create a derived candidate. If evidence is missing, gather it or report unknown; do not retry blindly.
+10. Finish when criteria pass, further candidates do not improve the target, or the remaining work is outside the supported command surface.
+
+## Recognition contract
+
+Recognition is a constrained evidence operation, not a source of new intent. The caller supplies semantic alternatives when action semantics must be distinguished. Never infer from a filename, Clip name, candidate order, ID, or saliency.
+
+Use only relevant tasks from this set:
+
+```text
+visual: trajectory_shape, action_semantics, visual_motion_quality, contact_pattern
+structured: loop_endpoint, keyframe_heading, trajectory_turn,
+            trajectory_length, phase_track, endpoint_pose, motion_profile
+```
+
+Allowed visual values remain deliberately small:
+
+```text
+trajectory_shape: closed_loop | open_path | near_static | unclear
+visual_motion_quality: smooth_appearance | visible_break | unclear
+contact_pattern: alternating | left_dominant | right_dominant | unclear
+```
+
+For every task, return a value, confidence, and evidence. Return `unknown` or `unclear` when the image is unreadable, fields are absent, evidence conflicts, or the claim requires playback that was not observed. `smooth_appearance` describes an unbroken static drawing; it does not mean playback smoothness. Structured trajectory values come from named returned fields, never from pixel estimates.
+
+When comparing action semantics, use only caller-provided alternatives and phase/pose/contact evidence. A single accidental contact or anchor frame does not prove a required phase. If alternatives cannot be separated, preserve `unknown`.
+
+## Comparison contract
+
+Analyze and render each candidate separately with the same picture request, resolution, and evidence procedure. Validate the candidate-to-image mapping before comparing. Compare only criteria declared for the task, such as semantic correctness, trajectory coherence, foot contacts, required phase coverage, required Pose coverage, expression strength, endpoint continuity, or a declared neighboring-Clip transition.
+
+For each criterion, report `candidate_1`, `candidate_2`, `tie`, or `unknown`, with a short reason and evidence. Do not calculate an overall winner by summing scores, votes, magnitudes, displacement, contact counts, or selected frames. Prefer one candidate only when the target criterion and evidence make the difference decisive; otherwise report no reliable difference or insufficient evidence.
+
+## Evidence boundaries
+
+Report these separately:
+
+- **Visual**: what the opened image visibly shows.
+- **Structured**: what the command returned as a measured field.
+- **Playback**: what was observed during actual playback or a supported runtime check.
+
+Static pictures cannot establish velocity or acceleration smoothness, foot sliding, popping, or playback continuity. A missing criterion is `unknown`, not a failure. A failed command is different from an animation that generated but failed its acceptance criteria.
+
+## Revision and human handoff
+
+Use a targeted revision table internally:
+
+```text
+failed criterion → supporting evidence → changed input → new candidate → result
+```
+
+Do not regenerate passing dependencies. Stop automatic revision when the same criterion fails without improvement across the configured attempts, when the remaining defect is artistic frame-by-frame polish, or when it needs complex rigging, physics, or an unsupported object command. Report the successful criteria, failed/unknown criteria, candidates tried, evidence paths, and the precise animator handoff.
+
+For simple props, the loop may include future Transform-curve and interaction commands. They must share the same contact frames, offsets, Timeline range, and evidence IDs with the character candidate. Until such commands exist, mark arbitrary prop curve authoring or hand attachment as unsupported.

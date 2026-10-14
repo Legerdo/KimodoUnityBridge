@@ -1,14 +1,14 @@
-# Four-Phase Animation Workflow: Practical Test Cases
+# Reusable Animation Loop: Practical Test Cases
 
 These are interactive acceptance tests for the Skill workflow, not Unity unit tests. Run them in a Unity project with KimodoUnityBridge installed, a ready local runtime, an active Timeline Session, and at least one valid humanoid character. Re-check `kimodo_help` and the live schema before each run. Do not treat a test prompt as permission to alter scene assets outside the requested generated output.
 
 ## Shared pass criteria
 
-- Phase 1 states intent, action beats, space, timing exactness, evidence needed, acceptance criteria, and consequential unknowns.
-- Phase 2 adds only supported structured constraints, validates the time base and references, and stops when an exact input cannot be resolved.
-- Phase 3 saves the exact `request_id`, checks warnings, polls to a terminal state, and does not duplicate an in-flight request.
-- Phase 4 uses full `animation_analyze` for the completed Clip, opens returned image evidence, and marks unsupported conclusions unknown.
-- A correction produces a distinct derived Clip and repeats the affected phases; the earlier Clip and its history remain available.
+- The plan states intent, action beats, space, timing, evidence needed, acceptance criteria, and consequential unknowns.
+- The request adds only supported structured constraints, validates time bases and references, and stops when an exact input cannot be resolved.
+- The loop saves the exact `request_id`, checks warnings, polls to a terminal state, and does not duplicate an in-flight request.
+- Completed Clips use `animation_analyze`; returned image evidence is opened, and unsupported conclusions remain unknown.
+- A correction produces a distinct derived Clip and repeats only the affected loop steps; earlier Clips and their history remain available.
 
 ## Cases
 
@@ -18,7 +18,7 @@ These are interactive acceptance tests for the Skill workflow, not Unity unit te
 
 **Setup:** Any valid humanoid character in the current scene.
 
-**Exercise:** Run all four phases without adding path, Pose, or loop constraints unless the live scene or user requirement establishes a need. Generate, poll, run `animation_analyze` on one Clip, and inspect its returned image.
+**Exercise:** Run the reusable loop without adding path, Pose, or loop constraints unless the live scene or user requirement establishes a need. Generate, poll, run `animation_analyze` on one Clip, and inspect its returned image.
 
 **Pass when:** the plan preserves the planted greeting and relaxed ending; no unsupported spatial constraints are submitted; the report distinguishes visible evidence from unverified playback quality.
 
@@ -68,7 +68,7 @@ These are interactive acceptance tests for the Skill workflow, not Unity unit te
 
 **Setup:** A completed greeting Clip and a valid humanoid.
 
-**Exercise:** Analyze and inspect the original Clip. If evidence supports the defect, return to phase 2 for the affected constraint, then phase 3 to generate and poll a derived Clip; return to phase 4 using the same acceptance criterion. Revisit phase 1 only if the intent, beats, timing, or criterion changes.
+**Exercise:** Analyze and inspect the original Clip. If evidence supports the defect, revise only the affected constraint, generate and poll a derived Clip, then evaluate it against the same acceptance criterion. Revisit intent planning only if the intent, beats, timing, or criterion changes.
 
 **Pass when:** the revision is triggered by cited evidence, targets the identified beat, and leaves the original available. If the pause cannot be judged from available evidence, no speculative retry occurs.
 
@@ -88,7 +88,7 @@ These are interactive acceptance tests for the Skill workflow, not Unity unit te
 
 **Setup:** A valid humanoid and a clearly identified route/endpoint, with the time/action combination intentionally left ambiguous.
 
-**Exercise:** Phase 1 identifies the conflict between pace, distance, and duration and asks which requirement should take priority. Do not submit generation until the user resolves it. After clarification, convert an approximate duration to 60 FPS frames in phase 2, or preserve an explicit frame count. If the user requires an exact duration that cannot be represented at 60 FPS, ask whether the nearest frame duration is acceptable.
+**Exercise:** The planning step identifies the conflict between pace, distance, and duration and asks which requirement should take priority. Do not submit generation until the user resolves it. After clarification, convert an approximate duration to 60 FPS frames or preserve an explicit frame count. If the user requires an exact duration that cannot be represented at 60 FPS, ask whether the nearest frame duration is acceptable.
 
 **Pass when:** the system does not silently change the action, route, or duration and does not invent coordinates; no generation request is submitted before the consequential ambiguity is resolved.
 
