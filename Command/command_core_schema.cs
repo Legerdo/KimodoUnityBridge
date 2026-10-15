@@ -140,7 +140,7 @@ namespace KimodoUnityBridge.Command
                 GenerateAnimationCommand => CommandDocumentation(
                     "Submit one animation generation request for a character in the current scene context.",
                     new[] { "Describe one simple semantic action in prompt; aim for 25 words or fewer.", "Represent exact body pose, root position, effector targets, duration, path, loop, and Clip windows in their explicit fields when required.", "Save request_id and use kimodo_get_generation to poll; do not resubmit a running request." },
-                    new[] { "The accepted response contains request_id, status, non-blocking check results, and warnings. Pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect; effect-only constraints skip it.", "On completion, kimodo_get_generation returns the generated Clip metadata, asset path, animation_id, and available generation diagnostics." },
+                    new[] { "The accepted response contains request_id, status, non-blocking check results, and warnings. Pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect; effect-only constraints skip it.", "On completion, kimodo_get_generation returns the generated Clip metadata, asset path, animation_id, generation diagnostics, and one full animation_analyze result under post_analysis. Analysis failure is reported separately and does not invalidate the generated Clip." },
                     new[] { "A completed result is appended as a Timeline Clip; existing completed Clips are retained.", "The first scene pose is used as the automatic starting anchor unless explicit first-frame or In/Out samples take precedence." },
                     new[] { "Trajectory overrides require an explicit requirement or confirmed scene/analysis evidence; prompt words do not select path options.", "analysis_option is lightweight generation-time analysis, not the full animation_analyze command.", "Command checks validate supported request boundaries; they do not judge semantic or artistic quality." },
                     SceneContextCommand, PoseGetCommand, GetGenerationCommand, CancelGenerationCommand, AnimationAnalyzeCommand),
@@ -269,7 +269,7 @@ namespace KimodoUnityBridge.Command
                 PoseGetCommand => new[] { "pose", "source", "character_root", "data" },
                 PoseTestCommand => new[] { "pose", "source", "overall", "joints" },
                 PoseSetCommand or PoseSetRootTransformCommand or PoseSetMuscleCommand => new[] { "pose", "data" },
-                GetGenerationCommand => new[] { "request_id", "status", "stage", "message", "started_at_utc", "estimated_completion_utc", "eta_seconds", "progress_current", "progress_total", "progress_rate", "backend_progress", "runtime_root", "runtime_version", "install_mode", "server_connected", "clip", "animation_id", "seed", "analysis", "analysis_schema_version", "source_type", "skeleton", "person", "fps", "source_frame_count", "frame_count", "joint_names", "pose_parameterization", "coordinate_spaces", "betas", "rest_joints_m", "poses", "constraints", "constraint_loss", "inout_sampling", "target_alive", "backend_request_json" },
+                GetGenerationCommand => new[] { "request_id", "status", "stage", "message", "started_at_utc", "estimated_completion_utc", "eta_seconds", "progress_current", "progress_total", "progress_rate", "backend_progress", "runtime_root", "runtime_version", "install_mode", "server_connected", "clip", "animation_id", "seed", "analysis", "post_analysis", "analysis_schema_version", "source_type", "skeleton", "person", "fps", "source_frame_count", "frame_count", "joint_names", "pose_parameterization", "coordinate_spaces", "betas", "rest_joints_m", "poses", "constraints", "constraint_loss", "inout_sampling", "target_alive", "backend_request_json" },
                 CancelGenerationCommand => new[] { "request_id", "status", "stage", "message", "canceled", "clip" },
                 SessionClearCommand => new[] { "cleared", "name", "destroyed_context_count", "recreated_on_next_command" },
                 _ => Array.Empty<string>()
@@ -416,6 +416,18 @@ namespace KimodoUnityBridge.Command
                 case "overall": return new JObject { ["type"] = "string", ["enum"] = new JArray("passed", "failed", "not_tested") };
                 case "data": case "check": case "analysis": case "constraint_loss": case "inout_sampling": case "evaluated_joints_world":
                     return ObjectSchema();
+                case "post_analysis":
+                    return new JObject
+                    {
+                        ["type"] = "object",
+                        ["properties"] = new JObject
+                        {
+                            ["status"] = new JObject { ["type"] = "string", ["enum"] = new JArray("pending", "completed", "failed", "skipped") },
+                            ["result"] = ObjectSchema("analysis_schema_version", "clip", "pictures"),
+                            ["error"] = ObjectSchema("code", "message")
+                        },
+                        ["additionalProperties"] = true
+                    };
                 default:
                     return new JObject { ["type"] = "object" };
             }

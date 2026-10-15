@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using KimodoBridge.Editor;
 using KimodoUnityBridge.Command;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
@@ -79,6 +80,7 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(videoAnalysis["inputSchema"]?["properties"]?["person"]?["enum"], Is.Not.Null);
             Assert.That(videoAnalysis["outputSchema"]?["properties"]?["request_id"], Is.Not.Null);
             Assert.That(get["outputSchema"]?["properties"]?["poses"]?["items"]?["properties"]?["body_pose_axis_angle"], Is.Not.Null);
+            Assert.That(get["outputSchema"]?["properties"]?["post_analysis"]?.Value<string>("type"), Is.EqualTo("object"));
             JObject duration = (JObject)generate["inputSchema"]?["properties"]?["duration_frames"];
             Assert.That(duration?.Value<int>("minimum"), Is.EqualTo(1));
             Assert.That(duration?.Value<int>("default"), Is.EqualTo(300));
@@ -180,6 +182,7 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(generate["outputSchema"]?["properties"]?["request_id"], Is.Not.Null);
             Assert.That(generate["outputSchema"]?["properties"]?["check"], Is.Not.Null);
             Assert.That(generate["outputSchema"]?["properties"]?["warnings"]?["type"]?.Value<string>(), Is.EqualTo("array"));
+            Assert.That(Tool(document, "kimodo_get_generation")["outputSchema"]?["properties"]?["post_analysis"], Is.Not.Null);
             Assert.That(generate["outputSchema"]?["properties"]?["model"], Is.Null);
             Assert.That(generate["outputSchema"]?["properties"]?["constraints"], Is.Null);
 
@@ -311,6 +314,40 @@ namespace KimodoUnityBridge.Command.Tests
             });
             Assert.That(failed["error"]?.Value<string>("code"), Is.EqualTo("generation_failed"));
             Assert.That(failed["error"]?.Value<string>("message"), Is.EqualTo("backend unavailable"));
+        }
+
+        [Test]
+        [Category("Generation")]
+        public void PostGenerationAnalysisStatus_KeepsAnalysisOutcomeSeparate()
+        {
+            Type context = typeof(command_dispatcher).Assembly.GetType("KimodoUnityBridge.Command.command_context");
+            MethodInfo builder = context.GetMethod("BuildPostAnalysisStatus", BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(builder, Is.Not.Null);
+
+            var completedPayload = new KimodoEditorGenerationResult
+            {
+                PostAnalysisJson = "{\"analysis_schema_version\":1,\"clip\":{\"name\":\"PickUp\"}}"
+            };
+            JObject completed = (JObject)builder.Invoke(null, new object[]
+            {
+                completedPayload, KimodoEditorGenerationJobStatus.Completed
+            });
+            Assert.That(completed.Value<string>("status"), Is.EqualTo("completed"));
+            Assert.That(completed["result"]?["clip"]?.Value<string>("name"), Is.EqualTo("PickUp"));
+
+            var failedPayload = new KimodoEditorGenerationResult { PostAnalysisError = "picture render failed" };
+            JObject failed = (JObject)builder.Invoke(null, new object[]
+            {
+                failedPayload, KimodoEditorGenerationJobStatus.Completed
+            });
+            Assert.That(failed.Value<string>("status"), Is.EqualTo("failed"));
+            Assert.That(failed["error"]?.Value<string>("code"), Is.EqualTo("post_analysis_failed"));
+
+            JObject skipped = (JObject)builder.Invoke(null, new object[]
+            {
+                new KimodoEditorGenerationResult(), KimodoEditorGenerationJobStatus.Canceled
+            });
+            Assert.That(skipped.Value<string>("status"), Is.EqualTo("skipped"));
         }
 
         private static JObject Definitions()
