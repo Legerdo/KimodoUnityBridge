@@ -874,108 +874,119 @@ namespace KimodoUnityBridge.Command
         public static string AnimationAnalyze(string argumentsJson)
         {
             return Execute(argumentsJson, arguments =>
+                Ok(AnimationAnalyzeCore(arguments, allowActiveGenerationRange: false)));
+        }
+
+        private static JObject AnimationAnalyzeCore(JObject arguments, bool allowActiveGenerationRange)
+        {
+            TimelineSessionRecord session = RequireTimelineSession(arguments);
+            JArray clips = arguments["clips"] as JArray;
+            if (clips == null || clips.Count != 1 || clips[0] is not JObject clipReference)
             {
-                TimelineSessionRecord session = RequireTimelineSession(arguments);
-                JArray clips = arguments["clips"] as JArray;
-                if (clips == null || clips.Count != 1 || clips[0] is not JObject clipReference)
-                {
-                    throw new InvalidOperationException("clips must contain exactly one character and clip reference.");
-                }
-                string characterName = RequiredStringValue(clipReference, "character");
-                if (IsLegacyPreviewCharacterReference(characterName))
-                {
-                    throw new InvalidOperationException($"Character reference '{characterName}' identifies a session preview object. Use the source scene character name instead.");
-                }
-                TimelineCharacterRecord character = session.Characters.FirstOrDefault(item =>
-                    string.Equals(item.Name, characterName, StringComparison.OrdinalIgnoreCase));
-                if (character == null)
-                {
-                    throw new InvalidOperationException($"Character '{characterName}' is not in the current scene context.");
-                }
+                throw new InvalidOperationException("clips must contain exactly one character and clip reference.");
+            }
+            string characterName = RequiredStringValue(clipReference, "character");
+            if (IsLegacyPreviewCharacterReference(characterName))
+            {
+                throw new InvalidOperationException($"Character reference '{characterName}' identifies a session preview object. Use the source scene character name instead.");
+            }
+            TimelineCharacterRecord character = session.Characters.FirstOrDefault(item =>
+                string.Equals(item.Name, characterName, StringComparison.OrdinalIgnoreCase));
+            if (character == null)
+            {
+                throw new InvalidOperationException($"Character '{characterName}' is not in the current scene context.");
+            }
 
-                string clipName = RequiredStringValue(clipReference, "clip");
-                TimelineAnimationRecord animation = character.Animations.FirstOrDefault(item =>
-                    string.Equals(item.Name, clipName, StringComparison.OrdinalIgnoreCase));
-                if (animation == null)
+            string clipName = RequiredStringValue(clipReference, "clip");
+            TimelineAnimationRecord animation = character.Animations.FirstOrDefault(item =>
+                string.Equals(item.Name, clipName, StringComparison.OrdinalIgnoreCase));
+            if (animation == null)
+            {
+                if (allowActiveGenerationRange)
                 {
-                    AnimationClip externalClip = ResolveAnimationClip(clipName);
-                    animation = AppendAnimationClip(session, character, externalClip, "analysis_source", null);
+                    throw new InvalidOperationException(
+                        $"Generated Clip '{clipName}' is not registered in the current scene context; post-analysis will not append a duplicate Clip.");
                 }
-                int startFrame = Mathf.RoundToInt((float)(animation.TimelineStartSeconds * SessionFrameRate));
-                int endFrame = startFrame + Math.Max(1, Mathf.RoundToInt((float)(animation.TimelineDurationSeconds * SessionFrameRate)));
+                AnimationClip externalClip = ResolveAnimationClip(clipName);
+                animation = AppendAnimationClip(session, character, externalClip, "analysis_source", null);
+            }
+            int startFrame = Mathf.RoundToInt((float)(animation.TimelineStartSeconds * SessionFrameRate));
+            int endFrame = startFrame + Math.Max(1, Mathf.RoundToInt((float)(animation.TimelineDurationSeconds * SessionFrameRate)));
+            if (!allowActiveGenerationRange)
+            {
                 ThrowIfGenerationRangeLocked(session, character, startFrame, endFrame, AnimationAnalyzeCommand);
+            }
 
-                JObject picture = AnalysisPictureRequest.Parse(arguments["picture"] as JObject).ToJson();
-                int pictureResolution = ResolveAnalysisPictureResolution(arguments["resolution"]);
-                JObject requestedAnalysisOptions = null;
-                string requestedAnalysisOptionsJson = ParseAnalysisOptionsJson(arguments);
-                if (!string.IsNullOrWhiteSpace(requestedAnalysisOptionsJson))
+            JObject picture = AnalysisPictureRequest.Parse(arguments["picture"] as JObject).ToJson();
+            int pictureResolution = ResolveAnalysisPictureResolution(arguments["resolution"]);
+            JObject requestedAnalysisOptions = null;
+            string requestedAnalysisOptionsJson = ParseAnalysisOptionsJson(arguments);
+            if (!string.IsNullOrWhiteSpace(requestedAnalysisOptionsJson))
+            {
+                requestedAnalysisOptions = JObject.Parse(requestedAnalysisOptionsJson);
+            }
+            JObject analysisOptions = BuildEffectiveAnalysisOptions(requestedAnalysisOptions);
+            string inputSignature = BuildAnimationAnalysisSignature(character, animation, analysisOptions);
+            AnalysisCacheRecord record;
+            if (!TryFindCachedAnimationAnalysis(session, character, animation, inputSignature, out record))
+            {
+                if (!IsHumanoidCharacter(character) && !HasRenderableMesh(character.Root))
                 {
-                    requestedAnalysisOptions = JObject.Parse(requestedAnalysisOptionsJson);
-                }
-                JObject analysisOptions = BuildEffectiveAnalysisOptions(requestedAnalysisOptions);
-                string inputSignature = BuildAnimationAnalysisSignature(character, animation, analysisOptions);
-                AnalysisCacheRecord record;
-                if (!TryFindCachedAnimationAnalysis(session, character, animation, inputSignature, out record))
-                {
-                    if (!IsHumanoidCharacter(character) && !HasRenderableMesh(character.Root))
-                    {
-                        throw new InvalidOperationException(
-                            $"Character '{character.Name}' is neither a valid humanoid nor a renderable Mesh object.");
-                    }
-
-                    JObject analysis;
-                    byte[] analysisMotionBytes;
-                    if (IsHumanoidCharacter(character))
-                    {
-                        analysis = AnalyzeAnimation(session, animation, analysisOptions, out analysisMotionBytes);
-                    }
-                    else
-                    {
-                        analysis = BuildMeshAnalysis(animation);
-                        analysisMotionBytes = null;
-                    }
-                    if (!IsHumanoidCharacter(character)) analysis["source"] = "mesh_only_pose_sampling";
-                    string id = CacheAnalysisResult(
-                        session, character, startFrame / SessionFrameRate, endFrame / SessionFrameRate,
-                        new JArray(), analysis, analysisMotionBytes, animation, inputSignature);
-                    record = GetCachedAnalysis(session, id);
+                    throw new InvalidOperationException(
+                        $"Character '{character.Name}' is neither a valid humanoid nor a renderable Mesh object.");
                 }
 
-                // Normalize on cache hits as well so persisted results never
-                // reintroduce deprecated relative-time keyframe fields.
-                NormalizeAnalysisContract(record.Analysis, startFrame, endFrame);
+                JObject analysis;
+                byte[] analysisMotionBytes;
                 if (IsHumanoidCharacter(character))
                 {
-                    EnsureAnalysisRootTrajectory(session, character, record, startFrame, endFrame);
-                    EnsureEndpointPoseComparison(session, character, animation, record, startFrame, endFrame);
+                    analysis = AnalyzeAnimation(session, animation, analysisOptions, out analysisMotionBytes);
                 }
-                var subject = new AnalysisSubject(character, animation, record, startFrame, endFrame);
-                JObject pictures = RenderAnalysisPictures(session, new[] { subject }, picture, pictureResolution);
-                SaveTimelineSession(session);
-                string analysisImagePath = pictures?.Value<string>("image_path") ?? string.Empty;
-                var analysisLog = new JObject
+                else
                 {
-                    ["picture"] = picture.DeepClone(),
-                    ["clip"] = new JObject
-                    {
-                        ["character"] = subject.Character?.Name ?? string.Empty,
-                        ["clip"] = subject.Animation?.Name ?? string.Empty,
-                        ["analysis"] = subject.Record.Analysis?.DeepClone() ?? new JObject()
-                    },
-                    ["image_path"] = analysisImagePath,
-                    ["image_path_absolute"] = string.IsNullOrWhiteSpace(analysisImagePath)
-                        ? string.Empty
-                        : ProjectRelativePathToAbsolute(analysisImagePath)
-                };
-                Debug.Log("[Kimodo][Analysis] " + analysisLog.ToString(Formatting.None));
-                return Ok(new JObject
+                    analysis = BuildMeshAnalysis(animation);
+                    analysisMotionBytes = null;
+                }
+                if (!IsHumanoidCharacter(character)) analysis["source"] = "mesh_only_pose_sampling";
+                string id = CacheAnalysisResult(
+                    session, character, startFrame / SessionFrameRate, endFrame / SessionFrameRate,
+                    new JArray(), analysis, analysisMotionBytes, animation, inputSignature);
+                record = GetCachedAnalysis(session, id);
+            }
+
+            // Normalize on cache hits as well so persisted results never
+            // reintroduce deprecated relative-time keyframe fields.
+            NormalizeAnalysisContract(record.Analysis, startFrame, endFrame);
+            if (IsHumanoidCharacter(character))
+            {
+                EnsureAnalysisRootTrajectory(session, character, record, startFrame, endFrame);
+                EnsureEndpointPoseComparison(session, character, animation, record, startFrame, endFrame);
+            }
+            var subject = new AnalysisSubject(character, animation, record, startFrame, endFrame);
+            JObject pictures = RenderAnalysisPictures(session, new[] { subject }, picture, pictureResolution);
+            SaveTimelineSession(session);
+            string analysisImagePath = pictures?.Value<string>("image_path") ?? string.Empty;
+            var analysisLog = new JObject
+            {
+                ["picture"] = picture.DeepClone(),
+                ["clip"] = new JObject
                 {
-                    ["analysis_schema_version"] = AnalysisContractVersion,
-                    ["clip"] = BuildAnimationAnalyzeClipResult(subject),
-                    ["pictures"] = BuildPublicPictureMetadata(pictures, subject)
-                });
-            });
+                    ["character"] = subject.Character?.Name ?? string.Empty,
+                    ["clip"] = subject.Animation?.Name ?? string.Empty,
+                    ["analysis"] = subject.Record.Analysis?.DeepClone() ?? new JObject()
+                },
+                ["image_path"] = analysisImagePath,
+                ["image_path_absolute"] = string.IsNullOrWhiteSpace(analysisImagePath)
+                    ? string.Empty
+                    : ProjectRelativePathToAbsolute(analysisImagePath)
+            };
+            Debug.Log("[Kimodo][Analysis] " + analysisLog.ToString(Formatting.None));
+            return new JObject
+            {
+                ["analysis_schema_version"] = AnalysisContractVersion,
+                ["clip"] = BuildAnimationAnalyzeClipResult(subject),
+                ["pictures"] = BuildPublicPictureMetadata(pictures, subject)
+            };
         }
 
         private static JObject BuildAnimationAnalyzeClipResult(AnalysisSubject subject)

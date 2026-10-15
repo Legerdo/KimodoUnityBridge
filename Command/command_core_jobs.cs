@@ -214,10 +214,18 @@ namespace KimodoUnityBridge.Command
                 result["path"] = generated.GeneratedClip != null
                     ? AssetDatabase.GetAssetPath(generated.GeneratedClip) ?? string.Empty
                     : string.Empty;
+                result["post_analysis"] = BuildPostAnalysisStatus(generated, session.Status);
             }
             else
             {
                 result["path"] = string.Empty;
+                if (record.TimelineGenerationTrace != null)
+                {
+                    result["post_analysis"] = new JObject
+                    {
+                        ["status"] = session.Status == KimodoEditorGenerationJobStatus.Running ? "pending" : "skipped"
+                    };
+                }
             }
             if (record.TimelineGenerationTrace != null)
             {
@@ -233,6 +241,63 @@ namespace KimodoUnityBridge.Command
                 }
             }
             return result;
+        }
+
+        private static JObject BuildPostAnalysisStatus(
+            KimodoEditorGenerationResult generated,
+            KimodoEditorGenerationJobStatus generationStatus)
+        {
+            if (!string.IsNullOrWhiteSpace(generated?.PostAnalysisJson))
+            {
+                try
+                {
+                    return new JObject
+                    {
+                        ["status"] = "completed",
+                        ["result"] = JToken.Parse(generated.PostAnalysisJson)
+                    };
+                }
+                catch
+                {
+                    return new JObject
+                    {
+                        ["status"] = "failed",
+                        ["error"] = new JObject
+                        {
+                            ["code"] = "post_analysis_result_invalid",
+                            ["message"] = "Post-generation analysis returned invalid JSON."
+                        }
+                    };
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(generated?.PostAnalysisError))
+            {
+                return new JObject
+                {
+                    ["status"] = "failed",
+                    ["error"] = new JObject
+                    {
+                        ["code"] = "post_analysis_failed",
+                        ["message"] = generated.PostAnalysisError
+                    }
+                };
+            }
+
+            if (generationStatus != KimodoEditorGenerationJobStatus.Completed)
+            {
+                return new JObject { ["status"] = "skipped" };
+            }
+
+            return new JObject
+            {
+                ["status"] = "failed",
+                ["error"] = new JObject
+                {
+                    ["code"] = "post_analysis_unavailable",
+                    ["message"] = "No post-generation analysis result was recorded."
+                }
+            };
         }
 
         private static JObject NormalizeInstallStatus(JObject source, string requestId)
