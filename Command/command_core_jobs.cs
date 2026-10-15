@@ -522,7 +522,7 @@ namespace KimodoUnityBridge.Command
                 string candidate = modelName.Trim();
                 if (candidate.IndexOfAny(new[] { '\\', '/', ':' }) >= 0)
                 {
-                    throw new InvalidOperationException("model must be a registered model name/configuration id from kimodo_help section models, not a filesystem path.");
+                    throw new InvalidOperationException("model must be a registered model name/configuration id from kimodo.help section models, not a filesystem path.");
                 }
             }
             return KimodoMotionModelProfiles.NormalizeName(string.IsNullOrWhiteSpace(modelName)
@@ -614,7 +614,7 @@ namespace KimodoUnityBridge.Command
             if (found == null)
             {
                 throw new InvalidOperationException(
-                    $"Model '{modelName}' with text_encoder_model '{KimodoTextEncoderModeProtocol.ToProtocolValue(textEncoderMode)}' is not listed by kimodo_help section models.");
+                    $"Model '{modelName}' with text_encoder_model '{KimodoTextEncoderModeProtocol.ToProtocolValue(textEncoderMode)}' is not listed by kimodo.help section models.");
             }
             return found;
         }

@@ -453,7 +453,7 @@ namespace KimodoUnityBridge.Command.Tests
             JObject generation = JObject.Parse(command_dispatcher.GetCommandDefinitionsJson())
                 ["tools"]
                 .Values<JObject>()
-                .Single(tool => tool.Value<string>("name") == "kimodo_generate_animation");
+                .Single(tool => tool.Value<string>("name") == "animation.generate");
             JObject constraints = (JObject)generation["inputSchema"]["properties"]["constraints"];
             JObject point = ((JArray)constraints["items"]["oneOf"])
                 .Values<JObject>()

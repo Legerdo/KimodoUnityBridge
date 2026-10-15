@@ -721,7 +721,7 @@ namespace KimodoUnityBridge.Command
             {
                 // A command point without an explicit Pose is still created
                 // from a complete scene-time support sample. This is the same
-                // sampling boundary used by pose_get; the concrete mode below
+                // sampling boundary used by pose.get; the concrete mode below
                 // expresses the channels authored by this command.
                 return CaptureSampleResult(
                     RequireCurrentTimelineSession(),

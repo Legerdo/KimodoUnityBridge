@@ -16,6 +16,6 @@
 
 ## 交接说明
 
-执行任务时从根目录 `SKILL.md` 开始，读取 `tools/common.md`，再按任务需要查询 `Command/help.json` 或实时 `kimodo_help`。归档材料不作为当前工作流指令。
+执行任务时从根目录 `SKILL.md` 开始，读取 `tools/common.md`，再按任务需要查询 `Command/help.json` 或实时 `kimodo.help`。归档材料不作为当前工作流指令。
 
 修改命令或执行规则时，更新其归属文档，并运行静态链接/命令审计与 `git diff --check`。

@@ -5,7 +5,7 @@ description: Coordinate reusable Unity animation tasks across Kimodo commands, U
 
 # KimodoUnityBridge
 
-Use this Skill when the user wants to create, continue, retarget, inspect, compare, or improve animation in a Unity project with KimodoUnityBridge installed. Read [`tools/common.md`](tools/common.md) before executing a task. Read the live command schema or `kimodo_help` before choosing parameters; [`Command/help.json`](Command/help.json) is the checked-in reference, not a substitute for the connected Editor schema.
+Use this Skill when the user wants to create, continue, retarget, inspect, compare, or improve animation in a Unity project with KimodoUnityBridge installed. Read [`tools/common.md`](tools/common.md) before executing a task. Read the live command schema or `kimodo.help` before choosing parameters; [`Command/help.json`](Command/help.json) is the checked-in reference, not a substitute for the connected Editor schema.
 
 ## Scope
 
@@ -49,13 +49,13 @@ Choose criteria that can be checked for this task. Typical criteria are action s
 
 ### Constraints and generation
 
-Keep the motion prompt short and semantic. Put exact positions, headings, Poses, hand or foot targets, loop settings, Clip windows, and confirmed continuation data in structured command fields. Use only scene evidence or explicit requirements for exact constraints. Resolve and inspect a `pose_get` result before using its `{track,index}` reference. Distinguish Timeline-global frames from generated-Clip-relative frames.
+Keep the motion prompt short and semantic. Put exact positions, headings, Poses, hand or foot targets, loop settings, Clip windows, and confirmed continuation data in structured command fields. Use only scene evidence or explicit requirements for exact constraints. Resolve and inspect a `pose.get` result before using its `{track,index}` reference. Distinguish Timeline-global frames from generated-Clip-relative frames.
 
 Generate dependent Clips in order. When a later Clip must continue from an earlier one, finish and evaluate the earlier Clip first, then use its confirmed ending as the next input. For unstable generation, vary the Seed or a targeted constraint and retain every candidate's `request_id`, `animation_id`, Seed, prompt, constraints, and analysis IDs.
 
 ### Evidence, recognition, and comparison
 
-Run `animation_analyze` for each candidate that needs evaluation and open its returned picture before making a visual claim. Use the fixed recognition tasks in `tools/common.md`; only run tasks that answer the current acceptance criteria. Compare candidates under identical analysis and rendering conditions. Decide criterion by criterion; never add scores, votes, frame counts, displacement, or contact counts into an invented total.
+Run `animation.analyze` for each candidate that needs evaluation and open its returned picture before making a visual claim. Use the fixed recognition tasks in `tools/common.md`; only run tasks that answer the current acceptance criteria. Compare candidates under identical analysis and rendering conditions. Decide criterion by criterion; never add scores, votes, frame counts, displacement, or contact counts into an invented total.
 
 Separate visual observations, structured measurements, and playback observations. Static analysis cannot prove playback continuity, acceleration, speed smoothness, foot sliding, popping, or a final acting judgment. Mark missing or conflicting evidence as unknown.
 
@@ -65,8 +65,8 @@ When evidence supports a defect, state the failed criterion, change only the rel
 
 ## Command and API routes
 
-Use the available Unity project tools through the route selected for each subtask. For Kimodo operations, use the Unity CLI connected to the Editor and invoke the public `KimodoUnityBridge.Command.command_dispatcher`. `kimodo_install_server` and `kimodo_generate_animation` are asynchronous: save the exact `request_id` and poll with `kimodo_get_generation` until a terminal state. Check top-level `ok`, then task `status`; warnings are evidence to inspect, not proof of success or failure.
+Use the available Unity project tools through the route selected for each subtask. For Kimodo operations, use the Unity CLI connected to the Editor and invoke the public `KimodoUnityBridge.Command.command_dispatcher`. `server.install` and `animation.generate` are asynchronous: save the exact `request_id` and poll with `generation.get` until a terminal state. Check top-level `ok`, then task `status`; warnings are evidence to inspect, not proof of success or failure.
 
-Use `scene.context` for authoritative character, Clip, Timeline, and Session references. Use `pose_get`, `pose_test`, `pose_set`, `kimodo_retarget_animation`, `animation_analyze`, and `transform_capture` only with handles returned by the active context or the relevant command. Use `pose_test` after `pose_get` to measure actual Humanoid joint world positions and optionally compare contact targets; generation warnings are non-blocking preflight diagnostics and do not replace this measurement. Treat an asset path as metadata, not a scene Clip handle. Do not infer references from display names when a command has returned an unambiguous handle.
+Use `scene.context` for authoritative character, Clip, Timeline, and Session references. Use `pose.get`, `pose.test`, `pose.set`, `animation.retarget`, `animation.analyze`, and `transform.capture` only with handles returned by the active context or the relevant command. Use `pose.test` after `pose.get` to measure actual Humanoid joint world positions and optionally compare contact targets; generation warnings are non-blocking preflight diagnostics and do not replace this measurement. Treat an asset path as metadata, not a scene Clip handle. Do not infer references from display names when a command has returned an unambiguous handle.
 
 Kimodo commands are one part of the implementation, not a required wrapper around every operation. Use Unity APIs even when a command exists if the API gives the necessary precision or integration. Keep both routes in one loop: share contact frames, offsets, Timeline ranges, and evidence IDs; inspect the result in the scene; and distinguish character-Clip success from whole-interaction success. Before concluding an operation is impossible, inspect the installed package and relevant Unity APIs. Report a genuine API/tooling limitation only after that check.

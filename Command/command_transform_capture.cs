@@ -13,7 +13,7 @@ namespace KimodoUnityBridge.Command
         public static string TransformCapture(string argumentsJson) => Execute(argumentsJson, arguments =>
         {
             if (arguments["frames"] != null)
-                throw new InvalidOperationException("frames is not a sampling input. Use pose_get for the desired clip frame, then pass its pose reference.");
+                throw new InvalidOperationException("frames is not a sampling input. Use pose.get for the desired clip frame, then pass its pose reference.");
             EvaluatedPosePreview preview = null;
             var visibility = new Dictionary<Renderer, bool>();
             try
@@ -62,7 +62,7 @@ namespace KimodoUnityBridge.Command
             var targets = transformValues.Values<string>().Select(path =>
             {
                 bool isPose = path == "@pose" || (path?.StartsWith("@pose/", StringComparison.Ordinal) ?? false);
-                if (isPose && poseAnimator == null) throw new InvalidOperationException("@pose requires a pose reference returned by pose_get.");
+                if (isPose && poseAnimator == null) throw new InvalidOperationException("@pose requires a pose reference returned by pose.get.");
                 Transform transform = isPose
                     ? (path == "@pose" ? character.transform : character.transform.Find(path.Substring(6)))
                     : FindRelativeTransform(character.transform, path) ?? FindSceneTransform(path);

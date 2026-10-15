@@ -61,7 +61,7 @@ namespace KimodoUnityBridge.Command.Tests
                 animator.Rebind();
 
                 // First command materializes the current/default skeleton pose.
-                JObject pose = Invoke("pose_get", new JObject
+                JObject pose = Invoke("pose.get", new JObject
                 {
                     ["source"] = new JObject
                     {
@@ -123,7 +123,7 @@ namespace KimodoUnityBridge.Command.Tests
                     }
                 };
 
-                JObject accepted = Invoke("kimodo_generate_animation", request);
+                JObject accepted = Invoke("animation.generate", request);
                 requestId = accepted.Value<string>("request_id");
                 Assert.That(requestId, Is.Not.Null.And.Not.Empty, accepted.ToString());
                 Assert.That(accepted["check"], Is.Not.Null, "Generation must return shared constraint diagnostics.");
@@ -137,7 +137,7 @@ namespace KimodoUnityBridge.Command.Tests
                 KimodoMarkerSampleResult end = authored[2].SampleData;
                 Assert.That(start.constraintMode, Is.EqualTo("fullbody"));
                 Assert.That(start.sampleData, Is.Not.Null.And.Property("IsValid").True,
-                    "Start point must carry the pose_get default-pose sample.");
+                    "Start point must carry the pose.get default-pose sample.");
                 JArray defaultRoot = (JArray)pose["data"]?["root"]?["t"];
                 Assert.That(defaultRoot, Is.Not.Null, pose.ToString());
                 Assert.That(start.rootOverride.t.x, Is.EqualTo(defaultRoot[0].Value<float>()).Within(0.001f));
@@ -161,7 +161,7 @@ namespace KimodoUnityBridge.Command.Tests
                 DateTime deadline = DateTime.UtcNow.AddMinutes(10);
                 while (DateTime.UtcNow < deadline)
                 {
-                    status = Invoke("kimodo_get_generation", new JObject { ["request_id"] = requestId });
+                    status = Invoke("generation.get", new JObject { ["request_id"] = requestId });
                     string state = status.Value<string>("status")?.ToLowerInvariant();
                     if (state == "completed" || state == "failed" || state == "canceled") break;
                     yield return new WaitForSeconds(1f);
@@ -187,11 +187,11 @@ namespace KimodoUnityBridge.Command.Tests
                 if (!string.IsNullOrWhiteSpace(requestId))
                 {
                     // Cancellation is best-effort and only applies while running.
-                    JObject status = Invoke("kimodo_get_generation", new JObject { ["request_id"] = requestId });
+                    JObject status = Invoke("generation.get", new JObject { ["request_id"] = requestId });
                     string state = status.Value<string>("status")?.ToLowerInvariant();
                     if (state != "completed" && state != "failed" && state != "canceled")
                     {
-                        Invoke("kimodo_cancel_generation", new JObject
+                        Invoke("generation.cancel", new JObject
                         { ["request_id"] = requestId, ["reason"] = "test cleanup" });
                     }
                 }
