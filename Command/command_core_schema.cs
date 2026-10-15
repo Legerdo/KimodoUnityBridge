@@ -181,16 +181,16 @@ namespace KimodoUnityBridge.Command
                 MocapVideoAnalysisCommand => CommandDocumentation(
                     "Use when a video file should be converted into a time-ordered SMPL-X pose array for downstream retargeting or analysis.",
                     new[] { "Pass an absolute video_path that the QuickServer machine can read. Supported formats are MP4, MOV, M4V, AVI, and MKV; the file must not exceed 2 GiB.", "The command returns immediately with status=accepted and a request_id. Poll kimodo_get_generation using that exact id until status is completed, failed, or canceled; do not submit the video again just to check progress.", "For a two-person video, optionally set person to left or right to select the performer by screen position. Omit person for the default selection." },
-                    new[] { "A completed request returns poses in source-video order plus fps, frame_count, source_frame_count, joint_names, betas, and rest_joints_m.", "Each pose contains global_orient_axis_angle, body_pose_axis_angle, and translation_m. Rotations are axis-angle radians; translation and rest joints are in meters.", "The global coordinate space is gravity-aligned Y-up. Optional incam_* fields use OpenCV camera coordinates: X-right, Y-down, Z-forward.", "The result is raw SMPL-X pose data. It does not create a clip, Playable track, character binding, or timeline edit." },
+                    new[] { "A completed request returns poses in source-video order plus one top-level constraints array, fps, frame_count, source_frame_count, joint_names, betas, and rest_joints_m.", "Each pose contains raw global_orient_axis_angle, body_pose_axis_angle, and translation_m values. The top-level constraints array uses the same merged raw FullBody constraint format accepted by animation generation.", "Rotations are axis-angle radians; translation and rest joints are in meters. The global coordinate space is gravity-aligned Y-up. Optional incam_* fields use OpenCV camera coordinates: X-right, Y-down, Z-forward.", "The result does not create a clip, Playable track, character binding, or timeline edit." },
                     new[] { "Read-only; does not create, modify, or clear Unity scene objects or animation assets." },
-                    new[] { "This estimates body pose only; it does not return a rendered animation or automatically convert poses into a Unity Humanoid muscle track.", "The request can fail if QuickServer's GVHMR runtime, checkpoints, or required assets are unavailable." },
+                    new[] { "The top-level constraints array groups the whole sequence into the existing raw FullBody payload; the command still does not return a rendered animation or create a Unity Humanoid muscle track.", "The request can fail if QuickServer's GVHMR runtime, checkpoints, or the SMPL-X Avatar asset are unavailable." },
                     MocapPictureAnalysisCommand, GetGenerationCommand, RetargetAnimationCommand),
                 MocapPictureAnalysisCommand => CommandDocumentation(
                     "Use when a still image should be converted into a single SMPL-X pose sample for downstream retargeting or analysis.",
                     new[] { "Pass an absolute image_path for a PNG, JPG, or JPEG file that the QuickServer machine can read. The file must not exceed 2 GiB.", "The command returns immediately with status=accepted and a request_id. Poll kimodo_get_generation using that exact id until status is completed, failed, or canceled; do not submit the image again just to check progress.", "The estimator temporarily treats the still image as a one-second clip and returns one pose sample from it." },
-                    new[] { "A completed request returns a poses array with one item, plus joint_names, betas, and rest_joints_m.", "The pose contains global_orient_axis_angle, body_pose_axis_angle, and translation_m. Rotations are axis-angle radians; translation and rest joints are in meters.", "The global coordinate space is gravity-aligned Y-up. Optional incam_* fields use OpenCV camera coordinates: X-right, Y-down, Z-forward.", "The result is raw SMPL-X pose data. It does not create a clip, Playable track, character binding, or timeline edit." },
+                    new[] { "A completed request returns one raw SMPL-X pose plus a top-level constraints array containing the matching raw FullBody constraint, along with joint_names, betas, and rest_joints_m.", "The pose contains raw global_orient_axis_angle, body_pose_axis_angle, and translation_m values. The constraints array uses the same format accepted by animation generation.", "Rotations are axis-angle radians; translation and rest joints are in meters. The global coordinate space is gravity-aligned Y-up. Optional incam_* fields use OpenCV camera coordinates: X-right, Y-down, Z-forward.", "The result does not create a clip, Playable track, character binding, or timeline edit." },
                     new[] { "Read-only; does not create, modify, or clear Unity scene objects or animation assets." },
-                    new[] { "This estimates body pose only; it does not return a rendered animation or automatically convert poses into a Unity Humanoid muscle track.", "The request can fail if QuickServer's GVHMR runtime, checkpoints, or required assets are unavailable." },
+                    new[] { "The constraints array is a raw FullBody payload with one frame; the command still does not return a rendered animation or create a Unity Humanoid muscle track.", "The request can fail if QuickServer's GVHMR runtime, checkpoints, or the SMPL-X Avatar asset are unavailable." },
                     MocapVideoAnalysisCommand, GetGenerationCommand, RetargetAnimationCommand),
                 CancelGenerationCommand => CommandDocumentation(
                     "Request cancellation of an active animation generation.",
@@ -260,7 +260,7 @@ namespace KimodoUnityBridge.Command
                 GenerateAnimationCommand => new[] { "request_id", "status", "check", "warnings" },
                 PoseGetCommand => new[] { "pose", "source", "character_root", "data" },
                 PoseSetCommand or PoseSetRootTransformCommand or PoseSetMuscleCommand => new[] { "pose", "data" },
-                GetGenerationCommand => new[] { "request_id", "status", "stage", "message", "started_at_utc", "estimated_completion_utc", "eta_seconds", "progress_current", "progress_total", "progress_rate", "backend_progress", "runtime_root", "runtime_version", "install_mode", "server_connected", "clip", "animation_id", "seed", "analysis", "analysis_schema_version", "source_type", "skeleton", "person", "fps", "source_frame_count", "frame_count", "joint_names", "pose_parameterization", "coordinate_spaces", "betas", "rest_joints_m", "poses", "constraint_loss", "inout_sampling", "target_alive", "backend_request_json" },
+                GetGenerationCommand => new[] { "request_id", "status", "stage", "message", "started_at_utc", "estimated_completion_utc", "eta_seconds", "progress_current", "progress_total", "progress_rate", "backend_progress", "runtime_root", "runtime_version", "install_mode", "server_connected", "clip", "animation_id", "seed", "analysis", "analysis_schema_version", "source_type", "skeleton", "person", "fps", "source_frame_count", "frame_count", "joint_names", "pose_parameterization", "coordinate_spaces", "betas", "rest_joints_m", "poses", "constraints", "constraint_loss", "inout_sampling", "target_alive", "backend_request_json" },
                 CancelGenerationCommand => new[] { "request_id", "status", "stage", "message", "canceled", "clip" },
                 SessionClearCommand => new[] { "cleared", "name", "destroyed_context_count", "recreated_on_next_command" },
                 _ => Array.Empty<string>()
@@ -348,10 +348,16 @@ namespace KimodoUnityBridge.Command
                 }
                 case "tiles": return ArraySchema("object", "tile", "view", "projection", "transforms", "bounds");
                 case "targets": return ArraySchema("object", "key", "world_position");
+                case "constraints" when command == GetGenerationCommand:
+                    return new JObject { ["type"] = "array", ["items"] = RawConstraintSchema() };
                 case "warnings": case "execution_model": case "routing": case "workflow": case "constraints": case "constraint_rules":
                     return new JObject { ["type"] = "array" };
                 case "world_position": return NumberArraySchema();
-                case "poses": return ArraySchema("object", "frame", "source_frame", "timestamp_seconds", "global_orient_axis_angle", "body_pose_axis_angle", "translation_m", "incam_global_orient_axis_angle", "incam_body_pose_axis_angle", "incam_translation_m", "static_confidence");
+                case "poses":
+                {
+                    JObject schema = ArraySchema("object", "frame", "source_frame", "timestamp_seconds", "global_orient_axis_angle", "body_pose_axis_angle", "translation_m", "incam_global_orient_axis_angle", "incam_body_pose_axis_angle", "incam_translation_m", "static_confidence");
+                    return schema;
+                }
                 case "joint_names": return new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" } };
                 case "betas": case "rest_joints_m": return new JObject { ["type"] = "array" };
                 case "configs": return ArraySchema("object");
@@ -411,7 +417,7 @@ namespace KimodoUnityBridge.Command
                     "enabled" or "avatar_valid_humanoid" or "cached" => new JObject { ["type"] = "boolean" },
                     "frame_rate" or "fps" or "timestamp_seconds" => new JObject { ["type"] = "number" },
                     "segments" or "phase_track" or "keyframes" or "foot_contacts" or "images" or "tile_paths" or "picture_paths" or "transforms" or "animations" or "generations" or "analyses" or "tiles" or "headers" or "global_orient_axis_angle" or "body_pose_axis_angle" or "translation_m" or "incam_global_orient_axis_angle" or "incam_body_pose_axis_angle" or "incam_translation_m" or "static_confidence" or "joint_names" or "coordinate_spaces" or "betas" or "rest_joints_m" or "poses" => new JObject { ["type"] = "array" },
-                    "session" or "history" or "root_trajectory" or "endpoint_pose_comparison" or "motion_profile" or "environment" or "bounds" or "timeline_preview" or "outputSchema" or "title" or "header" => new JObject { ["type"] = "object" },
+                    "session" or "history" or "root_trajectory" or "endpoint_pose_comparison" or "motion_profile" or "environment" or "bounds" or "timeline_preview" or "outputSchema" or "title" or "header" or "root" or "hands" or "feet" => new JObject { ["type"] = "object" },
                     "world_position" => NumberArraySchema(),
                     "required" or "examples" => new JObject { ["type"] = "array" },
                     "description" => new JObject { ["type"] = "string" },
@@ -458,6 +464,20 @@ namespace KimodoUnityBridge.Command
                 ["type"] = "array",
                 ["items"] = new JObject { ["type"] = "number" }
             };
+        }
+
+        private static JObject RawConstraintSchema()
+        {
+            JObject schema = ObjectSchema("type", "frame_indices", "smooth_root_2d", "global_root_heading", "local_joints_rot", "root_positions", "target_positions", "joint_names", "dense_path");
+            schema["properties"]["frame_indices"] = new JObject { ["type"] = "array" };
+            schema["properties"]["smooth_root_2d"] = new JObject { ["type"] = "array" };
+            schema["properties"]["global_root_heading"] = new JObject { ["type"] = "array" };
+            schema["properties"]["local_joints_rot"] = new JObject { ["type"] = "array" };
+            schema["properties"]["root_positions"] = new JObject { ["type"] = "array" };
+            schema["properties"]["target_positions"] = new JObject { ["type"] = "array" };
+            schema["properties"]["joint_names"] = new JObject { ["type"] = "array" };
+            schema["properties"]["dense_path"] = new JObject { ["type"] = "boolean" };
+            return schema;
         }
 
         private static JObject NullableSchema(JObject schema)

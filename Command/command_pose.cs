@@ -84,7 +84,7 @@ namespace KimodoUnityBridge.Command
             else if (hasScenePose) resultSource["mode"] = "scene_pose";
             else if (hasRestPose) resultSource["mode"] = "skeleton_rest_pose";
             result["data"] = fullData
-                ? BuildPoseJson(marker.SampleData)
+                ? KimodoConstraintPoseUtility.BuildPoseJson(marker.SampleData)
                 : BuildCompactPose(marker.SampleData);
             return Ok(result);
         });
@@ -132,7 +132,7 @@ namespace KimodoUnityBridge.Command
             return Ok(new JObject
             {
                 ["pose"] = PoseReferenceJson(character.PoseCacheTrack.name, reference.Index),
-                ["data"] = BuildPoseJson(sample)
+                ["data"] = KimodoConstraintPoseUtility.BuildPoseJson(sample)
             });
         });
 
@@ -208,7 +208,7 @@ namespace KimodoUnityBridge.Command
             return Ok(new JObject
             {
                 ["pose"] = PoseReferenceJson(character.PoseCacheTrack.name, reference.Index),
-                ["data"] = BuildPoseJson(sample)
+                ["data"] = KimodoConstraintPoseUtility.BuildPoseJson(sample)
             });
         });
 
@@ -269,7 +269,7 @@ namespace KimodoUnityBridge.Command
             return Ok(new JObject
             {
                 ["pose"] = PoseReferenceJson(character.PoseCacheTrack.name, reference.Index),
-                ["data"] = BuildPoseJson(sample)
+                ["data"] = KimodoConstraintPoseUtility.BuildPoseJson(sample)
             });
         });
 
@@ -365,7 +365,7 @@ namespace KimodoUnityBridge.Command
                 {
                     throw new InvalidOperationException("Timeline pose sampling returned no sample.");
                 }
-                return BuildCapturedSampleResult(samples[0], sampler.TargetCache, sampleTime);
+                return KimodoConstraintPoseUtility.BuildCapturedSampleResult(samples[0], sampler.TargetCache, sampleTime);
             }
         }
 
@@ -433,7 +433,7 @@ namespace KimodoUnityBridge.Command
                 {
                     throw new InvalidOperationException($"Timeline pose sampling failed: {error}");
                 }
-                return BuildCapturedSampleResult(sample, cache, sampleTime);
+                return KimodoConstraintPoseUtility.BuildCapturedSampleResult(sample, cache, sampleTime);
             }
             finally
             {
@@ -472,29 +472,6 @@ namespace KimodoUnityBridge.Command
                 out Vector3 worldPosition,
                 out Quaternion worldRotation);
             cache.root.transform.SetPositionAndRotation(worldPosition, worldRotation);
-        }
-
-        private static KimodoMarkerSampleResult BuildCapturedSampleResult(
-            MuscleSample sample,
-            RetargetSkeleton cache,
-            double sampleTime)
-        {
-            bool hasSampleData = sample?.IsValid == true;
-            var result = new KimodoMarkerSampleResult
-            {
-                sampleData = sample?.Clone() ?? new MuscleSample(),
-                sampleValid = hasSampleData,
-                // A captured sample is a complete evaluated pose, not a user
-                // constraint selection. The preview pipeline applies its
-                // full-body payload; sampleValid gates the whole capture,
-                // while CaptureWorldTargets fills the scene-facing targets.
-                enableMask = hasSampleData ? KimodoConstraintMask.ForType("fullbody") : new KimodoConstraintMask(),
-                constraintMode = "constraint",
-                sampleTime = sampleTime,
-                enabled = true
-            };
-            KimodoRetargetMarkerSamplingUtility.CaptureWorldTargets(cache, result);
-            return result;
         }
 
         private static KimodoMarkerSampleResult[] CaptureSampleResults(
@@ -562,7 +539,7 @@ namespace KimodoUnityBridge.Command
                 var results = new KimodoMarkerSampleResult[samples.Length];
                 for (int index = 0; index < samples.Length; index++)
                 {
-                    results[index] = BuildCapturedSampleResult(
+                    results[index] = KimodoConstraintPoseUtility.BuildCapturedSampleResult(
                         samples[index],
                         sampler.TargetCache,
                         sampleTimes[index]);
@@ -635,7 +612,7 @@ namespace KimodoUnityBridge.Command
                     {
                         throw new InvalidOperationException($"Timeline pose sampling failed: {error}");
                     }
-                    results[index] = BuildCapturedSampleResult(sample, cache, timelineTime);
+                    results[index] = KimodoConstraintPoseUtility.BuildCapturedSampleResult(sample, cache, timelineTime);
                 }
                 return results;
             }
@@ -783,26 +760,6 @@ namespace KimodoUnityBridge.Command
             ["index"] = index
         };
 
-        private static JObject BuildPoseJson(KimodoMarkerSampleResult sample)
-        {
-            ValidateCommandSample(sample);
-            return new JObject
-            {
-                ["muscles"] = new JArray(sample.sampleData.data.Take(KimodoSampleDataLayout.BodyMuscleCount)),
-                ["root"] = FullTransformJson(GetRootTransform(sample)),
-                ["hands"] = new JObject
-                {
-                    ["left"] = FullTransformJson(GetEndEffector(sample, "left_hand")),
-                    ["right"] = FullTransformJson(GetEndEffector(sample, "right_hand"))
-                },
-                ["feet"] = new JObject
-                {
-                    ["left"] = FullTransformJson(GetEndEffector(sample, "left_foot")),
-                    ["right"] = FullTransformJson(GetEndEffector(sample, "right_foot"))
-                }
-            };
-        }
-
         private static JObject BuildCompactPose(KimodoMarkerSampleResult sample)
         {
             ValidateCommandSample(sample);
@@ -828,17 +785,6 @@ namespace KimodoUnityBridge.Command
             {
                 throw new InvalidOperationException("Pose source has no valid 70-value sampleData payload.");
             }
-        }
-
-        private static JObject FullTransformJson(KimodoRigidTransform transform)
-        {
-            var result = new JObject
-            {
-                ["t"] = new JArray(transform.t.x, transform.t.y, transform.t.z),
-                ["q"] = new JArray(transform.q.x, transform.q.y, transform.q.z, transform.q.w),
-                ["enable_rotation"] = transform.enableRotation
-            };
-            return result;
         }
 
         private static JObject CharacterRootTransformJson(GameObject characterRoot)

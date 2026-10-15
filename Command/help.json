@@ -851,7 +851,7 @@
     },
     {
       "name": "analysis.video",
-      "description": "Estimate a per-frame SMPL-X pose sequence from a local video. This starts an asynchronous analysis job; poll kimodo_get_generation with its request_id. It returns pose data only and does not create or apply a Unity animation.",
+      "description": "Estimate a per-frame SMPL-X pose sequence from a local video. This starts an asynchronous analysis job; poll kimodo_get_generation with its request_id. The result includes raw SMPL-X poses and a top-level FullBody constraints array in the existing raw constraint format; it does not create or apply a Unity animation.",
       "documentation": {
         "when_to_use": "Use when a video file should be converted into a time-ordered SMPL-X pose array for downstream retargeting or analysis.",
         "behavior": [
@@ -860,16 +860,16 @@
           "For a two-person video, optionally set person to left or right to select the performer by screen position. Omit person for the default selection."
         ],
         "result_notes": [
-          "A completed request returns poses in source-video order plus fps, frame_count, source_frame_count, joint_names, betas, and rest_joints_m.",
-          "Each pose contains global_orient_axis_angle, body_pose_axis_angle, and translation_m. Rotations are axis-angle radians; translation and rest joints are in meters.",
+          "A completed request returns poses in source-video order plus one top-level constraints array, fps, frame_count, source_frame_count, joint_names, betas, and rest_joints_m.",
+          "Each pose contains global_orient_axis_angle, body_pose_axis_angle, and translation_m. The top-level constraints array uses the same merged raw FullBody constraint format accepted by animation generation.",
           "The global coordinate space is gravity-aligned Y-up. Optional incam_* fields use OpenCV camera coordinates: X-right, Y-down, Z-forward.",
-          "The result is raw SMPL-X pose data. It does not create a clip, Playable track, character binding, or timeline edit."
+          "The result does not create a clip, Playable track, character binding, or timeline edit."
         ],
         "scene_effects": [
           "Read-only; does not create, modify, or clear Unity scene objects or animation assets."
         ],
         "limits": [
-          "This estimates body pose only; it does not return a rendered animation or automatically convert poses into a Unity Humanoid muscle track.",
+          "The top-level constraints array groups the whole sequence into the existing raw FullBody payload; the command still does not create a rendered animation or Timeline track.",
           "The request can fail if QuickServer's GVHMR runtime, checkpoints, or required assets are unavailable."
         ],
         "related_commands": [
@@ -957,7 +957,7 @@
     },
     {
       "name": "analysis.picture",
-      "description": "Estimate one SMPL-X pose from a local still image. This starts an asynchronous analysis job; poll kimodo_get_generation with its request_id. It returns pose data only and does not create or apply a Unity animation.",
+      "description": "Estimate one SMPL-X pose from a local still image. This starts an asynchronous analysis job; poll kimodo_get_generation with its request_id. The result includes raw SMPL-X pose data and a one-frame FullBody constraint in the existing raw constraint format; it does not create or apply a Unity animation.",
       "documentation": {
         "when_to_use": "Use when a still image should be converted into a single SMPL-X pose sample for downstream retargeting or analysis.",
         "behavior": [
@@ -966,16 +966,16 @@
           "The estimator temporarily treats the still image as a one-second clip and returns one pose sample from it."
         ],
         "result_notes": [
-          "A completed request returns a poses array with one item, plus joint_names, betas, and rest_joints_m.",
-          "The pose contains global_orient_axis_angle, body_pose_axis_angle, and translation_m. Rotations are axis-angle radians; translation and rest joints are in meters.",
+          "A completed request returns one raw SMPL-X pose plus a top-level constraints array containing the matching raw FullBody constraint, along with joint_names, betas, and rest_joints_m.",
+          "The pose contains global_orient_axis_angle, body_pose_axis_angle, and translation_m. The constraints array uses the same format accepted by animation generation.",
           "The global coordinate space is gravity-aligned Y-up. Optional incam_* fields use OpenCV camera coordinates: X-right, Y-down, Z-forward.",
-          "The result is raw SMPL-X pose data. It does not create a clip, Playable track, character binding, or timeline edit."
+          "The result does not create a clip, Playable track, character binding, or timeline edit."
         ],
         "scene_effects": [
           "Read-only; does not create, modify, or clear Unity scene objects or animation assets."
         ],
         "limits": [
-          "This estimates body pose only; it does not return a rendered animation or automatically convert poses into a Unity Humanoid muscle track.",
+          "The constraints array is a raw FullBody payload with one frame; the command still does not create a rendered animation or Timeline track.",
           "The request can fail if QuickServer's GVHMR runtime, checkpoints, or required assets are unavailable."
         ],
         "related_commands": [
@@ -3339,6 +3339,42 @@
                 },
                 "static_confidence": {
                   "type": "array"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "frame_indices": {
+                  "type": "array"
+                },
+                "smooth_root_2d": {
+                  "type": "array"
+                },
+                "global_root_heading": {
+                  "type": "array"
+                },
+                "local_joints_rot": {
+                  "type": "array"
+                },
+                "root_positions": {
+                  "type": "array"
+                },
+                "target_positions": {
+                  "type": "array"
+                },
+                "joint_names": {
+                  "type": "array"
+                },
+                "dense_path": {
+                  "type": "boolean"
                 }
               },
               "additionalProperties": true

@@ -272,7 +272,6 @@ namespace KimodoBridge
                     {
                         MotionData = motionData,
                         MotionBytes = motionPayload,
-                        Mp4Path = header?.Value<string>("mp4_path"),
                         MotionFormat = outputFormat,
                         RawStatus = status,
                         Message = string.IsNullOrWhiteSpace(responseMessage) ? "Bridge generation complete." : responseMessage,
@@ -304,7 +303,6 @@ namespace KimodoBridge
                         StartFrame = first?.StartFrame ?? 0,
                         EndFrameExclusive = first?.EndFrameExclusive ?? 0,
                         AnalysisJson = analysisJson,
-                        Mp4Path = header?.Value<string>("mp4_path"),
                         KmbAttachments = attachments
                     };
                 }
@@ -318,7 +316,6 @@ namespace KimodoBridge
                 return new KimodoBridgeGenerationResult
                 {
                     MotionJsonCompact = motionJson,
-                    Mp4Path = header?.Value<string>("mp4_path"),
                     MotionFormat = string.IsNullOrWhiteSpace(outputFormat) ? "json_compact" : outputFormat,
                     RawStatus = status,
                     Message = string.IsNullOrWhiteSpace(responseMessage) ? "Bridge generation complete." : responseMessage,

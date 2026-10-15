@@ -86,7 +86,7 @@ namespace KimodoUnityBridge.Command
                                 ["description"] = "Final picture tile resolution in pixels; accepts 64 through 4096. Rendering uses a 2x supersample and downsamples to this size. Defaults to 1920."
                             }, false))),
                     CommandDefinition(MocapVideoAnalysisCommand,
-                        "Estimate a per-frame SMPL-X pose sequence from a local video. This starts an asynchronous analysis job; poll kimodo_get_generation with its request_id. It returns pose data only and does not create or apply a Unity animation.",
+                        "Estimate a per-frame SMPL-X pose sequence from a local video. This starts an asynchronous analysis job; poll kimodo_get_generation with its request_id. The result includes raw SMPL-X poses and matching FullBody constraints in the existing raw constraint format; it does not create or apply a Unity animation.",
                         Properties(
                             Required("video_path", "string", "Absolute path to a local video readable by QuickServer."),
                             new PropertyDefinition("person", new JObject
@@ -96,7 +96,7 @@ namespace KimodoUnityBridge.Command
                                 ["description"] = "Select one performer by screen side in a two-person video."
                             }, false))),
                     CommandDefinition(MocapPictureAnalysisCommand,
-                        "Estimate one SMPL-X pose from a local still image. This starts an asynchronous analysis job; poll kimodo_get_generation with its request_id. It returns pose data only and does not create or apply a Unity animation.",
+                        "Estimate one SMPL-X pose from a local still image. This starts an asynchronous analysis job; poll kimodo_get_generation with its request_id. The result includes raw SMPL-X pose data and a FullBody constraint in the existing raw constraint format; it does not create or apply a Unity animation.",
                         Properties(
                             Required("image_path", "string", "Absolute path to a local PNG or JPEG readable by QuickServer."))),
                     CommandDefinition(TransformCaptureCommand,

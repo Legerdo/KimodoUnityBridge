@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
 using KimodoBridge;
+using KimodoBridge.Editor;
 
 namespace KimodoUnityBridge.Command
 {
@@ -65,12 +66,35 @@ namespace KimodoUnityBridge.Command
             {
                 JObject analysis = await KimodoBridgeService.Shared.AnalyzeMocapAsync(
                     kind, mediaPath, person, CancellationToken.None);
+                analysis = await AppendConstraintsOnEditorThreadAsync(analysis);
                 UpdateMocapAnalysisTask(requestId, "completed", "completed", "Mocap pose estimation complete.", analysis);
             }
             catch (Exception exception)
             {
                 UpdateMocapAnalysisTask(requestId, "failed", "failed", exception.Message);
             }
+        }
+
+        private static Task<JObject> AppendConstraintsOnEditorThreadAsync(JObject analysis)
+        {
+            var completion = new TaskCompletionSource<JObject>(TaskCreationOptions.RunContinuationsAsynchronously);
+            EditorApplication.delayCall += () =>
+            {
+                try
+                {
+                    if (!KimodoConstraintPoseUtility.TryAppendSmplxConstraints(analysis, out string error))
+                    {
+                        completion.TrySetException(new InvalidOperationException($"SMPL-X pose conversion failed: {error}"));
+                        return;
+                    }
+                    completion.TrySetResult(analysis);
+                }
+                catch (Exception exception)
+                {
+                    completion.TrySetException(exception);
+                }
+            };
+            return completion.Task;
         }
 
         private static void UpdateMocapAnalysisTask(
