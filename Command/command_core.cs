@@ -29,6 +29,7 @@ namespace KimodoUnityBridge.Command
         public const string TransformCaptureCommand = "transform_capture";
         public const string RetargetAnimationCommand = "kimodo_retarget_animation";
         public const string PoseGetCommand = "pose_get";
+        public const string PoseTestCommand = "pose_test";
         public const string PoseSetCommand = "pose_set";
         public const string PoseSetRootTransformCommand = "pose_set_root_transform";
         public const string PoseSetMuscleCommand = "pose_set_muscle";
@@ -119,7 +120,7 @@ namespace KimodoUnityBridge.Command
                             Required("target_character", "string", "Target scene character name or object_ref. Session preview objects are rejected."),
                             OptionalOutput())),
                     CommandDefinition(GenerateAnimationCommand,
-                        "Start asynchronous generation for a character in the current scene context. Command-created Timeline Clips enable AutoBegin anchoring automatically; explicit first-frame or In/Out samples take precedence. The accepted response contains request_id, status, and non-blocking checks; poll request_id for the completed Clip. Supply trajectory settings only when the requested path is known from explicit requirements or confirmed scene/analysis evidence; prompt wording never selects path options.",
+                        "Start asynchronous generation for a character in the current scene context. Command-created Timeline Clips enable AutoBegin anchoring automatically; explicit first-frame or In/Out samples take precedence. The accepted response contains request_id, status, and non-blocking request/constraint warnings; pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect, never for effect-only constraints. These warnings are not measured joint positions in the generated motion; use pose_get then pose_test to measure sampled joint positions and contact reach after generation. Supply trajectory settings only when the requested path is known from explicit requirements or confirmed scene/analysis evidence; prompt wording never selects path options.",
                         Properties(
                             Required("character", "string", "Scene character name or object_ref. Session preview objects are rejected; use the source scene character."),
                             Required("prompt", "string", "Short semantic description of the current Clip's action; aim for 25 words or fewer. Express exact FullBody, position, and effector anchors through structured constraints."),
@@ -135,12 +136,18 @@ namespace KimodoUnityBridge.Command
                             OptionalGeneration(),
                             OptionalOutput(),
                             Optional("analysis_option", "object", "Optional generation-time lightweight analysis. When enabled, generation returns sparse salient keyframe markers and foot-contact changes; it does not run the full animation_analyze command."),
-                            OptionalConstraints("constraints", "Point constraints are selected by optional pose, root2d, and effect data; multiple fields at one frame compose by channel. root_path and inout remain separate constraint forms; duplicate frames are rejected; command frames use 60 FPS."))),
+                            OptionalConstraints("constraints", "Point constraints are selected by optional pose, root2d, and effect data; multiple fields at one frame compose by channel. Pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect; effect-only constraints skip it. root_path and inout remain separate constraint forms; duplicate frames are rejected; command frames use 60 FPS."))),
                     CommandDefinition(PoseGetCommand,
                         "Sample one absolute Timeline-global frame at 60 FPS, or select mode scene_pose / skeleton_rest_pose to read the original scene Animator or Avatar rest pose. Every response includes character_root, the bound scene GameObject root Transform in world space; data.root is the sampled Pose root channel. Every call creates an External Pose slot and returns {track,index}.",
                         Properties(
                             RequiredPoseSource("source"),
                             Optional("full_data", "boolean", "Return all 49 muscles and TQ channels; defaults to false."))),
+                    CommandDefinition(PoseTestCommand,
+                        "Measure actual Humanoid joint world positions after evaluating any External Pose, including a pose sampled from a generated effect-only result. Optionally compare selected joints with world-space target positions; this is an explicit pose measurement, separate from generation-time non-blocking warnings.",
+                        Properties(
+                            RequiredPoseReference("pose"),
+                            OptionalEnumArray("joints", "Humanoid joints to measure. Defaults to hips, head, hands, and feet; joints named in targets are included automatically.", "Hips", "Head", "LeftHand", "RightHand", "LeftFoot", "RightFoot", "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg"),
+                            OptionalPoseTestTargets())),
                     CommandDefinition(PoseSetCommand,
                         "Modify an External Pose slot. Supply root, muscles, effector, or any combination.",
                         PoseSetSchema()),
@@ -253,6 +260,7 @@ namespace KimodoUnityBridge.Command
                         Route("analyze a picture for one SMPL-X pose", MocapPictureAnalysisCommand, "then " + GetGenerationCommand),
                         Route("analyze and render motion", AnimationAnalyzeCommand, "returns one composite picture and self-describing tiles"),
                         Route("materialize or edit a pose", PoseGetCommand, "then pose_set"),
+                        Route("measure actual joint positions or test contact reach", PoseGetCommand, "then " + PoseTestCommand),
                         Route("obtain a reusable root trajectory", AnimationAnalyzeCommand, "then reference root_trajectory.path from a generation root_path constraint"),
                     },
                     ["handles"] = new JObject
@@ -295,7 +303,7 @@ namespace KimodoUnityBridge.Command
                     new JObject
                     {
                         ["type"] = "point",
-                        ["description"] = "Optional pose, root2d, and effect data select and compose constraint channels at one frame.",
+                        ["description"] = "Optional pose, root2d, and effect data select and compose constraint channels at one frame. Pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect.",
                         ["shape"] = new JObject
                         {
                             ["frame"] = "Relative frame in the generated clip.",
@@ -325,6 +333,7 @@ namespace KimodoUnityBridge.Command
                 ["rules"] = new JArray
                 {
                     "Point constraint family is inferred from the presence of pose, root2d, and effect data. Any non-empty combination composes by channel; Root2D overlays planar root channels and effect data overlays the named end effectors.",
+                    "Pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect. Effect-only constraints skip this preflight; pose_test remains available to measure actual sampled poses after generation.",
                     "A point constraint must contain at least one of pose, root2d, or effect. Put mixed data in one point object; separate point objects at a duplicate frame are rejected.",
                     "Use animation_analyze, confirm that the returned Root Path belongs to the intended character and motion, then reference clip.root_trajectory.path from root_path.",
                     "Use path angles, distance, or heading only for a known trajectory backed by an explicit requirement or confirmed evidence. Do not infer any trajectory setting from prompt keywords; omit path when the route is unknown.",

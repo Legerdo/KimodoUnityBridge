@@ -126,8 +126,9 @@ namespace KimodoUnityBridge.Command
                     KimodoMarkerSampleResult sample = BuildCanonicalConstraint(
                         canonical, targetCache, modelName, frameRate, at, i,
                         sceneCharacterRoot, sourceCharacter, poseWarnings);
-                    if (canonical["effect"] is JObject effect)
+                    if (HasPoseAndEffect(canonical))
                     {
+                        JObject effect = (JObject)canonical["effect"];
                         if (!KimodoConstraintPosePipeline.TryApplyCanonical(
                             sample, frameRate, targetCache, out _, out _, out string validationError))
                         {
@@ -335,6 +336,11 @@ namespace KimodoUnityBridge.Command
             if (composed.Count != 1)
                 throw new InvalidOperationException($"constraints[{constraintIndex}] did not resolve to one composed sample.");
             return composed[0];
+        }
+
+        internal static bool HasPoseAndEffect(JObject constraint)
+        {
+            return constraint?["pose"] is JObject && constraint["effect"] is JObject;
         }
 
         private static void ValidatePointConstraintShape(JObject constraint, int index)

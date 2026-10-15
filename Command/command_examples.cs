@@ -47,6 +47,11 @@ namespace KimodoUnityBridge.Command
                         @"{'source':{'character':'<character>','mode':'scene_pose'},'full_data':true}"),
                     Example("Capture the Humanoid Avatar's stored skeleton rest pose.",
                         @"{'source':{'character':'<character>','mode':'skeleton_rest_pose'},'full_data':true}"));
+                case PoseTestCommand: return new JArray(
+                    Example("Measure the actual world-space hand positions in a sampled Timeline pose.",
+                        @"{'pose':{'track':'<pose track returned by pose_get>','index':0},'joints':['RightHand','LeftHand']}"),
+                    Example("Check whether the sampled right hand reaches a world-space contact point within 5 cm.",
+                        @"{'pose':{'track':'<pose track returned by pose_get>','index':0},'targets':[{'joint':'RightHand','position':[1.2,0.9,2.4],'tolerance_m':0.05}]}"));
                 case PoseSetCommand: return Examples("Edit the root of the Pose slot returned by pose_get; position is in Character world space.",
                     @"{'pose':{'track':'<returned pose track>','index':0},'root':{'position':[0,1,0],'rotation':[0,0,0,1]}}");
                 case PoseSetRootTransformCommand: return Examples("Set a returned Pose slot's root position.",

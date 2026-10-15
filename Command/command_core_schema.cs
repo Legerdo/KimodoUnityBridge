@@ -35,6 +35,7 @@ namespace KimodoUnityBridge.Command
                 [RetargetAnimationCommand] = RetargetAnimation,
                 [GenerateAnimationCommand] = GenerateAnimationAsset,
                 [PoseGetCommand] = PoseGet,
+                [PoseTestCommand] = PoseTest,
                 [PoseSetCommand] = PoseSet,
                 [PoseSetRootTransformCommand] = PoseSetRootTransform,
                 [PoseSetMuscleCommand] = PoseSetMuscle,
@@ -139,7 +140,7 @@ namespace KimodoUnityBridge.Command
                 GenerateAnimationCommand => CommandDocumentation(
                     "Submit one animation generation request for a character in the current scene context.",
                     new[] { "Describe one simple semantic action in prompt; aim for 25 words or fewer.", "Represent exact body pose, root position, effector targets, duration, path, loop, and Clip windows in their explicit fields when required.", "Save request_id and use kimodo_get_generation to poll; do not resubmit a running request." },
-                    new[] { "The accepted response contains request_id, status, non-blocking check results, and warnings.", "On completion, kimodo_get_generation returns the generated Clip metadata, asset path, animation_id, and available generation diagnostics." },
+                    new[] { "The accepted response contains request_id, status, non-blocking check results, and warnings. Pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect; effect-only constraints skip it.", "On completion, kimodo_get_generation returns the generated Clip metadata, asset path, animation_id, and available generation diagnostics." },
                     new[] { "A completed result is appended as a Timeline Clip; existing completed Clips are retained.", "The first scene pose is used as the automatic starting anchor unless explicit first-frame or In/Out samples take precedence." },
                     new[] { "Trajectory overrides require an explicit requirement or confirmed scene/analysis evidence; prompt words do not select path options.", "analysis_option is lightweight generation-time analysis, not the full animation_analyze command.", "Command checks validate supported request boundaries; they do not judge semantic or artistic quality." },
                     SceneContextCommand, PoseGetCommand, GetGenerationCommand, CancelGenerationCommand, AnimationAnalyzeCommand),
@@ -150,6 +151,13 @@ namespace KimodoUnityBridge.Command
                     new[] { "Every call creates an External Pose slot in the current scene context." },
                     new[] { "A Timeline frame and scene_pose/skeleton_rest_pose mode are alternative source forms.", "Use full_data only when all muscle and TQ channels are needed." },
                     SceneContextCommand, AnimationAnalyzeCommand, TransformCaptureCommand, PoseSetCommand),
+                PoseTestCommand => CommandDocumentation(
+                    "Measure the actual world-space positions of Humanoid joints in an External Pose, optionally checking them against expected contact targets.",
+                    new[] { "Call pose_get for the desired scene or Timeline frame first, then pass its returned pose reference.", "Use targets when a contact or reach criterion needs a numerical pass/fail check; target positions and tolerances are in meters in world space." },
+                    new[] { "Returns measured joint world positions, optional target distances and tolerance results, and an overall status.", "This samples the evaluated Pose rig; it does not judge whether the pose looks natural or whether a generated Clip plays smoothly." },
+                    new[] { "Read-only with respect to the scene, Timeline, Pose slot, and animation assets; evaluation uses a transient preview rig." },
+                    new[] { "pose_test explicitly measures the actual joints in any sampled Pose, including after effect-only generation. Generation-time pose/effect safety preflight is separate and runs only when the same constraint explicitly includes both pose and effect.", "Requires a valid Humanoid character and a Pose reference from the current context." },
+                    PoseGetCommand, TransformCaptureCommand, GenerateAnimationCommand),
                 PoseSetCommand => CommandDocumentation(
                     "Update the root transform, muscle channels, or effector targets of an existing External Pose slot.",
                     new[] { "Use only a {track,index} reference returned by pose_get or another Pose editing command.", "Supply at least one of root, muscles, or effector; multiple supplied channels are updated together." },
@@ -259,6 +267,7 @@ namespace KimodoUnityBridge.Command
                 RetargetAnimationCommand => new[] { "retargeted", "source_character", "character", "animation" },
                 GenerateAnimationCommand => new[] { "request_id", "status", "check", "warnings" },
                 PoseGetCommand => new[] { "pose", "source", "character_root", "data" },
+                PoseTestCommand => new[] { "pose", "source", "overall", "joints" },
                 PoseSetCommand or PoseSetRootTransformCommand or PoseSetMuscleCommand => new[] { "pose", "data" },
                 GetGenerationCommand => new[] { "request_id", "status", "stage", "message", "started_at_utc", "estimated_completion_utc", "eta_seconds", "progress_current", "progress_total", "progress_rate", "backend_progress", "runtime_root", "runtime_version", "install_mode", "server_connected", "clip", "animation_id", "seed", "analysis", "analysis_schema_version", "source_type", "skeleton", "person", "fps", "source_frame_count", "frame_count", "joint_names", "pose_parameterization", "coordinate_spaces", "betas", "rest_joints_m", "poses", "constraints", "constraint_loss", "inout_sampling", "target_alive", "backend_request_json" },
                 CancelGenerationCommand => new[] { "request_id", "status", "stage", "message", "canceled", "clip" },
@@ -348,6 +357,17 @@ namespace KimodoUnityBridge.Command
                 }
                 case "tiles": return ArraySchema("object", "tile", "view", "projection", "transforms", "bounds");
                 case "targets": return ArraySchema("object", "key", "world_position");
+                case "joints":
+                {
+                    JObject schema = ArraySchema("object", "joint", "world_position", "target_position", "distance_m", "tolerance_m", "status");
+                    schema["items"]["properties"]["joint"] = new JObject { ["type"] = "string" };
+                    schema["items"]["properties"]["world_position"] = NumberArraySchema();
+                    schema["items"]["properties"]["target_position"] = NullableSchema(NumberArraySchema());
+                    schema["items"]["properties"]["distance_m"] = NullableSchema(new JObject { ["type"] = "number" });
+                    schema["items"]["properties"]["tolerance_m"] = NullableSchema(new JObject { ["type"] = "number" });
+                    schema["items"]["properties"]["status"] = new JObject { ["type"] = "string", ["enum"] = new JArray("passed", "failed", "not_tested") };
+                    return schema;
+                }
                 case "constraints" when command == GetGenerationCommand:
                     return new JObject { ["type"] = "array", ["items"] = RawConstraintSchema() };
                 case "warnings": case "execution_model": case "routing": case "workflow": case "constraints": case "constraint_rules":
@@ -393,6 +413,7 @@ namespace KimodoUnityBridge.Command
                     source["properties"]["frame"] = NullableSchema(new JObject { ["type"] = "integer" });
                     return source;
                 }
+                case "overall": return new JObject { ["type"] = "string", ["enum"] = new JArray("passed", "failed", "not_tested") };
                 case "data": case "check": case "analysis": case "constraint_loss": case "inout_sampling": case "evaluated_joints_world":
                     return ObjectSchema();
                 default:
@@ -407,7 +428,7 @@ namespace KimodoUnityBridge.Command
             {
                 properties[name] = name switch
                 {
-                    "name" or "character" or "source" or "kind" or "asset_path" or "analysis_schema_version" or
+                    "name" or "character" or "source" or "kind" or "asset_path" or "analysis_schema_version" or "track" or
                     "analysis_mode" or "phase_track_version" or "tile" or "view" or "projection" or "key" or "role" or
                     "scene_object" or "object_ref" or "animator" or "avatar" or "hierarchy_path" or "playable_asset" or
                     "render_version" or "level" or "aspect" or "image_path" or "output" or "mode" or "path" or "type" or "clip" or "screenshot_generated_at" => new JObject { ["type"] = "string" },
@@ -850,6 +871,32 @@ namespace KimodoUnityBridge.Command
         private static PropertyDefinition RequiredPoseReference(string name)
         {
             return new PropertyDefinition(name, PoseReferenceSchema(), true);
+        }
+
+        private static PropertyDefinition OptionalPoseTestTargets()
+        {
+            JObject position = new JObject
+            {
+                ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3,
+                ["items"] = new JObject { ["type"] = "number" }
+            };
+            JObject target = new JObject
+            {
+                ["type"] = "object",
+                ["additionalProperties"] = false,
+                ["properties"] = new JObject
+                {
+                    ["joint"] = new JObject { ["type"] = "string", ["enum"] = new JArray("Hips", "Head", "LeftHand", "RightHand", "LeftFoot", "RightFoot", "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg") },
+                    ["position"] = position,
+                    ["tolerance_m"] = new JObject { ["type"] = "number", ["minimum"] = 0, ["default"] = 0.05 }
+                },
+                ["required"] = new JArray("joint", "position")
+            };
+            return new PropertyDefinition("targets", new JObject
+            {
+                ["type"] = "array", ["items"] = target,
+                ["description"] = "Optional expected world-space joint positions and per-target tolerances in meters."
+            }, false);
         }
 
         private static JObject PoseSetSchema()

@@ -5,7 +5,7 @@ description: Shared execution, evidence, recognition, comparison, revision, and 
 
 # Common execution contract
 
-This file is the active shared contract for the root Skill. It replaces the former four phase manuals with one loop and keeps the useful evidence rules from the historical recognition and comparison procedures.
+This file is the active shared contract for the root Skill. It replaces the former four phase manuals with one loop and keeps the useful evidence rules from the historical recognition and comparison procedures. It coordinates Kimodo commands and Unity/project APIs as equal implementation routes for one animation task.
 
 ## Command entry and state
 
@@ -16,7 +16,9 @@ string schema = KimodoUnityBridge.Command.command_dispatcher.GetCommandDefinitio
 string result = KimodoUnityBridge.Command.command_dispatcher.Invoke(commandName, argumentsJson);
 ```
 
-Read the live schema or `kimodo_help` before choosing a command or parameter. Use protocol command names, not internal C# handler names. With Unity CLI, execute the dispatcher in the connected Editor. Command frames use 60 FPS; use the documented Clip-relative or Timeline-global origin for each field.
+Plan the complete visible Unity result before choosing tools. Kimodo commands, Unity Editor APIs, Timeline APIs, AnimationClip/AnimationCurve APIs, runtime APIs, and project-local tools are peer routes in the same execution loop. Read the live schema or `kimodo_help` before choosing a Kimodo command or parameter. Use protocol command names, not internal C# handler names. With Unity CLI, execute the dispatcher in the connected Editor. Command frames use 60 FPS; use the documented Clip-relative or Timeline-global origin for each field. The command schema describes the Kimodo route; it is not an allowlist of all permitted implementation methods. For each subtask, record `subtask → route → output → acceptance check`. If an operation is better represented by a Unity or project API, use that API directly and record the route.
+
+The active Unity scene, Timeline, and Kimodo Session are an editable working pipeline. The agent may switch context and extend an existing Timeline by inserting tracks, clips, bindings, or synchronized prop motion. Preserve existing tracks and clips by default; prefer adding a track or making a derived Timeline over rewriting or rebuilding existing content. Modify existing content only when required by the task, and preserve a recoverable original first. After editing, verify the active scene/session, track bindings, clip ranges, and synchronization in the intended Timeline.
 
 At the start of a task, keep a compact loop state:
 
@@ -24,6 +26,7 @@ At the start of a task, keep a compact loop state:
 intent and explicit requirements
 scene character/object references
 planned Clips and dependencies
+subtask-to-route plan and produced assets/tracks
 acceptance criteria and allowed semantic alternatives
 confirmed Pose, root, effector, path, and object evidence
 candidates: request_id, animation_id, seed, prompt, constraints, analysis_id
@@ -50,13 +53,13 @@ For each request:
 1. Resolve participating characters and objects from the current scene. Identify the visible result, action order, contact points, duration, and ending state. State assumptions.
 2. Split independent goals or target interactions into Clips. Keep one continuous semantic action together. Record dependencies between Clips.
 3. Select only criteria relevant to the request. Criteria may be semantic, spatial, temporal, contact-related, structural, visual, or playback-related.
-4. Gather the smallest evidence needed: `scene.context`, `pose_get`, `transform_capture`, an existing Clip analysis, or a confirmed object Transform. Do not turn every observation into a constraint.
-5. Construct a short semantic prompt and structured constraints. Exact root position, heading, Pose, hand/foot target, loop, duration, and continuation belong in fields supported by the live schema.
+4. Gather the smallest evidence needed: `scene.context`, `pose_get`, `pose_test`, `transform_capture`, an existing Clip analysis, or a confirmed object Transform. Use `pose_test` to measure actual Humanoid joint positions in any sampled Pose and compare them with contact targets, including after effect-only generation. Generation-time pose/effect safety preflight runs only when one point constraint explicitly contains both `pose` and `effect`; effect-only constraints skip this check. Such preflight warnings remain non-blocking and do not replace measured pose results. Do not turn every observation into a constraint.
+5. Construct a short semantic prompt and structured constraints. Exact root position, heading, Pose, hand/foot target, loop, duration, and continuation belong in Kimodo fields when supported; object curves, Timeline tracks, bindings, and other asset edits belong in the appropriate Unity or project API.
 6. Generate candidates, poll each request, and retain the IDs and submitted settings.
 7. Analyze each candidate under the criteria. Open returned images before visual claims and map each claim to its tile or structured field.
 8. Compare candidates only when there are multiple candidates or the user requests a comparison. Use identical conditions and decide each criterion independently.
 9. If a criterion fails with evidence, change only the relevant input and create a derived candidate. If evidence is missing, gather it or report unknown; do not retry blindly.
-10. Finish when criteria pass, further candidates do not improve the target, or the remaining work is outside the supported command surface.
+10. Finish when criteria pass, further candidates do not improve the target, or the remaining work is unavailable through both the relevant command and API routes, or requires human artistic judgment.
 
 ## Recognition contract
 
@@ -106,6 +109,6 @@ Use a targeted revision table internally:
 failed criterion → supporting evidence → changed input → new candidate → result
 ```
 
-Do not regenerate passing dependencies. Stop automatic revision when the same criterion fails without improvement across the configured attempts, when the remaining defect is artistic frame-by-frame polish, or when it needs complex rigging, physics, or an unsupported object command. Report the successful criteria, failed/unknown criteria, candidates tried, evidence paths, and the precise animator handoff.
+Do not regenerate passing dependencies. Stop automatic revision when the same criterion fails without improvement across the configured attempts, when the remaining defect is artistic frame-by-frame polish, or when it needs complex rigging or physics. A missing command alone is not a stop condition: first inspect the project/package and relevant Unity APIs and attempt an appropriate API-based route. Report the successful criteria, failed/unknown criteria, candidates tried, evidence paths, and the precise animator handoff.
 
-For simple props, the loop may include future Transform-curve and interaction commands. They must share the same contact frames, offsets, Timeline range, and evidence IDs with the character candidate. Until such commands exist, mark arbitrary prop curve authoring or hand attachment as unsupported.
+For simple props, use Kimodo commands where exposed and Unity APIs where needed to author Transform curves, Timeline tracks, or hand attachment. Keep them tied to the character candidate through shared contact frames, offsets, Timeline range, and evidence IDs. Verify both character pose and object motion; if an API route is genuinely unavailable, mark that criterion unknown and explain the limitation.

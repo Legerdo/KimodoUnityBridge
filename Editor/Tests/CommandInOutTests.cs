@@ -380,5 +380,26 @@ namespace KimodoUnityBridge.Command.Tests
             JObject generate = definitions["tools"].Values<JObject>().Single(c => c.Value<string>("name") == "kimodo_generate_animation");
             Assert.That(generate["inputSchema"]?["properties"]?["prompt"]?.Value<string>("description"), Does.Contain("25 words or fewer"));
         }
+
+        [Test]
+        public void PoseTest_HelpSeparatesMeasuredPoseFromGenerationWarnings()
+        {
+            JObject manual = JObject.Parse(command_dispatcher.Invoke(
+                "kimodo_help", new JObject { ["command"] = "pose_test" }.ToString()))["manual"] as JObject;
+            Assert.That(manual, Is.Not.Null);
+            Assert.That(manual["inputSchema"]?["required"]?.Values<string>(), Does.Contain("pose"));
+            Assert.That(manual["inputSchema"]?["properties"]?["targets"]?["items"]?["properties"]?["tolerance_m"]?.Value<double>("default"), Is.EqualTo(0.05));
+            Assert.That(string.Join(" ", manual["documentation"]?["result_notes"]?.Values<string>() ?? Enumerable.Empty<string>()), Does.Contain("measured").IgnoreCase);
+            Assert.That(string.Join(" ", manual["documentation"]?["limits"]?.Values<string>() ?? Enumerable.Empty<string>()), Does.Contain("Generation-time warnings").IgnoreCase);
+        }
+
+        [TestCase("{'pose':{'track':'poses','index':0},'effect':{'right_hand':{'position':[1,2,3]}}}", true)]
+        [TestCase("{'effect':{'right_hand':{'position':[1,2,3]}}}", false)]
+        [TestCase("{'pose':{'track':'poses','index':0}}", false)]
+        [TestCase("{'root2d':{'position':[0,0],'heading':[0,1]},'effect':{'right_hand':{'position':[1,2,3]}}}", false)]
+        public void PoseEffectSafetyPreflight_RequiresExplicitPoseAndEffect(string json, bool expected)
+        {
+            Assert.That(command_context.HasPoseAndEffect(JObject.Parse(json)), Is.EqualTo(expected));
+        }
     }
 }

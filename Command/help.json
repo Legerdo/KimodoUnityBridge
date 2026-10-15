@@ -851,7 +851,7 @@
     },
     {
       "name": "analysis.video",
-      "description": "Estimate a per-frame SMPL-X pose sequence from a local video. This starts an asynchronous analysis job; poll kimodo_get_generation with its request_id. The result includes raw SMPL-X poses and a top-level FullBody constraints array in the existing raw constraint format; it does not create or apply a Unity animation.",
+      "description": "Estimate a per-frame SMPL-X pose sequence from a local video. This starts an asynchronous analysis job; poll kimodo_get_generation with its request_id. The result includes raw SMPL-X poses and matching FullBody constraints in the existing raw constraint format; it does not create or apply a Unity animation.",
       "documentation": {
         "when_to_use": "Use when a video file should be converted into a time-ordered SMPL-X pose array for downstream retargeting or analysis.",
         "behavior": [
@@ -861,16 +861,16 @@
         ],
         "result_notes": [
           "A completed request returns poses in source-video order plus one top-level constraints array, fps, frame_count, source_frame_count, joint_names, betas, and rest_joints_m.",
-          "Each pose contains global_orient_axis_angle, body_pose_axis_angle, and translation_m. The top-level constraints array uses the same merged raw FullBody constraint format accepted by animation generation.",
-          "The global coordinate space is gravity-aligned Y-up. Optional incam_* fields use OpenCV camera coordinates: X-right, Y-down, Z-forward.",
+          "Each pose contains raw global_orient_axis_angle, body_pose_axis_angle, and translation_m values. The top-level constraints array uses the same merged raw FullBody constraint format accepted by animation generation.",
+          "Rotations are axis-angle radians; translation and rest joints are in meters. The global coordinate space is gravity-aligned Y-up. Optional incam_* fields use OpenCV camera coordinates: X-right, Y-down, Z-forward.",
           "The result does not create a clip, Playable track, character binding, or timeline edit."
         ],
         "scene_effects": [
           "Read-only; does not create, modify, or clear Unity scene objects or animation assets."
         ],
         "limits": [
-          "The top-level constraints array groups the whole sequence into the existing raw FullBody payload; the command still does not create a rendered animation or Timeline track.",
-          "The request can fail if QuickServer's GVHMR runtime, checkpoints, or required assets are unavailable."
+          "The top-level constraints array groups the whole sequence into the existing raw FullBody payload; the command still does not return a rendered animation or create a Unity Humanoid muscle track.",
+          "The request can fail if QuickServer's GVHMR runtime, checkpoints, or the SMPL-X Avatar asset are unavailable."
         ],
         "related_commands": [
           "analysis.picture",
@@ -899,15 +899,6 @@
         ],
         "additionalProperties": false
       },
-      "examples": [
-        {
-          "description": "Estimate SMPL-X poses from a video, then poll for the pose array.",
-          "arguments": {
-            "video_path": "C:/data/mocap.mp4",
-            "person": "left"
-          }
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -953,11 +944,20 @@
           "ok"
         ],
         "additionalProperties": true
-      }
+      },
+      "examples": [
+        {
+          "description": "Estimate SMPL-X poses from a video, then poll for the pose array.",
+          "arguments": {
+            "video_path": "C:/data/mocap.mp4",
+            "person": "left"
+          }
+        }
+      ]
     },
     {
       "name": "analysis.picture",
-      "description": "Estimate one SMPL-X pose from a local still image. This starts an asynchronous analysis job; poll kimodo_get_generation with its request_id. The result includes raw SMPL-X pose data and a one-frame FullBody constraint in the existing raw constraint format; it does not create or apply a Unity animation.",
+      "description": "Estimate one SMPL-X pose from a local still image. This starts an asynchronous analysis job; poll kimodo_get_generation with its request_id. The result includes raw SMPL-X pose data and a FullBody constraint in the existing raw constraint format; it does not create or apply a Unity animation.",
       "documentation": {
         "when_to_use": "Use when a still image should be converted into a single SMPL-X pose sample for downstream retargeting or analysis.",
         "behavior": [
@@ -967,16 +967,16 @@
         ],
         "result_notes": [
           "A completed request returns one raw SMPL-X pose plus a top-level constraints array containing the matching raw FullBody constraint, along with joint_names, betas, and rest_joints_m.",
-          "The pose contains global_orient_axis_angle, body_pose_axis_angle, and translation_m. The constraints array uses the same format accepted by animation generation.",
-          "The global coordinate space is gravity-aligned Y-up. Optional incam_* fields use OpenCV camera coordinates: X-right, Y-down, Z-forward.",
+          "The pose contains raw global_orient_axis_angle, body_pose_axis_angle, and translation_m values. The constraints array uses the same format accepted by animation generation.",
+          "Rotations are axis-angle radians; translation and rest joints are in meters. The global coordinate space is gravity-aligned Y-up. Optional incam_* fields use OpenCV camera coordinates: X-right, Y-down, Z-forward.",
           "The result does not create a clip, Playable track, character binding, or timeline edit."
         ],
         "scene_effects": [
           "Read-only; does not create, modify, or clear Unity scene objects or animation assets."
         ],
         "limits": [
-          "The constraints array is a raw FullBody payload with one frame; the command still does not create a rendered animation or Timeline track.",
-          "The request can fail if QuickServer's GVHMR runtime, checkpoints, or required assets are unavailable."
+          "The constraints array is a raw FullBody payload with one frame; the command still does not return a rendered animation or create a Unity Humanoid muscle track.",
+          "The request can fail if QuickServer's GVHMR runtime, checkpoints, or the SMPL-X Avatar asset are unavailable."
         ],
         "related_commands": [
           "analysis.video",
@@ -997,14 +997,6 @@
         ],
         "additionalProperties": false
       },
-      "examples": [
-        {
-          "description": "Estimate one SMPL-X pose from a still image, then poll for the pose array.",
-          "arguments": {
-            "image_path": "C:/data/pose.jpg"
-          }
-        }
-      ],
       "outputSchema": {
         "type": "object",
         "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
@@ -1050,7 +1042,15 @@
           "ok"
         ],
         "additionalProperties": true
-      }
+      },
+      "examples": [
+        {
+          "description": "Estimate one SMPL-X pose from a still image, then poll for the pose array.",
+          "arguments": {
+            "image_path": "C:/data/pose.jpg"
+          }
+        }
+      ]
     },
     {
       "name": "transform_capture",
@@ -1429,7 +1429,7 @@
     },
     {
       "name": "kimodo_generate_animation",
-      "description": "Start asynchronous generation for a character in the current scene context. Command-created Timeline Clips enable AutoBegin anchoring automatically; explicit first-frame or In/Out samples take precedence. The accepted response contains request_id, status, and non-blocking checks; poll request_id for the completed Clip. Supply trajectory settings only when the requested path is known from explicit requirements or confirmed scene/analysis evidence; prompt wording never selects path options.",
+      "description": "Start asynchronous generation for a character in the current scene context. Command-created Timeline Clips enable AutoBegin anchoring automatically; explicit first-frame or In/Out samples take precedence. The accepted response contains request_id, status, and non-blocking request/constraint warnings; pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect, never for effect-only constraints. These warnings are not measured joint positions in the generated motion; use pose_get then pose_test to measure sampled joint positions and contact reach after generation. Supply trajectory settings only when the requested path is known from explicit requirements or confirmed scene/analysis evidence; prompt wording never selects path options.",
       "documentation": {
         "when_to_use": "Submit one animation generation request for a character in the current scene context.",
         "behavior": [
@@ -1438,7 +1438,7 @@
           "Save request_id and use kimodo_get_generation to poll; do not resubmit a running request."
         ],
         "result_notes": [
-          "The accepted response contains request_id, status, non-blocking check results, and warnings.",
+          "The accepted response contains request_id, status, non-blocking check results, and warnings. Pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect; effect-only constraints skip it.",
           "On completion, kimodo_get_generation returns the generated Clip metadata, asset path, animation_id, and available generation diagnostics."
         ],
         "scene_effects": [
@@ -1593,7 +1593,7 @@
           },
           "constraints": {
             "type": "array",
-            "description": "Point constraints are selected by optional pose, root2d, and effect data; multiple fields at one frame compose by channel. root_path and inout remain separate constraint forms; duplicate frames are rejected; command frames use 60 FPS.",
+            "description": "Point constraints are selected by optional pose, root2d, and effect data; multiple fields at one frame compose by channel. Pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect; effect-only constraints skip it. root_path and inout remain separate constraint forms; duplicate frames are rejected; command frames use 60 FPS.",
             "items": {
               "oneOf": [
                 {
@@ -1624,6 +1624,7 @@
                     },
                     "root2d": {
                       "type": "object",
+                      "description": "Planar root position and heading constraint; supply both channels together.",
                       "additionalProperties": false,
                       "properties": {
                         "position": {
@@ -1648,8 +1649,7 @@
                       "required": [
                         "position",
                         "heading"
-                      ],
-                      "description": "Planar root position and heading constraint; supply both channels together."
+                      ]
                     },
                     "effect": {
                       "type": "object",
@@ -1689,8 +1689,7 @@
                                 "rotation"
                               ]
                             }
-                          ],
-                          "description": "Effector target position and/or rotation."
+                          ]
                         },
                         "right_hand": {
                           "type": "object",
@@ -1726,8 +1725,7 @@
                                 "rotation"
                               ]
                             }
-                          ],
-                          "description": "Effector target position and/or rotation."
+                          ]
                         },
                         "left_foot": {
                           "type": "object",
@@ -1763,8 +1761,7 @@
                                 "rotation"
                               ]
                             }
-                          ],
-                          "description": "Effector target position and/or rotation."
+                          ]
                         },
                         "right_foot": {
                           "type": "object",
@@ -1800,8 +1797,7 @@
                                 "rotation"
                               ]
                             }
-                          ],
-                          "description": "Effector target position and/or rotation."
+                          ]
                         }
                       },
                       "anyOf": [
@@ -1825,8 +1821,7 @@
                             "right_foot"
                           ]
                         }
-                      ],
-                      "description": "World-space targets for one or more hands or feet. Supply position and/or rotation for each target."
+                      ]
                     }
                   },
                   "required": [
@@ -2077,7 +2072,7 @@
       },
       "examples": [
         {
-          "description": "Generate two seconds and poll the returned request_id.",
+          "description": "Submit one Clip request; use the returned request_id with kimodo_get_generation.",
           "arguments": {
             "character": "<character>",
             "prompt": "<short action for one Clip>",
@@ -2376,7 +2371,7 @@
             "type": "object",
             "properties": {
               "track": {
-                "type": "object"
+                "type": "string"
               },
               "index": {
                 "type": "integer"
@@ -2501,6 +2496,320 @@
               "mode": "skeleton_rest_pose"
             },
             "full_data": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "pose_test",
+      "description": "Measure actual Humanoid joint world positions after evaluating any External Pose, including a pose sampled from a generated effect-only result. Optionally compare selected joints with world-space target positions; this is an explicit pose measurement, separate from generation-time non-blocking warnings.",
+      "documentation": {
+        "when_to_use": "Measure the actual world-space positions of Humanoid joints in an External Pose, optionally checking them against expected contact targets.",
+        "behavior": [
+          "Call pose_get for the desired scene or Timeline frame first, then pass its returned pose reference.",
+          "Use targets when a contact or reach criterion needs a numerical pass/fail check; target positions and tolerances are in meters in world space."
+        ],
+        "result_notes": [
+          "Returns measured joint world positions, optional target distances and tolerance results, and an overall status.",
+          "This samples the evaluated Pose rig; it does not judge whether the pose looks natural or whether a generated Clip plays smoothly."
+        ],
+        "scene_effects": [
+          "Read-only with respect to the scene, Timeline, Pose slot, and animation assets; evaluation uses a transient preview rig."
+        ],
+        "limits": [
+          "pose_test explicitly measures the actual joints in any sampled Pose, including after effect-only generation. Generation-time pose/effect safety preflight is separate and runs only when the same constraint explicitly includes both pose and effect.",
+          "Requires a valid Humanoid character and a Pose reference from the current context."
+        ],
+        "related_commands": [
+          "pose_get",
+          "transform_capture",
+          "kimodo_generate_animation"
+        ]
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "pose": {
+            "type": "object",
+            "description": "External Pose slot in the current scene context.",
+            "additionalProperties": false,
+            "properties": {
+              "track": {
+                "type": "string"
+              },
+              "index": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "track",
+              "index"
+            ]
+          },
+          "joints": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "Hips",
+                "Head",
+                "LeftHand",
+                "RightHand",
+                "LeftFoot",
+                "RightFoot",
+                "LeftUpperArm",
+                "RightUpperArm",
+                "LeftLowerArm",
+                "RightLowerArm",
+                "LeftUpperLeg",
+                "RightUpperLeg",
+                "LeftLowerLeg",
+                "RightLowerLeg"
+              ]
+            },
+            "description": "Humanoid joints to measure. Defaults to hips, head, hands, and feet; joints named in targets are included automatically."
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "joint": {
+                  "type": "string",
+                  "enum": [
+                    "Hips",
+                    "Head",
+                    "LeftHand",
+                    "RightHand",
+                    "LeftFoot",
+                    "RightFoot",
+                    "LeftUpperArm",
+                    "RightUpperArm",
+                    "LeftLowerArm",
+                    "RightLowerArm",
+                    "LeftUpperLeg",
+                    "RightUpperLeg",
+                    "LeftLowerLeg",
+                    "RightLowerLeg"
+                  ]
+                },
+                "position": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                "tolerance_m": {
+                  "type": "number",
+                  "minimum": 0,
+                  "default": 0.05
+                }
+              },
+              "required": [
+                "joint",
+                "position"
+              ]
+            },
+            "description": "Optional expected world-space joint positions and per-target tolerances in meters."
+          }
+        },
+        "required": [
+          "pose"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "Command responses keep domain fields at the top level. Success uses ok=true; command errors use ok=false and an error object. Async job failures are reported by status with an error object.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "description": "Optional command error. Command errors use {code, message, details?}; asynchronous job failures include this object while the poll command itself succeeds.",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": true
+          },
+          "pose": {
+            "type": "object",
+            "properties": {
+              "track": {
+                "type": "string"
+              },
+              "index": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "character": {
+                "type": "string"
+              },
+              "character_path": {
+                "type": "object"
+              },
+              "pose": {
+                "type": "object"
+              },
+              "clip": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "frame": {
+                "oneOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "timeline_frame_60": {
+                "type": "integer"
+              },
+              "mode": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          },
+          "overall": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "not_tested"
+            ]
+          },
+          "joints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "joint": {
+                  "type": "string"
+                },
+                "world_position": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                "target_position": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "distance_m": {
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "tolerance_m": {
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "not_tested"
+                  ]
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "additionalProperties": true
+      },
+      "examples": [
+        {
+          "description": "Measure the actual world-space hand positions in a sampled Timeline pose.",
+          "arguments": {
+            "pose": {
+              "track": "<pose track returned by pose_get>",
+              "index": 0
+            },
+            "joints": [
+              "RightHand",
+              "LeftHand"
+            ]
+          }
+        },
+        {
+          "description": "Check whether the sampled right hand reaches a world-space contact point within 5 cm.",
+          "arguments": {
+            "pose": {
+              "track": "<pose track returned by pose_get>",
+              "index": 0
+            },
+            "targets": [
+              {
+                "joint": "RightHand",
+                "position": [
+                  1.2,
+                  0.9,
+                  2.4
+                ],
+                "tolerance_m": 0.05
+              }
+            ]
           }
         }
       ]
@@ -2784,7 +3093,7 @@
             "type": "object",
             "properties": {
               "track": {
-                "type": "object"
+                "type": "string"
               },
               "index": {
                 "type": "integer"
@@ -2913,7 +3222,7 @@
             "type": "object",
             "properties": {
               "track": {
-                "type": "object"
+                "type": "string"
               },
               "index": {
                 "type": "integer"
@@ -3036,7 +3345,7 @@
             "type": "object",
             "properties": {
               "track": {
-                "type": "object"
+                "type": "string"
               },
               "index": {
                 "type": "integer"
@@ -3237,31 +3546,6 @@
             "properties": {},
             "additionalProperties": true
           },
-          "constraint_loss": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": true
-          },
-          "inout_sampling": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": true
-          },
-          "target_alive": {
-            "type": "boolean"
-          },
-          "backend_request_json": {
-            "oneOf": [
-              {
-                "type": "object",
-                "properties": {},
-                "additionalProperties": true
-              },
-              {
-                "type": "string"
-              }
-            ]
-          },
           "analysis_schema_version": {
             "type": "string"
           },
@@ -3379,6 +3663,31 @@
               },
               "additionalProperties": true
             }
+          },
+          "constraint_loss": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "inout_sampling": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "target_alive": {
+            "type": "boolean"
+          },
+          "backend_request_json": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              },
+              {
+                "type": "string"
+              }
+            ]
           }
         },
         "required": [

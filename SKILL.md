@@ -1,6 +1,6 @@
 ---
 name: kimodo-unity-bridge
-description: Run reusable Unity animation tasks through Kimodo scene context, pose constraints, generation, analysis, comparison, and targeted revision.
+description: Coordinate reusable Unity animation tasks across Kimodo commands, Unity APIs, Timeline assets, scene context, pose constraints, generation, analysis, comparison, and targeted revision.
 ---
 
 # KimodoUnityBridge
@@ -11,7 +11,17 @@ Use this Skill when the user wants to create, continue, retarget, inspect, compa
 
 The reusable workflow covers Humanoid character animation and simple Transform-driven scene objects such as doors, balls, weapons, and props. It can generate derived character Clips, sample and edit generation Poses, apply root and end-effector constraints, retarget Humanoid Clips, inspect evidence, and compare candidates. Complex rigs, quadrupeds, non-humanoid creatures, vehicles, physics authoring, and final frame-by-frame acting polish require a different tool or an animator.
 
-Do not claim that an object interaction is complete when the available commands cannot author or bind the object's Transform curve. Record the missing capability and hand it off after the supported character work and evidence collection.
+The command surface is a convenient route, not the boundary of what the agent may do. When a required operation is absent from the live command schema, inspect the project and use appropriate available Unity APIs (for example, Editor scripting, AnimationClip/AnimationCurve, Timeline, or runtime APIs) to complete it. Verify API behavior and preserve generated or source assets before modifying them. Hand off only when the operation is unavailable or the remaining task requires human artistic judgment; do not label work unsupported merely because no Kimodo command exists.
+
+Treat Unity scene, Timeline, and Kimodo Session context as an editable working pipeline. The agent may select or switch context, and may extend an existing Timeline by inserting tracks, clips, bindings, or synchronized prop motion. Preserve existing tracks and clips by default; prefer adding a track or creating a derived Timeline over rewriting or rebuilding existing content. Modify existing content only when the task requires it, and preserve a recoverable original before doing so. After edits, verify the active scene/session, track bindings, clip ranges, and synchronization in the intended Timeline.
+
+## Tool coordination
+
+Plan the complete visible Unity result first, then assign each subtask to the most suitable route. Kimodo commands, Unity Editor APIs, Timeline APIs, AnimationClip/AnimationCurve APIs, runtime APIs, and project-local tools are peers in one workflow. Do not treat command invocation as the goal, and do not wait for a command failure before considering an API that is already appropriate for the task.
+
+Use Kimodo commands for semantic scene discovery, Humanoid pose and effector constraints, character generation, retargeting, analysis, comparison, and Kimodo candidate/session references. Use Unity or project APIs for scene and asset edits that are more naturally represented there, such as sampling actual bone positions, creating or editing prop Transform curves, inserting Timeline tracks, binding objects, and checking multi-object synchronization. When a task crosses both routes, pass the same object references, contact frames, offsets, clip ranges, and evidence through the loop.
+
+Before execution, make a small routing plan such as `subtask → route → output → acceptance check`. For a character picking up an object, this normally includes a character route, a pose-test route, an object-motion route, and a Timeline-integration route. The plan is not rigid: choose a different route when the live project exposes a better one.
 
 ## One execution loop
 
@@ -51,12 +61,12 @@ Separate visual observations, structured measurements, and playback observations
 
 ### Revision and handoff
 
-When evidence supports a defect, state the failed criterion, change only the relevant prompt, Pose, root, effector, continuation, or object curve input, then generate and evaluate a derived candidate under the same criterion. Stop when the required criteria pass, when further candidates show no meaningful improvement, or when the remaining issue requires frame-by-frame acting, complex binding, physics, or an unsupported command. The final report names the selected output, criteria and evidence, remaining unknowns, attempts, and the exact human follow-up.
+When evidence supports a defect, state the failed criterion, change only the relevant prompt, Pose, root, effector, continuation, or object curve input, then generate and evaluate a derived candidate under the same criterion. Stop when the required criteria pass, when further candidates show no meaningful improvement, or when the remaining issue requires frame-by-frame acting, complex binding, physics, or an unavailable API. The final report names the selected output, criteria and evidence, remaining unknowns, attempts, and the exact human follow-up.
 
-## Command route
+## Command and API routes
 
-Use the host's Unity tools first. If they cannot perform the operation, use the Unity CLI connected to the Editor and invoke the public `KimodoUnityBridge.Command.command_dispatcher`. `kimodo_install_server` and `kimodo_generate_animation` are asynchronous: save the exact `request_id` and poll with `kimodo_get_generation` until a terminal state. Check top-level `ok`, then task `status`; warnings are evidence to inspect, not proof of success or failure.
+Use the available Unity project tools through the route selected for each subtask. For Kimodo operations, use the Unity CLI connected to the Editor and invoke the public `KimodoUnityBridge.Command.command_dispatcher`. `kimodo_install_server` and `kimodo_generate_animation` are asynchronous: save the exact `request_id` and poll with `kimodo_get_generation` until a terminal state. Check top-level `ok`, then task `status`; warnings are evidence to inspect, not proof of success or failure.
 
-Use `scene.context` for authoritative character, Clip, Timeline, and Session references. Use `pose_get`, `pose_set`, `kimodo_retarget_animation`, `animation_analyze`, and `transform_capture` only with handles returned by the active context or the relevant command. Treat an asset path as metadata, not a scene Clip handle. Do not infer references from display names when a command has returned an unambiguous handle.
+Use `scene.context` for authoritative character, Clip, Timeline, and Session references. Use `pose_get`, `pose_test`, `pose_set`, `kimodo_retarget_animation`, `animation_analyze`, and `transform_capture` only with handles returned by the active context or the relevant command. Use `pose_test` after `pose_get` to measure actual Humanoid joint world positions and optionally compare contact targets; generation warnings are non-blocking preflight diagnostics and do not replace this measurement. Treat an asset path as metadata, not a scene Clip handle. Do not infer references from display names when a command has returned an unambiguous handle.
 
-The current command surface does not itself author arbitrary prop Transform curves or parent a prop to a hand. When those commands are added, connect them to the same loop through shared contact frames, offsets, Timeline ranges, and interaction analysis; until then, report that part as unsupported rather than pretending the character Clip moved the prop.
+Kimodo commands are one part of the implementation, not a required wrapper around every operation. Use Unity APIs even when a command exists if the API gives the necessary precision or integration. Keep both routes in one loop: share contact frames, offsets, Timeline ranges, and evidence IDs; inspect the result in the scene; and distinguish character-Clip success from whole-interaction success. Before concluding an operation is impossible, inspect the installed package and relevant Unity APIs. Report a genuine API/tooling limitation only after that check.
