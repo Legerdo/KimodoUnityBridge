@@ -1,13 +1,13 @@
 # Reusable Animation Loop: Practical Test Cases
 
-These are interactive acceptance tests for the Skill workflow, not Unity unit tests. Run them in a Unity project with KimodoUnityBridge installed, a ready local runtime, an active Timeline Session, and at least one valid humanoid character. Re-check `kimodo_help` and the live schema before each run. Do not treat a test prompt as permission to alter scene assets outside the requested generated output.
+These are interactive acceptance tests for the Skill workflow, not Unity unit tests. Run them in a Unity project with KimodoUnityBridge installed, a ready local runtime, an active Timeline Session, and at least one valid humanoid character. Re-check `kimodo.help` and the live schema before each run. Do not treat a test prompt as permission to alter scene assets outside the requested generated output.
 
 ## Shared pass criteria
 
 - The plan states intent, action beats, space, timing, evidence needed, acceptance criteria, and consequential unknowns.
 - The request adds only supported structured constraints, validates time bases and references, and stops when an exact input cannot be resolved.
 - The loop saves the exact `request_id`, checks warnings, polls to a terminal state, and does not duplicate an in-flight request.
-- Completed Clips use `animation_analyze`; returned image evidence is opened, and unsupported conclusions remain unknown.
+- Completed Clips use `animation.analyze`; returned image evidence is opened, and unsupported conclusions remain unknown.
 - A correction produces a distinct derived Clip and repeats only the affected loop steps; earlier Clips and their history remain available.
 
 ## Cases
@@ -18,7 +18,7 @@ These are interactive acceptance tests for the Skill workflow, not Unity unit te
 
 **Setup:** Any valid humanoid character in the current scene.
 
-**Exercise:** Run the reusable loop without adding path, Pose, or loop constraints unless the live scene or user requirement establishes a need. Generate, poll, run `animation_analyze` on one Clip, and inspect its returned image.
+**Exercise:** Run the reusable loop without adding path, Pose, or loop constraints unless the live scene or user requirement establishes a need. Generate, poll, run `animation.analyze` on one Clip, and inspect its returned image.
 
 **Pass when:** the plan preserves the planted greeting and relaxed ending; no unsupported spatial constraints are submitted; the report distinguishes visible evidence from unverified playback quality.
 
@@ -26,7 +26,7 @@ These are interactive acceptance tests for the Skill workflow, not Unity unit te
 
 **Request:** “Use the analyzed path from the selected source Clip as a movement reference for this new action.”
 
-**Setup:** A valid humanoid and a source Clip whose `animation_analyze` result contains `clip.root_trajectory.path`.
+**Setup:** A valid humanoid and a source Clip whose `animation.analyze` result contains `clip.root_trajectory.path`.
 
 **Exercise:** Resolve the source Clip from current scene context, confirm its analysis result and path `{track,index}`, then construct `root_path` using that returned reference. Inspect warnings and analyze the generated result.
 
@@ -38,7 +38,7 @@ These are interactive acceptance tests for the Skill workflow, not Unity unit te
 
 **Setup:** A valid humanoid, a source Clip with a candidate crouch, and a visible or otherwise confirmed landing context.
 
-**Exercise:** Analyze the source Clip, select a candidate Timeline-global frame, call `pose_get` with `source.timeline_frame_60`, inspect the returned Pose, and only then pass its returned `{track,index}` as the generation constraint. Analyze the result and inspect relevant pose tiles.
+**Exercise:** Analyze the source Clip, select a candidate Timeline-global frame, call `pose.get` with `source.timeline_frame_60`, inspect the returned Pose, and only then pass its returned `{track,index}` as the generation constraint. Analyze the result and inspect relevant pose tiles.
 
 **Pass when:** the Pose was sampled and confirmed for the landing role, the Timeline-global source frame is not confused with a generated-Clip-relative constraint frame, and the report does not treat one Pose as proof of the whole jump or obstacle clearance.
 

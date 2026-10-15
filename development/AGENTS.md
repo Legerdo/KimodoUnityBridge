@@ -23,6 +23,6 @@ These rules apply to repository maintenance. Animation task execution is defined
 
 ## Maintenance checks
 
-- For command changes, verify the live schema, `kimodo_help`, and the smallest relevant Unity/editor check.
+- For command changes, verify the live schema, `kimodo.help`, and the smallest relevant Unity/editor check.
 - For documentation changes, run a static terminology/command audit and `git diff --check`.
 - Report static, build, runtime, image, scene, and playback evidence separately.

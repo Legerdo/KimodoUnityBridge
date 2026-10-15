@@ -68,7 +68,7 @@ namespace KimodoUnityBridge.Command.Tests
                 animator.Rebind();
 
                 testSession = CreateCurrentTestContext(character, animator);
-                JObject analysis = Require("animation_analyze", new JObject
+                JObject analysis = Require("animation.analyze", new JObject
                 {
                     ["clips"] = new JArray(new JObject
                     {
@@ -143,7 +143,7 @@ namespace KimodoUnityBridge.Command.Tests
                     : Path.GetFullPath(Path.Combine(Application.dataPath, "..", relativePng));
                 Assert.That(relativePng, Is.Not.Null.And.EndsWith(".png"));
                 Assert.That(relativePng.Replace('\\', '/'), Does.StartWith("Library/KimodoData/"));
-                Assert.That(File.Exists(absolutePng), Is.True, "animation_analyze did not write its composite PNG.");
+                Assert.That(File.Exists(absolutePng), Is.True, "animation.analyze did not write its composite PNG.");
                 Assert.That(new FileInfo(absolutePng).Length, Is.GreaterThan(0));
             }
             finally

@@ -22,10 +22,10 @@ namespace KimodoUnityBridge.Command.Tests
         public void PoseCommands_ShareThePoseReferenceContract()
         {
             JObject document = Definitions();
-            JObject poseGet = Tool(document, "pose_get");
-            JObject poseSet = Tool(document, "pose_set");
-            JObject transformCapture = Tool(document, "transform_capture");
-            JObject generation = Tool(document, "kimodo_generate_animation");
+            JObject poseGet = Tool(document, "pose.get");
+            JObject poseSet = Tool(document, "pose.set");
+            JObject transformCapture = Tool(document, "transform.capture");
+            JObject generation = Tool(document, "animation.generate");
 
             JObject poseReference = (JObject)poseGet["inputSchema"]["properties"]["source"];
             Assert.That(poseReference["properties"], Is.Not.Null);
@@ -55,13 +55,13 @@ namespace KimodoUnityBridge.Command.Tests
         public void GenerationCommands_ShareRequestIdLifecycleContract()
         {
             JObject document = Definitions();
-            JObject generate = Tool(document, "kimodo_generate_animation");
-            JObject get = Tool(document, "kimodo_get_generation");
-            JObject cancel = Tool(document, "kimodo_cancel_generation");
-            JObject analyze = Tool(document, "animation_analyze");
+            JObject generate = Tool(document, "animation.generate");
+            JObject get = Tool(document, "generation.get");
+            JObject cancel = Tool(document, "generation.cancel");
+            JObject analyze = Tool(document, "animation.analyze");
             JObject videoAnalysis = Tool(document, "analysis.video");
             JObject pictureAnalysis = Tool(document, "analysis.picture");
-            JObject retarget = Tool(document, "kimodo_retarget_animation");
+            JObject retarget = Tool(document, "animation.retarget");
 
             Assert.That(generate["description"]?.Value<string>(), Does.Contain("request_id"));
             AssertRequiredProperty(get, "request_id");
@@ -129,11 +129,11 @@ namespace KimodoUnityBridge.Command.Tests
             JObject document = Definitions();
             string[] names =
             {
-                "kimodo_help",
-                "kimodo_install_server",
+                "kimodo.help",
+                "server.install",
                 "scene.context",
                 "session.clear",
-                "animation_analyze"
+                "animation.analyze"
             };
 
             foreach (string name in names)
@@ -156,7 +156,7 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(sceneContext["outputSchema"]?["properties"]?["history"]?["properties"]?["generations"]?["items"]?["properties"]?["animation_id"], Is.Not.Null);
             Assert.That(Tool(document, "session.clear")["inputSchema"]["required"], Is.Null.Or.Empty);
 
-            JObject poseGet = Tool(document, "pose_get");
+            JObject poseGet = Tool(document, "pose.get");
             Assert.That(poseGet["outputSchema"]?["properties"]?["character_root"]?["properties"]?["position"]?["type"]?.Value<string>(), Is.EqualTo("array"));
             Assert.That(poseGet["outputSchema"]?["properties"]?["character_root"]?["properties"]?["rotation"]?["maxItems"]?.Value<int>(), Is.EqualTo(4));
             Assert.That(poseGet["description"]?.Value<string>(), Does.Contain("data.root is the sampled Pose root channel"));
@@ -176,31 +176,31 @@ namespace KimodoUnityBridge.Command.Tests
                 CollectionAssert.Contains(output["required"].Values<string>(), "ok");
             }
 
-            JObject generate = Tool(document, "kimodo_generate_animation");
+            JObject generate = Tool(document, "animation.generate");
             Assert.That(generate["outputSchema"]?["properties"]?["request_id"], Is.Not.Null);
             Assert.That(generate["outputSchema"]?["properties"]?["check"], Is.Not.Null);
             Assert.That(generate["outputSchema"]?["properties"]?["warnings"]?["type"]?.Value<string>(), Is.EqualTo("array"));
             Assert.That(generate["outputSchema"]?["properties"]?["model"], Is.Null);
             Assert.That(generate["outputSchema"]?["properties"]?["constraints"], Is.Null);
 
-            JObject install = Tool(document, "kimodo_install_server");
+            JObject install = Tool(document, "server.install");
             CollectionAssert.AreEquivalent(
                 new[] { "ok", "error", "request_id", "status" },
                 ((JObject)install["outputSchema"]["properties"]).Properties().Select(property => property.Name));
 
-            JObject poll = Tool(document, "kimodo_get_generation");
+            JObject poll = Tool(document, "generation.get");
             Assert.That(poll["outputSchema"]?["properties"]?["clip"], Is.Not.Null);
             Assert.That(poll["outputSchema"]?["properties"]?["asset_path"], Is.Null);
             Assert.That(poll["outputSchema"]?["properties"]?["clip"]?["properties"]?["asset_path"]?.Value<string>("type"), Is.EqualTo("string"));
             Assert.That(poll["outputSchema"]?["properties"]?["clip"]?["properties"]?["end_timeline_frame_60_exclusive"]?.Value<string>("type"), Is.EqualTo("integer"));
             Assert.That(poll["outputSchema"]?["properties"]?["clip"]?["properties"]?["duration_frames"], Is.Null);
 
-            JObject cancel = Tool(document, "kimodo_cancel_generation");
+            JObject cancel = Tool(document, "generation.cancel");
             CollectionAssert.AreEquivalent(
                 new[] { "ok", "error", "request_id", "status", "stage", "message", "canceled", "clip" },
                 ((JObject)cancel["outputSchema"]["properties"]).Properties().Select(property => property.Name));
 
-            JObject analyze = Tool(document, "animation_analyze");
+            JObject analyze = Tool(document, "animation.analyze");
             Assert.That(analyze["outputSchema"]?["properties"]?["picture"], Is.Null);
             Assert.That(analyze["outputSchema"]?["properties"]?["clip"]?["properties"]?["analysis_id"]?.Value<string>("type"), Is.EqualTo("string"));
             Assert.That(analyze["outputSchema"]?["properties"]?["clip"]?["properties"]?["session_id"]?.Value<string>("type"), Is.EqualTo("string"));
@@ -208,7 +208,7 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["title"], Is.Null);
             Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["header"], Is.Null);
 
-            JObject poll2 = Tool(document, "kimodo_get_generation");
+            JObject poll2 = Tool(document, "generation.get");
             Assert.That(poll2["outputSchema"]?["properties"]?["animation_id"]?.Value<string>("type"), Is.EqualTo("string"));
             Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["headers"], Is.Null);
 
@@ -216,8 +216,33 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(error.Value<string>("type"), Is.EqualTo("object"));
             Assert.That(error["oneOf"], Is.Null);
 
-            Assert.That(Tool(document, "pose_set_root_transform").Value<string>("description"), Does.Contain("Compatibility alias"));
-            Assert.That(Tool(document, "pose_set_muscle").Value<string>("description"), Does.Contain("Compatibility alias"));
+            JObject poseSet = Tool(document, "pose.set");
+            Assert.That(poseSet.Value<string>("description"), Does.Not.Contain("Compatibility alias"));
+            Assert.That(poseSet["documentation"]?.Value<string>("when_to_use"), Does.Contain("Update the root transform"));
+        }
+
+        [Test]
+        [Category("Other")]
+        public void LegacyCommandSignatures_AreNotRegisteredOrDispatched()
+        {
+            JObject document = Definitions();
+            string[] names = ((JArray)document["tools"]).Values<JObject>()
+                .Select(command => command.Value<string>("name")).ToArray();
+            string[] legacyNames =
+            {
+                "kimodo_help", "scene_context", "kimodo_install_server", "kimodo_generate_animation",
+                "animation_analyze", "analysis_video", "analysis_picture", "transform_capture",
+                "kimodo_retarget_animation", "pose_get", "pose_test", "pose_set",
+                "pose_set_root_transform", "pose_set_muscle", "kimodo_get_generation",
+                "kimodo_cancel_generation", "session_clear"
+            };
+
+            foreach (string legacyName in legacyNames)
+            {
+                CollectionAssert.DoesNotContain(names, legacyName, legacyName);
+                JObject response = JObject.Parse(command_dispatcher.Invoke(legacyName, "{}"));
+                Assert.That(response["error"]?.Value<string>("code"), Is.EqualTo("unknown_command"), legacyName);
+            }
         }
 
         [Test]

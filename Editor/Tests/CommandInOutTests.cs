@@ -359,7 +359,7 @@ namespace KimodoUnityBridge.Command.Tests
             var definitions = JObject.Parse(command_dispatcher.GetCommandDefinitionsJson());
             var built = JObject.Parse((string)typeof(command_context).GetMethod("BuildCommandDefinitionsJson", PrivateStatic).Invoke(null, null));
             Assert.That(JToken.DeepEquals(built, definitions), Is.True, "Regenerate Command/help.json from its definition source.");
-            var overview = JObject.Parse(command_dispatcher.Invoke("kimodo_help", "{}"));
+            var overview = JObject.Parse(command_dispatcher.Invoke("kimodo.help", "{}"));
             foreach (var command in definitions["tools"].Values<JObject>())
             {
                 string name = command.Value<string>("name");
@@ -369,7 +369,7 @@ namespace KimodoUnityBridge.Command.Tests
                 Assert.That(documentation.Value<string>("when_to_use"), Is.Not.Null.And.Not.Empty, name);
                 foreach (string section in new[] { "behavior", "result_notes", "scene_effects", "limits", "related_commands" })
                     Assert.That(documentation[section] is JArray values && values.Count > 0, Is.True, $"{name}.{section}");
-                var detail = JObject.Parse(command_dispatcher.Invoke("kimodo_help", new JObject { ["command"] = name }.ToString()));
+                var detail = JObject.Parse(command_dispatcher.Invoke("kimodo.help", new JObject { ["command"] = name }.ToString()));
                 Assert.That(JToken.DeepEquals(detail["manual"]?["documentation"], documentation), Is.True, name);
                 Assert.That(JToken.DeepEquals(detail["manual"]["examples"], command["examples"]), Is.True, name);
                 JObject overviewCommand = overview["commands"].Values<JObject>().Single(c => c.Value<string>("name") == name);
@@ -377,7 +377,7 @@ namespace KimodoUnityBridge.Command.Tests
                 Assert.That(JToken.DeepEquals(overviewCommand["documentation"], documentation), Is.True, name);
             }
 
-            JObject generate = definitions["tools"].Values<JObject>().Single(c => c.Value<string>("name") == "kimodo_generate_animation");
+            JObject generate = definitions["tools"].Values<JObject>().Single(c => c.Value<string>("name") == "animation.generate");
             Assert.That(generate["inputSchema"]?["properties"]?["prompt"]?.Value<string>("description"), Does.Contain("25 words or fewer"));
         }
 
@@ -385,7 +385,7 @@ namespace KimodoUnityBridge.Command.Tests
         public void PoseTest_HelpSeparatesMeasuredPoseFromGenerationWarnings()
         {
             JObject manual = JObject.Parse(command_dispatcher.Invoke(
-                "kimodo_help", new JObject { ["command"] = "pose_test" }.ToString()))["manual"] as JObject;
+                "kimodo.help", new JObject { ["command"] = "pose.test" }.ToString()))["manual"] as JObject;
             Assert.That(manual, Is.Not.Null);
             Assert.That(manual["inputSchema"]?["required"]?.Values<string>(), Does.Contain("pose"));
             Assert.That(manual["inputSchema"]?["properties"]?["targets"]?["items"]?["properties"]?["tolerance_m"]?.Value<double>("default"), Is.EqualTo(0.05));
