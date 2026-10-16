@@ -122,11 +122,11 @@ namespace KimodoUnityBridge.Command
                     new[] { "The clips array must contain exactly one Clip.", "Static pictures do not establish playback continuity, velocity smoothness, foot sliding, or other time-continuous properties." },
                     SceneContextCommand, PoseGetCommand, TransformCaptureCommand),
                 TransformCaptureCommand => CommandDocumentation(
-                    "Render a four-view image and world-space joint measurements for a scene character or a sampled External Pose, optionally framed with scene objects.",
-                    new[] { "Use character_path for the current scene character or a Pose reference returned by pose.get.", "Use @pose or @pose/<relative bone path> to include the evaluated Pose in the capture." },
-                    new[] { "Returns image_path, view/tile metadata, target references, and evaluated joint positions in world space." },
-                    new[] { "Creates image evidence but does not change scene poses." },
-                    new[] { "To capture a Clip frame, sample it first with pose.get; transforms must resolve in the current scene or Pose." },
+                    "Render a four-view image or a temporary scene-camera image and world-space joint measurements for a scene character or a sampled External Pose, optionally framed with scene objects.",
+                    new[] { "Use character_path for the current scene character, a Pose reference returned by pose.get, or character_path plus timeline_frame_60 for direct single-frame sampling.", "Use @pose or @pose/<relative bone path> to include the evaluated Pose in the capture." },
+                    new[] { "Returns image_path, view/tile metadata, target references, and evaluated joint positions in world space. camera.mode=scene clones the requested camera in memory and never saves its temporary framing." },
+                    new[] { "Creates image evidence but does not change scene poses. A direct timeline_frame_60 capture temporarily evaluates and then restores the Timeline time." },
+                    new[] { "timeline_frame_60 and pose are mutually exclusive; transforms must resolve in the current scene or Pose." },
                     PoseGetCommand, SceneContextCommand),
                 RetargetAnimationCommand => CommandDocumentation(
                     "Retarget one loaded source Clip to another character in the current scene context.",
@@ -247,7 +247,7 @@ namespace KimodoUnityBridge.Command
                 InstallServerCommand => new[] { "request_id", "status" },
                 MocapVideoAnalysisCommand or MocapPictureAnalysisCommand => new[] { "request_id", "status" },
                 AnimationAnalyzeCommand => new[] { "analysis_schema_version", "clip", "pictures" },
-                TransformCaptureCommand => new[] { "image_path", "width", "height", "tile_size", "tiles", "source", "targets", "evaluated_joints_world" },
+                TransformCaptureCommand => new[] { "image_path", "width", "height", "tile_size", "tile_border_px", "camera_mode", "tiles", "source", "targets", "evaluated_joints_world" },
                 RetargetAnimationCommand => new[] { "retargeted", "source_character", "character", "animation" },
                 GenerateAnimationCommand => new[] { "request_id", "status", "check", "warnings" },
                 PoseGetCommand => new[] { "pose", "source", "character_root", "data" },
@@ -293,10 +293,14 @@ namespace KimodoUnityBridge.Command
                 case "backend_progress": case "analysis_schema_version":
                 case "source_type": case "skeleton": case "person":
                     return new JObject { ["type"] = "string" };
-                case "width": case "height": case "tile_size": case "duration_frames_60": case "current_frame_60":
+                case "camera_mode":
+                    return new JObject { ["type"] = "string", ["enum"] = new JArray("auto", "scene") };
+                case "width": case "height": case "duration_frames_60": case "current_frame_60":
                 case "destroyed_context_count": case "duration_frames": case "progress_current": case "progress_total": case "count": case "seed":
                 case "source_frame_count": case "frame_count": case "source_frame":
                     return new JObject { ["type"] = "integer" };
+                case "tile_size": case "tile_border_px":
+                    return NullableSchema(new JObject { ["type"] = "integer" });
                 case "frame_rate": case "fps":
                     return new JObject { ["type"] = "number" };
                 case "eta_seconds": case "progress_rate":
@@ -427,10 +431,11 @@ namespace KimodoUnityBridge.Command
                     "name" or "character" or "source" or "kind" or "asset_path" or "analysis_schema_version" or "track" or
                     "analysis_mode" or "phase_track_version" or "tile" or "view" or "projection" or "key" or "role" or
                     "scene_object" or "object_ref" or "animator" or "avatar" or "hierarchy_path" or "playable_asset" or
-                    "render_version" or "level" or "aspect" or "image_path" or "output" or "mode" or "path" or "type" or "clip" or "screenshot_generated_at" => new JObject { ["type"] = "string" },
+                    "render_version" or "level" or "aspect" or "image_path" or "output" or "mode" or "camera_mode" or "path" or "type" or "clip" or "screenshot_generated_at" => new JObject { ["type"] = "string" },
                     "session_id" or "schema_version" or "animation_id" or "analysis_id" or "animation_name" or "input_signature" or "created_at_utc" or "analysis_path" or "request_id" or "status" or "stage" or "message" or "error" or "started_at_utc" or "updated_at_utc" or "source_type" or "skeleton" or "person" or "pose_parameterization" => new JObject { ["type"] = "string" },
                     "session_revision" or "start_timeline_frame_60" or "end_timeline_frame_60_exclusive" or "duration_frames" or "timeline_frame_60" or
                     "duration_frames_60" or "tile_count" or "width" or "height" or "resolution" or "supersample" or "header_height" or "index" or "frame" or "source_frame" or "source_frame_count" or "frame_count" => new JObject { ["type"] = "integer" },
+                    "tile_border_px" => NullableSchema(new JObject { ["type"] = "integer" }),
                     "enabled" or "avatar_valid_humanoid" or "cached" => new JObject { ["type"] = "boolean" },
                     "frame_rate" or "fps" or "timestamp_seconds" => new JObject { ["type"] = "number" },
                     "segments" or "phase_track" or "keyframes" or "foot_contacts" or "images" or "tile_paths" or "picture_paths" or "transforms" or "animations" or "generations" or "analyses" or "tiles" or "headers" or "global_orient_axis_angle" or "body_pose_axis_angle" or "translation_m" or "incam_global_orient_axis_angle" or "incam_body_pose_axis_angle" or "incam_translation_m" or "static_confidence" or "joint_names" or "coordinate_spaces" or "betas" or "rest_joints_m" or "poses" => new JObject { ["type"] = "array" },

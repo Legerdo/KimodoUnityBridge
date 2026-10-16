@@ -49,6 +49,10 @@
 - [ ] 区分并保留仍有实际用途的 Timeline segment `role`、Marker `sourceRole` 与 analysis 输入字段，禁止全局关键字替换。
 - [ ] 完成图片选项与 Analysis option 协议调整后，重新验证拾取苹果生成流程；在此之前，拾取苹果任务使用当前稳定的 generation 命令链，不依赖未完成的 Analysis 协议重构。
 
+## Known issues：复合动作规划与姿势/约束选择
+
+本节的详细记录已移到 skill 随附的 [`tools/known-issues.md`](../tools/known-issues.md)。它是执行时可参考的绕行信息，不是强制流程、硬性指标或停止条件；后续随执行循环、Pose test、command schema 和 Unity/API 集成更新统一修订。
+
 ## Constraint 重构计划（分批实施）
 
 ### 目标和范围
@@ -121,3 +125,9 @@
 - Command Root2D（2026-10-08）：Root2D command 先构造 canonical root payload，再仅在 command 边界将 root position 的 Y 固定为 1；UI authored Root2D 高度不被覆盖，RootEffect 复用该路径。
 - 验证（2026-10-08）：`KimodoTool.Editor.Tests.csproj` 编译通过（0 错误）；旧 carry 行为测试已标记 Ignore 作为归档语义，新增长度往返、root 编辑不改 effector、Root2D command Y=1 回归断言。完整 Unity EditMode 运行需等桌面 FullDemo 解锁后执行。
 - Foot IK 边界（2026-10-08）：Constraint 专用 `AnimationClipPlayable` 显式关闭 `SetApplyFootIK`。原生 Foot IK 不再绕过 effector enabled mask 固定脚部；普通采样路径仍保留原有 Foot IK 默认行为。
+
+## 后续 TODO（暂缓至项目稳定后）
+
+- 审查 `KimodoBridgeService.EnsureConnectedAsync` 的异步线程边界：它在 `ConfigureAwait(false)` 后可能继续执行 Editor 注入的 RuntimeRoot/Settings 委托。确认并发等待时是否会离开 Unity 主线程，再决定如何将 Unity Editor API 调用切回主线程。
+- 收敛 `KimodoTool.Editor` 与 `KimodoTool.Command.Editor` 间的分析桥接：`KimodoClipAnalysisService` 和 `KimodoPlayableClipEditor` 通过反射查找 `KimodoAnalysisPictureBridge`。评估共享接口或显式注册方案，避免字符串类型名和方法签名形成隐式程序集依赖。
+- 上述两项属于程序集边界/线程敏感改动，项目稳定前只记录，不在当前阶段改实现。

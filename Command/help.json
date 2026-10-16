@@ -1054,21 +1054,21 @@
     },
     {
       "name": "transform.capture",
-      "description": "Capture the current scene or an External Pose returned by pose.get together with scene objects, in world space. Returns a four-view image and evaluated joint positions; does not change scene poses.",
+      "description": "Capture the current scene or an External Pose returned by pose.get together with scene objects, in world space. Optionally sample one absolute Timeline-global 60 FPS frame directly with timeline_frame_60. Returns a four-view image by default, or a single scene-camera image when camera.mode is scene; restores the original Timeline time and never saves temporary camera changes.",
       "documentation": {
-        "when_to_use": "Render a four-view image and world-space joint measurements for a scene character or a sampled External Pose, optionally framed with scene objects.",
+        "when_to_use": "Render a four-view image and world-space joint measurements for a scene character or a sampled External Pose, optionally framed with scene objects. Use character_path plus timeline_frame_60 to sample a single absolute Timeline-global frame directly.",
         "behavior": [
-          "Use character_path for the current scene character or a Pose reference returned by pose.get.",
+          "Use character_path for the current scene character, a Pose reference returned by pose.get, or character_path plus timeline_frame_60 for direct single-frame sampling.",
           "Use @pose or @pose/<relative bone path> to include the evaluated Pose in the capture."
         ],
         "result_notes": [
           "Returns image_path, view/tile metadata, target references, and evaluated joint positions in world space."
         ],
         "scene_effects": [
-          "Creates image evidence but does not change scene poses."
+          "Creates image evidence but does not change scene poses. A direct timeline_frame_60 capture temporarily evaluates and then restores the Timeline time."
         ],
         "limits": [
-          "To capture a Clip frame, sample it first with pose.get; transforms must resolve in the current scene or Pose."
+          "timeline_frame_60 and pose are mutually exclusive; transforms must resolve in the current scene or Pose."
         ],
         "related_commands": [
           "pose.get",
@@ -1110,7 +1110,102 @@
           },
           "resolution": {
             "type": "integer",
-            "description": "Per-view pixel size, 64 through 4096; defaults to 1024. To capture an animation frame, first call pose.get and pass its pose reference."
+            "description": "Per-view pixel size for the default four-view capture, 64 through 4096; defaults to 1024. Scene-camera captures use camera.resolution."
+          },
+          "timeline_frame_60": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Optional absolute Timeline-global frame at 60 FPS. Requires character_path; mutually exclusive with pose. The Timeline and scene objects are evaluated at this frame for the capture, then restored."
+          },
+          "camera": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Optional temporary scene-camera capture. The source camera is cloned, adjusted in memory, rendered, and discarded; the scene camera is never saved.",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "scene"
+                ],
+                "default": "auto",
+                "description": "Use the existing four-view renderer (auto) or a scene camera (scene)."
+              },
+              "path": {
+                "type": "string",
+                "description": "Active-scene camera hierarchy path; defaults to Main Camera when mode is scene."
+              },
+              "auto_frame": {
+                "type": "boolean",
+                "default": true,
+                "description": "Temporarily frame the requested transforms while preserving the source camera's viewing direction."
+              },
+              "resolution": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "integer",
+                  "minimum": 64,
+                  "maximum": 4096
+                },
+                "description": "Scene-camera output [width,height]."
+              },
+              "position": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": {
+                  "type": "number"
+                },
+                "description": "Optional temporary world position [x,y,z]."
+              },
+              "rotation": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 4,
+                "items": {
+                  "type": "number"
+                },
+                "description": "Optional temporary world rotation quaternion [x,y,z,w]."
+              },
+              "field_of_view": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 179,
+                "description": "Optional temporary perspective field of view."
+              },
+              "near_clip": {
+                "type": "number",
+                "minimum": 0.001,
+                "description": "Optional temporary near clip plane."
+              },
+              "far_clip": {
+                "type": "number",
+                "minimum": 0.01,
+                "description": "Optional temporary far clip plane."
+              },
+              "orthographic": {
+                "type": "boolean",
+                "description": "Optional temporary projection mode."
+              },
+              "orthographic_size": {
+                "type": "number",
+                "minimum": 0.01,
+                "description": "Optional temporary orthographic size."
+              },
+              "background": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 4,
+                "items": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "description": "Temporary clear color [r,g,b] or [r,g,b,a]."
+              }
+            }
           }
         },
         "required": [
@@ -1155,7 +1250,34 @@
             "type": "integer"
           },
           "tile_size": {
-            "type": "integer"
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-tile size in default four-view captures; null for scene-camera captures."
+          },
+          "tile_border_px": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Border thickness in pixels between default four-view tiles; null for scene-camera captures."
+          },
+          "camera_mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "scene"
+            ],
+            "description": "Renderer used for the capture."
           },
           "tiles": {
             "type": "array",

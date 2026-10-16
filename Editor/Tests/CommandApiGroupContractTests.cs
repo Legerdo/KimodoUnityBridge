@@ -41,6 +41,14 @@ namespace KimodoUnityBridge.Command.Tests
 
             AssertPosePropertyUsesTrackIndex(poseSet["inputSchema"]["properties"]["pose"]);
             AssertPosePropertyUsesTrackIndex(transformCapture["inputSchema"]["properties"]["pose"]);
+            Assert.That(transformCapture["inputSchema"]?["properties"]?["timeline_frame_60"]?.Value<string>("type"), Is.EqualTo("integer"));
+            Assert.That(transformCapture["inputSchema"]?["properties"]?["timeline_frame_60"]?.Value<int?>("minimum"), Is.EqualTo(0));
+            JObject camera = (JObject)transformCapture["inputSchema"]?["properties"]?["camera"];
+            Assert.That(camera, Is.Not.Null);
+            CollectionAssert.AreEquivalent(new[] { "auto", "scene" }, camera["properties"]?["mode"]?["enum"]?.Values<string>());
+            Assert.That(camera["properties"]?["path"]?.Value<string>("type"), Is.EqualTo("string"));
+            Assert.That(camera["properties"]?["resolution"]?["minItems"]?.Value<int>(), Is.EqualTo(2));
+            Assert.That(camera["properties"]?["resolution"]?["maxItems"]?.Value<int>(), Is.EqualTo(2));
 
             JObject point = ((JArray)generation["inputSchema"]["properties"]["constraints"]["items"]["oneOf"])
                 .Values<JObject>()

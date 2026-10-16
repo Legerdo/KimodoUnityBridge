@@ -99,17 +99,43 @@ namespace KimodoUnityBridge.Command
                         Properties(
                             Required("image_path", "string", "Absolute path to a local PNG or JPEG readable by QuickServer."))),
                     CommandDefinition(TransformCaptureCommand,
-                        "Capture the current scene or an External Pose returned by pose.get together with scene objects, in world space. Returns a four-view image and evaluated joint positions; does not change scene poses.",
+                        "Capture the current scene or an External Pose returned by pose.get together with scene objects, in world space. Optionally sample one absolute Timeline-global 60 FPS frame directly with timeline_frame_60. Returns a four-view image by default, or a single scene-camera image when camera.mode is scene; restores the original Timeline time and never saves temporary camera changes.",
                         Properties(
                             Optional("character_path", "string", "Active-scene character hierarchy path; required unless pose is supplied."),
                             new PropertyDefinition("pose", PoseReferenceSchema(), false),
+                            new PropertyDefinition("timeline_frame_60", new JObject
+                            {
+                                ["type"] = "integer", ["minimum"] = 0,
+                                ["description"] = "Optional absolute Timeline-global frame at 60 FPS. Requires character_path; mutually exclusive with pose. The Timeline and scene objects are evaluated at this frame for the capture, then restored."
+                            }, false),
                             new PropertyDefinition("transforms", new JObject
                             {
                                 ["type"] = "array", ["minItems"] = 1,
                                 ["items"] = new JObject { ["type"] = "string" },
                                 ["description"] = "Scene hierarchy paths or character-relative paths. With pose, use @pose for the evaluated character or @pose/<relative bone path>. Include environment paths to frame them together."
                             }, true),
-                            Optional("resolution", "integer", "Per-view pixel size, 64 through 4096; defaults to 1024. To capture an animation frame, first call pose.get and pass its pose reference."))),
+                            Optional("resolution", "integer", "Per-view pixel size for the default four-view capture, 64 through 4096; defaults to 1024. Scene-camera captures use camera.resolution."),
+                            new PropertyDefinition("camera", new JObject
+                            {
+                                ["type"] = "object",
+                                ["additionalProperties"] = false,
+                                ["description"] = "Optional temporary scene-camera capture. The source camera is cloned, adjusted in memory, rendered, and discarded; the scene camera is never saved.",
+                                ["properties"] = new JObject
+                                {
+                                    ["mode"] = new JObject { ["type"] = "string", ["enum"] = new JArray("auto", "scene"), ["default"] = "auto", ["description"] = "Use the existing four-view renderer (auto) or a scene camera (scene)." },
+                                    ["path"] = new JObject { ["type"] = "string", ["description"] = "Active-scene camera hierarchy path; defaults to Main Camera when mode is scene." },
+                                    ["auto_frame"] = new JObject { ["type"] = "boolean", ["default"] = true, ["description"] = "Temporarily frame the requested transforms while preserving the source camera's viewing direction." },
+                                    ["resolution"] = new JObject { ["type"] = "array", ["minItems"] = 2, ["maxItems"] = 2, ["items"] = new JObject { ["type"] = "integer", ["minimum"] = 64, ["maximum"] = 4096 }, ["description"] = "Scene-camera output [width,height]." },
+                                    ["position"] = new JObject { ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3, ["items"] = new JObject { ["type"] = "number" }, ["description"] = "Optional temporary world position [x,y,z]." },
+                                    ["rotation"] = new JObject { ["type"] = "array", ["minItems"] = 4, ["maxItems"] = 4, ["items"] = new JObject { ["type"] = "number" }, ["description"] = "Optional temporary world rotation quaternion [x,y,z,w]." },
+                                    ["field_of_view"] = new JObject { ["type"] = "number", ["minimum"] = 1, ["maximum"] = 179, ["description"] = "Optional temporary perspective field of view." },
+                                    ["near_clip"] = new JObject { ["type"] = "number", ["minimum"] = 0.001, ["description"] = "Optional temporary near clip plane." },
+                                    ["far_clip"] = new JObject { ["type"] = "number", ["minimum"] = 0.01, ["description"] = "Optional temporary far clip plane." },
+                                    ["orthographic"] = new JObject { ["type"] = "boolean", ["description"] = "Optional temporary projection mode." },
+                                    ["orthographic_size"] = new JObject { ["type"] = "number", ["minimum"] = 0.01, ["description"] = "Optional temporary orthographic size." },
+                                    ["background"] = new JObject { ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 4, ["items"] = new JObject { ["type"] = "number", ["minimum"] = 0, ["maximum"] = 1 }, ["description"] = "Temporary clear color [r,g,b] or [r,g,b,a]." }
+                                }
+                            }, false))),
                     CommandDefinition(RetargetAnimationCommand,
                         "Retarget one loaded animation to another current scene context character and append the result.",
                         Properties(
