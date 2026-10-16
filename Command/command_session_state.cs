@@ -1241,7 +1241,7 @@ namespace KimodoUnityBridge.Command
             {
                 ["motion_semantics_version"] = 2,
                 ["path"] = PoseReferenceJson(character.PoseCacheTrack.name, index),
-                ["coordinate_space"] = "clip_start_local",
+                ["coordinate_space"] = "world",
                 ["frame_rate"] = SessionFrameRate,
                 ["frame_count"] = samples.Length,
                 ["duration_seconds"] = samples.Length / SessionFrameRate,

@@ -69,6 +69,20 @@ namespace KimodoUnityBridge.Command
                 var pointFrames = new HashSet<int>();
                 var pathFrames = new HashSet<int>();
                 var occupiedPathFrames = new HashSet<int>();
+                Vector3 rootPathAnchorPosition = new Vector3(0f, targetRootHeight, 0f);
+                Quaternion rootPathAnchorRotation = Quaternion.identity;
+                if (constraints.OfType<JObject>().Any(item => item["root_path"] is JObject))
+                {
+                    ResolveRootPathWorldAnchor(
+                        session,
+                        sourceCharacter,
+                        sceneCharacterRoot,
+                        targetAvatar,
+                        originalSessionTime,
+                        targetRootHeight,
+                        out rootPathAnchorPosition,
+                        out rootPathAnchorRotation);
+                }
                 foreach (JObject item in constraints.OfType<JObject>())
                     if (item.Property("inout") == null && item["root_path"] == null)
                         pointFrames.Add(RequiredNonNegativeFrame(item, "frame"));
@@ -85,13 +99,14 @@ namespace KimodoUnityBridge.Command
                         PoseReference reference = RequirePoseReference(rootPath["path"] as JObject);
                         if (!pathFrames.Add(startFrame))
                             throw new InvalidOperationException($"constraints[{i}].root_path reuses frame {startFrame}; command constraints are not merged.");
-                        pathSamples.AddRange(BuildRootPathConstraints(
+                        pathSamples.AddRange(BuildRootPathConstraintsWorld(
                             RequirePathMarker(reference).PathData,
                             i,
                             startFrame,
                             durationFrames,
-                            targetRootHeight,
                             targetCache != null ? Mathf.Max(1e-6f, targetCache.humanScale) : 1f,
+                            rootPathAnchorPosition,
+                            rootPathAnchorRotation,
                             pointFrames,
                             occupiedPathFrames));
                     }
@@ -438,6 +453,8 @@ namespace KimodoUnityBridge.Command
             return result;
         }
 
+        // Compatibility helper for editor tests and legacy reflection callers.
+        // Public command generation uses BuildRootPathConstraintsWorld below.
         private static IEnumerable<KimodoMarkerSampleResult> BuildRootPathConstraints(
             KimodoRootPathData path,
             int constraintIndex,
@@ -445,6 +462,29 @@ namespace KimodoUnityBridge.Command
             int durationFrames,
             float targetRootHeight,
             float targetHumanScale,
+            ISet<int> explicitPointFrames,
+            ISet<int> occupiedPathFrames)
+        {
+            return BuildRootPathConstraintsWorld(
+                path,
+                constraintIndex,
+                startFrame,
+                durationFrames,
+                targetHumanScale,
+                new Vector3(0f, targetRootHeight, 0f),
+                Quaternion.identity,
+                explicitPointFrames,
+                occupiedPathFrames);
+        }
+
+        private static IEnumerable<KimodoMarkerSampleResult> BuildRootPathConstraintsWorld(
+            KimodoRootPathData path,
+            int constraintIndex,
+            int startFrame,
+            int durationFrames,
+            float targetHumanScale,
+            Vector3 worldAnchorPosition,
+            Quaternion worldAnchorRotation,
             ISet<int> explicitPointFrames,
             ISet<int> occupiedPathFrames)
         {
@@ -505,15 +545,74 @@ namespace KimodoUnityBridge.Command
                 }
                 if (explicitPointFrames != null && explicitPointFrames.Contains(frame))
                     throw new InvalidOperationException($"constraints[{constraintIndex}].root_path collides with point frame {frame}; command constraints are not merged.");
+                Vector3 localPlanarPosition = new Vector3(position.x, 0f, position.y);
+                Vector3 worldPlanarPosition = worldAnchorPosition + worldAnchorRotation * localPlanarPosition;
+                Vector3 worldHeading = worldAnchorRotation * new Vector3(tangent.x, 0f, tangent.y);
                 result.Add(CreateRootOverrideSample(
                     frame,
-                    // Root paths constrain the planar trajectory and heading.
-                    // Vertical placement remains the canonical hips height;
-                    // path data never carries a separate delta-Y channel.
-                    new Vector3(position.x, targetRootHeight, position.y),
-                    new Vector3(tangent.x, 0f, tangent.y).normalized));
+                    // Analysis returns the path in its frame-zero World
+                    // reference. Resolve it once against the generation
+                    // character's World anchor; downstream exporters consume
+                    // the resulting World-space values directly.
+                    new Vector3(worldPlanarPosition.x, worldAnchorPosition.y, worldPlanarPosition.z),
+                    worldHeading.normalized));
             }
             return result;
+        }
+
+        private static void ResolveRootPathWorldAnchor(
+            TimelineSessionRecord session,
+            TimelineCharacterRecord sourceCharacter,
+            GameObject sceneCharacterRoot,
+            Avatar targetAvatar,
+            double sceneTime,
+            float targetRootHeight,
+            out Vector3 position,
+            out Quaternion rotation)
+        {
+            position = new Vector3(0f, targetRootHeight, 0f);
+            rotation = Quaternion.identity;
+            string anchorError = string.Empty;
+            if (sourceCharacter != null)
+            {
+                KimodoMarkerSampleResult sample = CaptureSampleResult(session, sourceCharacter, sceneTime);
+                GetRootTransform(sample, out position, out rotation);
+                rotation = KimodoMotionMath.ResolvePlanarHeading(rotation);
+                return;
+            }
+
+            if (targetAvatar != null && sceneCharacterRoot != null &&
+                KimodoRetargetAvatarUtility.TryBuildRetargetSkeleton(
+                    targetAvatar,
+                    "KimodoCommandRootPathAnchor",
+                    out RetargetSkeleton anchorCache,
+                    out anchorError))
+            {
+                try
+                {
+                    if (!TryCreateAvatarRestPoseSample(
+                        anchorCache,
+                        sceneCharacterRoot,
+                        alignToSceneRoot: true,
+                        out KimodoMarkerSampleResult restPose,
+                        out anchorError))
+                    {
+                        throw new InvalidOperationException(
+                            $"Root Path generation could not resolve its World anchor: {anchorError}");
+                    }
+                    GetRootTransform(restPose, out position, out rotation);
+                    rotation = KimodoMotionMath.ResolvePlanarHeading(rotation);
+                }
+                finally
+                {
+                    anchorCache.Dispose();
+                }
+            }
+            else if (targetAvatar != null && sceneCharacterRoot != null)
+            {
+                throw new InvalidOperationException(
+                    $"Root Path generation could not resolve its World anchor: {anchorError}");
+            }
         }
 
         private static Vector2 EvaluatePathHeading(IReadOnlyList<KimodoRootPathKnot> knots, float time)

@@ -738,9 +738,9 @@ namespace KimodoUnityBridge.Command
                 ["minProperties"] = 1
             };
             JObject root2dPosition = (JObject)vector2.DeepClone();
-            root2dPosition["description"] = "Planar root position [x,z].";
+            root2dPosition["description"] = "World-space planar root position [x,z].";
             JObject root2dHeading = (JObject)vector2.DeepClone();
-            root2dHeading["description"] = "Planar heading direction [x,z].";
+            root2dHeading["description"] = "World-space planar heading direction [x,z].";
             var pointItem = new JObject
             {
                 ["type"] = "object",
@@ -752,7 +752,7 @@ namespace KimodoUnityBridge.Command
                     ["root2d"] = new JObject
                     {
                         ["type"] = "object",
-                        ["description"] = "Planar root position and heading constraint; supply both channels together.",
+                        ["description"] = "World-space planar root position and heading constraint; supply both channels together.",
                         ["additionalProperties"] = false,
                         ["properties"] = new JObject
                         {
@@ -780,7 +780,7 @@ namespace KimodoUnityBridge.Command
                         ["type"] = "integer",
                         ["minimum"] = 0,
                         ["default"] = 0,
-                        ["description"] = "First path frame; defaults to the clip start. Use a confirmed path for the intended character and motion; root_path generates only start and end Root2D constraints, not intermediate route enforcement."
+                        ["description"] = "First path frame; defaults to the clip start. animation.analyze returns this path in World coordinates because the analyzed Clip begins at frame zero; generation resolves it once against the target character's World anchor. Use a confirmed path for the intended character and motion; root_path generates only start and end Root2D constraints, not intermediate route enforcement."
                     },
                     ["root_path"] = new JObject
                     {

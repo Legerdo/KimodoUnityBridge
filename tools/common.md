@@ -20,6 +20,12 @@ Plan the complete visible Unity result before choosing tools. Kimodo commands, U
 
 The active Unity scene, Timeline, and Kimodo Session are an editable working pipeline. The agent may switch context and extend an existing Timeline by inserting tracks, clips, bindings, or synchronized prop motion. Preserve existing tracks and clips by default; prefer adding a track or making a derived Timeline over rewriting or rebuilding existing content. Modify existing content only when required by the task, and preserve a recoverable original first. After editing, verify the active scene/session, track bindings, clip ranges, and synchronization in the intended Timeline.
 
+Coordinate-space contract:
+
+- Public command positions and targets (`root2d`, `effect`, `pose.set`, and `pose.test` targets) are expressed in Unity World space.
+- `animation.analyze.root_trajectory` is returned in World space. The analyzed Clip begins at frame zero, so its trajectory's zero origin is the World reference used by the command. When `animation.generate` consumes its `root_path`, generation resolves that World path once against the target character's World root position and planar heading.
+- Local joint rotations and camera-specific fields keep their documented spaces; the World-space rule applies to position and target fields.
+
 At the start of a task, keep a compact loop state:
 
 ```text
