@@ -137,9 +137,9 @@ namespace KimodoUnityBridge.Command
                     SceneContextCommand, AnimationAnalyzeCommand),
                 GenerateAnimationCommand => CommandDocumentation(
                     "Submit one animation generation request for a character in the current scene context.",
-                    new[] { "Describe one simple semantic action in prompt; aim for 25 words or fewer.", "Represent exact body pose, root position, effector targets, duration, path, loop, and Clip windows in their explicit fields when required.", "Save request_id and use generation.get to poll; do not resubmit a running request." },
+                    new[] { "Describe one simple semantic action in prompt; aim for 25 words or fewer.", "Represent exact body pose, root position, effector targets, duration, path, loop, and Clip windows in their explicit fields when required.", "Point constraints without an explicit pose use the Avatar skeleton rest pose, as in pose.get mode=skeleton_rest_pose; they never implicitly sample the Timeline. Explicit Pose references and In/Out source Clip sampling are preserved.", "Save request_id and use generation.get to poll; do not resubmit a running request." },
                     new[] { "The accepted response contains request_id, status, preflight check results, and warnings. Root speed above 7 m/s warns; above 10 m/s blocks generation. Root acceleration above 10 m/s² warns; above 15 m/s² blocks generation. Pose/effector safety preflight runs only when the same point constraint explicitly contains both pose and effector; effector requires pose or root as explicit root context.", "On completion, generation.get returns the generated Clip metadata, asset path, animation_id, generation diagnostics, and one full animation.analyze result under post_analysis. Analysis failure is reported separately and does not invalidate the generated Clip." },
-                    new[] { "A completed result is appended as a Timeline Clip; existing completed Clips are retained.", "The first scene pose is used as the automatic starting anchor unless explicit first-frame or In/Out samples take precedence." },
+                    new[] { "A completed result is appended as a Timeline Clip; existing completed Clips are retained.", "The Avatar skeleton rest pose is used as the automatic starting anchor unless explicit first-frame or In/Out samples take precedence." },
                     new[] { "Trajectory overrides require an explicit requirement or confirmed scene/analysis evidence; prompt words do not select path options.", "analysis_option is lightweight generation-time analysis, not the full animation.analyze command.", "Command checks validate supported request boundaries; they do not judge semantic or artistic quality." },
                     SceneContextCommand, PoseGetCommand, GetGenerationCommand, CancelGenerationCommand, AnimationAnalyzeCommand),
                 PoseGetCommand => CommandDocumentation(
@@ -725,7 +725,7 @@ namespace KimodoUnityBridge.Command
                     ["effector"] = effectors.DeepClone()
                 },
                 ["required"] = new JArray("frame"),
-                ["description"] = "Sample, assert concrete type from explicit inputs, then overlay data. root is Root2D; pose with optional root/effector is FullBody after IK; root + effector without pose is Effector. effector alone is invalid. Transforms accept position and/or Euler rotation; omitted channels retain sampled values. Empty transforms are invalid.",
+                ["description"] = "Use the explicit External Pose, or the Avatar skeleton rest pose when pose is omitted; never implicitly sample the Timeline. Select concrete type from explicit inputs, then overlay data. root is Root2D; pose with optional root/effector is FullBody after IK; root + effector without pose is Effector. effector alone is invalid. Transforms accept position and/or Euler rotation; omitted channels retain sampled values. Empty transforms are invalid.",
                 ["oneOf"] = new JArray(
                     new JObject { ["required"] = new JArray("pose") },
                     new JObject { ["required"] = new JArray("root", "effector"),
@@ -746,7 +746,7 @@ namespace KimodoUnityBridge.Command
                         ["type"] = "integer",
                         ["minimum"] = 0,
                         ["default"] = 0,
-                        ["description"] = "First path frame; defaults to the clip start. animation.analyze returns this path in World coordinates because the analyzed Clip begins at frame zero; generation resolves it once against the target character's World anchor. Use a confirmed path for the intended character and motion; root_path generates only start and end Root2D constraints, not intermediate route enforcement."
+                        ["description"] = "First path frame; defaults to the clip start. animation.analyze returns this path in World coordinates because the analyzed Clip begins at frame zero; generation resolves it once against the target character's rest-pose World anchor. Use a confirmed path for the intended character and motion; root_path generates only start and end Root2D constraints, not intermediate route enforcement."
                     },
                     ["root_path"] = new JObject
                     {

@@ -317,7 +317,7 @@ namespace KimodoUnityBridge.Command
                     new JObject
                     {
                         ["type"] = "point",
-                        ["description"] = "Sample a complete pose, assert one concrete type from root/pose/effector inputs, then overlay the supplied data. Pose/effector safety preflight runs only when the same point constraint explicitly contains both pose and effector.",
+                        ["description"] = "Use the explicit External Pose, or the Avatar skeleton rest pose when pose is omitted; never implicitly sample the Timeline. Select one concrete type from root/pose/effector inputs, then overlay the supplied data. Pose/effector safety preflight runs only when the same point constraint explicitly contains both pose and effector.",
                         ["shape"] = new JObject
                         {
                             ["frame"] = "Relative frame in the generated clip.",
@@ -349,9 +349,9 @@ namespace KimodoUnityBridge.Command
                     "The command selects Root2D, FullBody, or Effector solely from explicit root, pose, and effector fields. Full root values map to the UI fields; the existing solver and exporter handle their semantics.",
                     "Pose/effector safety preflight runs only when the same point constraint explicitly contains both pose and effector. root + effector constraints skip this preflight; pose.test remains available to measure actual sampled poses after generation.",
                     "A point constraint selects one mode: pose with optional root/effector is FullBody after IK; root + effector without pose is Effector; root alone is Root2D. effector alone is invalid. Put combined data in one point object; the command rejects duplicate frames.",
-                    "Use animation.analyze, confirm that the returned World-space Root Path belongs to the intended character and motion, then reference clip.root_trajectory.path from root_path; generation resolves it once against the target character's World anchor.",
+                    "Use animation.analyze, confirm that the returned World-space Root Path belongs to the intended character and motion, then reference clip.root_trajectory.path from root_path; generation resolves it once against the target character's rest-pose World anchor.",
                     "Use path angles, distance, or heading only for a known trajectory backed by an explicit requirement or confirmed evidence. Do not infer any trajectory setting from prompt keywords; omit path when the route is unknown.",
-                    "Use root_path only with a confirmed World-space animation.analyze Root Path reference for the intended character and motion. Generation resolves its path once against the target character's World anchor and creates only start and end Root2D constraints, so it does not prove an intermediate route.",
+                    "Use root_path only with a confirmed World-space animation.analyze Root Path reference for the intended character and motion. Generation resolves its path once against the target character's rest-pose World anchor and creates only start and end Root2D constraints, so it does not prove an intermediate route.",
                     "An explicit point frame cannot overlap a root_path sample frame; the command rejects the collision.",
                     "At most one standalone inout entry; in/out each require an explicit completed source Clip. Source character defaults to the generation character and must be the same character.",
                     "In/Out window_frames and source.frame use 60 FPS. Windows round up to model frames; sample_count must fit distinct model frames. One sample uses the seam; multiple samples include both endpoints.",

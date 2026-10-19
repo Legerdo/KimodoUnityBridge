@@ -1555,6 +1555,7 @@
         "behavior": [
           "Describe one simple semantic action in prompt; aim for 25 words or fewer.",
           "Represent exact body pose, root position, effector targets, duration, path, loop, and Clip windows in their explicit fields when required.",
+          "Point constraints without an explicit pose use the Avatar skeleton rest pose, as in pose.get mode=skeleton_rest_pose; they never implicitly sample the Timeline. Explicit Pose references and In/Out source Clip sampling are preserved.",
           "Save request_id and use generation.get to poll; do not resubmit a running request."
         ],
         "result_notes": [
@@ -1563,7 +1564,7 @@
         ],
         "scene_effects": [
           "A completed result is appended as a Timeline Clip; existing completed Clips are retained.",
-          "The first scene pose is used as the automatic starting anchor unless explicit first-frame or In/Out samples take precedence."
+          "The Avatar skeleton rest pose is used as the automatic starting anchor unless explicit first-frame or In/Out samples take precedence."
         ],
         "limits": [
           "Trajectory overrides require an explicit requirement or confirmed scene/analysis evidence; prompt words do not select path options.",
@@ -1954,7 +1955,7 @@
                   "required": [
                     "frame"
                   ],
-                  "description": "Sample, assert concrete type from explicit inputs, then overlay data. root is Root2D; pose with optional root/effector is FullBody after IK; root + effector without pose is Effector. effector alone is invalid. Transforms accept position and/or Euler rotation; omitted channels retain sampled values. Empty transforms are invalid.",
+                  "description": "Use the explicit External Pose, or the Avatar skeleton rest pose when pose is omitted; never implicitly sample the Timeline. Select concrete type from explicit inputs, then overlay data. root is Root2D; pose with optional root/effector is FullBody after IK; root + effector without pose is Effector. effector alone is invalid. Transforms accept position and/or Euler rotation; omitted channels retain sampled values. Empty transforms are invalid.",
                   "oneOf": [
                     {
                       "required": [
@@ -2001,7 +2002,7 @@
                       "type": "integer",
                       "minimum": 0,
                       "default": 0,
-                      "description": "First path frame; defaults to the clip start. animation.analyze returns this path in World coordinates because the analyzed Clip begins at frame zero; generation resolves it once against the target character's World anchor. Use a confirmed path for the intended character and motion; root_path generates only start and end Root2D constraints, not intermediate route enforcement."
+                      "description": "First path frame; defaults to the clip start. animation.analyze returns this path in World coordinates because the analyzed Clip begins at frame zero; generation resolves it once against the target character's rest-pose World anchor. Use a confirmed path for the intended character and motion; root_path generates only start and end Root2D constraints, not intermediate route enforcement."
                     },
                     "root_path": {
                       "type": "object",
