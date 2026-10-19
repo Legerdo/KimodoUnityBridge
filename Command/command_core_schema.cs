@@ -103,8 +103,8 @@ namespace KimodoUnityBridge.Command
                 SceneContextCommand => CommandDocumentation(
                     "Read the active Unity scene, its Kimodo Timeline, character handles, and current Session identity.",
                     new[] { "Use returned scene object references for later commands instead of guessing from names or asset paths.", "Set include_history only when the Session-wide animation, generation, and analysis index is needed." },
-                    new[] { "Returns current scene and director details, character/Clip references, frame-rate metadata, and Session identifiers.", "When requested, history includes compact animation, generation, and analysis records." },
-                    new[] { "Read-only; does not create, modify, or clear scene objects or animation assets." },
+                    new[] { "Returns current scene and director details, character/Clip references, frame-rate metadata, and Session identifiers.", "Character discovery uses the generation Avatar resolver: check Animator, importer and cache, then try automatic Avatar generation. Only valid Humanoid Avatars matching the character skeleton are indexed; resolution or generation failures skip the object.", "When requested, history includes compact animation, generation, and analysis records." },
+                    new[] { "May initialize the scene Session and generate missing Humanoid Avatars, including model importer updates and reimports. Existing animation clips are preserved." },
                     new[] { "Context reflects the active loaded scene and current Session; history is omitted by default.", "A Clip asset path is asset metadata and is not itself a scene Clip handle." },
                     GenerateAnimationCommand, AnimationAnalyzeCommand, PoseGetCommand),
                 InstallServerCommand => CommandDocumentation(
