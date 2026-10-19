@@ -6,7 +6,7 @@
 
 - [`AGENTS.md`](AGENTS.md)：仓库维护、协作和验证规则。
 - [`DEVELOPMENT.md`](DEVELOPMENT.md)：当前命令面和产品边界的开发快照。
-- [`plan.md`](plan.md)：文档与兼容性维护计划。
+- [`plan.md`](plan.md)：文档与兼容性维护计划，包含当前 Constraint 输入、类型推断与协议折叠边界。
 - [`animation-workflow-test-cases.md`](animation-workflow-test-cases.md)：通用动画循环交互式验收测试案例。
 - [`KIMODO_CPP_INTEGRATION_TODO.md`](KIMODO_CPP_INTEGRATION_TODO.md)：原生后端接入 TODO。
 - 根目录 [`SKILL.md`](../SKILL.md)：稳定入口、范围、通用动画循环和能力编排。
@@ -16,6 +16,6 @@
 
 ## 交接说明
 
-执行任务时从根目录 `SKILL.md` 开始，读取 `tools/common.md`，再按任务需要查询 `Command/help.json` 或实时 `kimodo.help`。归档材料不作为当前工作流指令。
+执行任务时从根目录 `SKILL.md` 开始，读取 `tools/common.md`，再按任务需要查询 `Command/help.json` 或实时 `kimodo.help`。归档材料不作为当前工作流指令或新实现的范例。Constraint 相关工作先读 [当前契约](plan.md#当前-constraint-契约)，不要从历史 composer、carry 或旧 mask 测试恢复已废弃语义。
 
 修改命令或执行规则时，更新其归属文档，并运行静态链接/命令审计与 `git diff --check`。

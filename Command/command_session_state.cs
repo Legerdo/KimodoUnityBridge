@@ -491,12 +491,10 @@ namespace KimodoUnityBridge.Command
                 return;
             }
 
-            List<KimodoMarkerSampleResult> unified =
-                KimodoConstraintSampleComposer.ComposeCanonicalSamples(samples, frameRate);
             double lastSampleTime = Math.Max(0.0, trace.DurationSeconds - 1.0 / Math.Max(1f, frameRate));
-            for (int i = 0; i < unified.Count; i++)
+            for (int i = 0; i < samples.Count; i++)
             {
-                KimodoMarkerSampleResult sample = unified[i];
+                KimodoMarkerSampleResult sample = samples[i];
                 if (sample == null)
                 {
                     continue;
@@ -522,9 +520,6 @@ namespace KimodoUnityBridge.Command
                 }
 
                 KimodoMarkerSampleResult markerSample = sample.Clone();
-                // Preserve the canonical mode inferred by the lower
-                // composer; command code does not choose a protocol family.
-                markerSample.constraintMode = sample.constraintMode;
                 marker.SampleData = markerSample;
                 if (createdMarker)
                 {

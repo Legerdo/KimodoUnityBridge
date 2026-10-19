@@ -144,7 +144,7 @@ namespace KimodoUnityBridge.Command
                             Required("target_character", "string", "Target scene character name or object_ref. Session preview objects are rejected."),
                             OptionalOutput())),
                     CommandDefinition(GenerateAnimationCommand,
-                        "Start asynchronous generation for a character in the current scene context. After generation, the same Timeline Clip is analyzed once with the full animation.analyze pipeline and returned under post_analysis; analysis failure does not invalidate the generated Clip. Command-created Timeline Clips enable AutoBegin anchoring automatically; explicit first-frame or In/Out samples take precedence. The accepted response contains request_id, status, and non-blocking request/constraint warnings; pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect, never for effect-only constraints. These warnings are not measured joint positions in the generated motion; use pose.get then pose.test to measure sampled joint positions and contact reach after generation. Supply trajectory settings only when the requested path is known from explicit requirements or confirmed scene/analysis evidence; prompt wording never selects path options.",
+                        "Start asynchronous generation for a character in the current scene context. Root speed above 7 m/s produces a warning; above 10 m/s blocks generation. Root acceleration above 15 m/s² produces a warning. After generation, the same Timeline Clip is analyzed once with the full animation.analyze pipeline and returned under post_analysis; analysis failure does not invalidate the generated Clip. Command-created Timeline Clips enable AutoBegin anchoring automatically; explicit first-frame or In/Out samples take precedence. The accepted response contains request_id, status, and request/constraint diagnostics. Pose/effector safety preflight runs only when the same point constraint explicitly contains both pose and effector; effector requires pose or root as explicit root context. These diagnostics are not measured joint positions in the generated motion; use pose.get then pose.test to measure sampled joint positions and contact reach after generation. Supply trajectory settings only when the requested path is known from explicit requirements or confirmed scene/analysis evidence; prompt wording never selects path options.",
                         Properties(
                             Required("character", "string", "Scene character name or object_ref. Session preview objects are rejected; use the source scene character."),
                             Required("prompt", "string", "Short semantic description of the current Clip's action; aim for 25 words or fewer. Express exact FullBody, position, and effector anchors through structured constraints."),
@@ -160,14 +160,14 @@ namespace KimodoUnityBridge.Command
                             OptionalGeneration(),
                             OptionalOutput(),
                             Optional("analysis_option", "object", "Optional generation-time lightweight analysis. When enabled, generation returns sparse salient keyframe markers and foot-contact changes; it does not run the full animation.analyze command."),
-                            OptionalConstraints("constraints", "Point constraints are selected by optional pose, root2d, and effect data; multiple fields at one frame compose by channel. Pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect; effect-only constraints skip it. root_path and inout remain separate constraint forms; duplicate frames are rejected; command frames use 60 FPS."))),
+                            OptionalConstraints("constraints", "Point constraints resolve to Root2D (root alone), FullBody (pose, optionally root/effector, after IK), or Effector (root + effector without pose). effector alone is invalid. Transforms accept World position and/or Euler rotation in degrees; omitted channels retain sampled values. Pose/effector safety preflight runs when the point explicitly contains both pose and effector. root_path and inout remain separate constraint forms; duplicate frames are rejected; command frames use 60 FPS."))),
                     CommandDefinition(PoseGetCommand,
                         "Sample one absolute Timeline-global frame at 60 FPS, or select mode scene_pose / skeleton_rest_pose to read the original scene Animator or Avatar rest pose. Every response includes character_root, the bound scene GameObject root Transform in world space; data.root is the sampled Pose root channel. Every call creates an External Pose slot and returns {track,index}.",
                         Properties(
                             RequiredPoseSource("source"),
                             Optional("full_data", "boolean", "Return all 49 muscles and TQ channels; defaults to false."))),
                     CommandDefinition(PoseTestCommand,
-                        "Measure actual Humanoid joint world positions after evaluating any External Pose, including a pose sampled from a generated effect-only result. Optionally compare selected joints with world-space target positions; this is an explicit pose measurement, separate from generation-time non-blocking warnings.",
+                        "Measure actual Humanoid joint world positions after evaluating any External Pose, including a pose sampled from an Effector-constrained result. Optionally compare selected joints with world-space target positions; this is an explicit pose measurement, separate from generation-time non-blocking warnings.",
                         Properties(
                             RequiredPoseReference("pose"),
                             OptionalEnumArray("joints", "Humanoid joints to measure. Defaults to hips, head, hands, and feet; joints named in targets are included automatically.", "Hips", "Head", "LeftHand", "RightHand", "LeftFoot", "RightFoot", "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg"),
@@ -262,7 +262,7 @@ namespace KimodoUnityBridge.Command
                         "Commands resolve scene and asset references directly; no public Session lifecycle call is required.",
                         "Pass returned object references to later commands; request_id polls installation, generation, or Mocap analysis tasks.",
                         "Installation, generation, and Mocap analysis are asynchronous: save request_id and poll generation.get. Tasks use accepted, running, completed, and failed states; generation may also be canceled.",
-                        "Generation acceptance returns the request handle, a non-blocking check, and optional warnings. Completion returns the generated Clip metadata and asset path; request details are available only with include_request_json."
+                        "Generation acceptance returns the request handle, preflight check results, and optional warnings. Requests with root speed above 10 m/s are rejected before generation. Completion returns the generated Clip metadata and asset path; request details are available only with include_request_json."
                     },
                     ["routing"] = new JArray
                     {
@@ -317,13 +317,13 @@ namespace KimodoUnityBridge.Command
                     new JObject
                     {
                         ["type"] = "point",
-                        ["description"] = "Optional pose, root2d, and effect data select and compose constraint channels at one frame. Pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect.",
+                        ["description"] = "Sample a complete pose, assert one concrete type from root/pose/effector inputs, then overlay the supplied data. Pose/effector safety preflight runs only when the same point constraint explicitly contains both pose and effector.",
                         ["shape"] = new JObject
                         {
                             ["frame"] = "Relative frame in the generated clip.",
                             ["pose"] = "Optional FullBody External Pose reference: {track,index}.",
-                            ["root2d"] = "Optional root position [x,z] and heading [x,z]; overlays the pose root channels.",
-                            ["effect"] = "Optional hand/foot targets with position and optional rotation."
+                            ["root"] = "Optional World root position [x,y,z] and/or Euler rotation [x,y,z] in degrees; maps directly to UI root fields.",
+                            ["effector"] = "Optional hand/foot targets, each with World position and/or Euler rotation in degrees. Omitted channels retain sampled values; empty transforms are invalid."
                         }
                     },
                     new JObject
@@ -346,9 +346,9 @@ namespace KimodoUnityBridge.Command
                 },
                 ["rules"] = new JArray
                 {
-                    "Point constraint family is inferred from the presence of pose, root2d, and effect data. Any non-empty combination composes by channel; Root2D overlays planar root channels and effect data overlays the named end effectors.",
-                    "Pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect. Effect-only constraints skip this preflight; pose.test remains available to measure actual sampled poses after generation.",
-                    "A point constraint must contain at least one of pose, root2d, or effect. Put mixed data in one point object; separate point objects at a duplicate frame are rejected.",
+                    "The command selects Root2D, FullBody, or Effector solely from explicit root, pose, and effector fields. Full root values map to the UI fields; the existing solver and exporter handle their semantics.",
+                    "Pose/effector safety preflight runs only when the same point constraint explicitly contains both pose and effector. root + effector constraints skip this preflight; pose.test remains available to measure actual sampled poses after generation.",
+                    "A point constraint selects one mode: pose with optional root/effector is FullBody after IK; root + effector without pose is Effector; root alone is Root2D. effector alone is invalid. Put combined data in one point object; the command rejects duplicate frames.",
                     "Use animation.analyze, confirm that the returned World-space Root Path belongs to the intended character and motion, then reference clip.root_trajectory.path from root_path; generation resolves it once against the target character's World anchor.",
                     "Use path angles, distance, or heading only for a known trajectory backed by an explicit requirement or confirmed evidence. Do not infer any trajectory setting from prompt keywords; omit path when the route is unknown.",
                     "Use root_path only with a confirmed World-space animation.analyze Root Path reference for the intended character and motion. Generation resolves its path once against the target character's World anchor and creates only start and end Root2D constraints, so it does not prove an intermediate route.",
@@ -651,6 +651,16 @@ namespace KimodoUnityBridge.Command
 
                 JObject generationCheck = BuildGenerationCheck(
                     arguments, character, durationFrames, (float)SessionFrameRate, modelName, poseConstraints);
+                if (generationCheck.Value<bool>("blocking"))
+                {
+                    string blockingMessage = generationCheck["root_trajectory"]?["issues"]?
+                        .OfType<JObject>()
+                        .FirstOrDefault(issue => string.Equals(issue.Value<string>("code"), "speed_hard_limit", StringComparison.OrdinalIgnoreCase))?
+                        .Value<string>("message");
+                    throw new InvalidOperationException(string.IsNullOrWhiteSpace(blockingMessage)
+                        ? "Generation preflight failed because the requested root speed exceeds the hard limit."
+                        : blockingMessage);
+                }
                 TimelineGenerationTrace trace = PrepareGenerationTrace(arguments, character, duration);
                 KimodoExternalConstraintRequest inOutConstraints = BuildCommandInOutConstraints(
                     arguments, trace, modelName, frameCount, frameRate, loopRequested, poseConstraints);

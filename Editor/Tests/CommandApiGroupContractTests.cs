@@ -52,10 +52,10 @@ namespace KimodoUnityBridge.Command.Tests
 
             JObject point = ((JArray)generation["inputSchema"]["properties"]["constraints"]["items"]["oneOf"])
                 .Values<JObject>()
-                .Single(branch => branch["properties"]?["pose"] != null && branch["properties"]?["root2d"] != null);
+                .Single(branch => branch["properties"]?["pose"] != null && branch["properties"]?["root"] != null);
             AssertPosePropertyUsesTrackIndex(point["properties"]?["pose"]);
-            Assert.That(point["properties"]?["root2d"], Is.Not.Null);
-            Assert.That(point["properties"]?["effect"], Is.Not.Null);
+            Assert.That(point["properties"]?["root"], Is.Not.Null);
+            Assert.That(point["properties"]?["effector"], Is.Not.Null);
             Assert.That(point["properties"]?["type"], Is.Null);
         }
 
@@ -104,7 +104,7 @@ namespace KimodoUnityBridge.Command.Tests
                 .Select(example => example["arguments"]?["constraints"] as JArray)
                 .Where(items => items != null)
                 .SelectMany(items => items.Values<JObject>())
-                .First(item => item["root2d"] != null && item["effect"] != null);
+                .First(item => item["root"] != null && item["effector"] != null);
             Assert.That(pointExample["type"], Is.Null);
             Assert.That(pointExample["pose"], Is.Not.Null);
         }
@@ -114,21 +114,25 @@ namespace KimodoUnityBridge.Command.Tests
         public void PointConstraintShape_UsesOptionalDataToSelectChannels()
         {
             AssertPointShapeValid(new JObject { ["frame"] = 0, ["pose"] = new JObject { ["track"] = "P", ["index"] = 0 } });
-            AssertPointShapeValid(new JObject { ["frame"] = 0, ["root2d"] = new JObject() });
-            AssertPointShapeValid(new JObject { ["frame"] = 0, ["effect"] = new JObject() });
+            AssertPointShapeValid(new JObject { ["frame"] = 0, ["root"] = Position() });
+            InvalidOperationException effectOnly = Assert.Throws<InvalidOperationException>(() =>
+                ValidatePointShape(new JObject { ["frame"] = 0, ["effector"] = new JObject { ["right_hand"] = Position() } }));
+            Assert.That(effectOnly.Message, Does.Contain("explicit root context"));
+            AssertPointShapeValid(new JObject { ["frame"] = 0, ["root"] = Position(), ["effector"] = new JObject { ["right_hand"] = Position() } });
+            AssertPointShapeValid(new JObject { ["frame"] = 0, ["pose"] = new JObject(), ["effector"] = new JObject { ["right_hand"] = Position() } });
             AssertPointShapeValid(new JObject
             {
                 ["frame"] = 0,
                 ["pose"] = new JObject { ["track"] = "P", ["index"] = 0 },
-                ["root2d"] = new JObject(),
-                ["effect"] = new JObject()
+                ["root"] = Position(),
+                ["effector"] = new JObject { ["right_hand"] = Position() }
             });
 
             InvalidOperationException empty = Assert.Throws<InvalidOperationException>(
                 () => ValidatePointShape(new JObject { ["frame"] = 0 }));
-            Assert.That(empty.Message, Does.Contain("pose, root2d, or effect"));
+            Assert.That(empty.Message, Does.Contain("pose or root"));
             InvalidOperationException typeTag = Assert.Throws<InvalidOperationException>(
-                () => ValidatePointShape(new JObject { ["frame"] = 0, ["type"] = "root2d", ["root2d"] = new JObject() }));
+                () => ValidatePointShape(new JObject { ["frame"] = 0, ["type"] = "root2d", ["root"] = Position() }));
             Assert.That(typeTag.Message, Does.Contain("type is not used"));
         }
 
@@ -411,6 +415,8 @@ namespace KimodoUnityBridge.Command.Tests
             CollectionAssert.Contains(((JArray)property["required"]).Values<string>(), "track");
             CollectionAssert.Contains(((JArray)property["required"]).Values<string>(), "index");
         }
+
+        private static JObject Position() => new JObject { ["position"] = new JArray(1f, 2f, 3f) };
 
         private static void AssertPointShapeValid(JObject value) => Assert.DoesNotThrow(() => ValidatePointShape(value));
 

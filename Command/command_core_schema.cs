@@ -138,7 +138,7 @@ namespace KimodoUnityBridge.Command
                 GenerateAnimationCommand => CommandDocumentation(
                     "Submit one animation generation request for a character in the current scene context.",
                     new[] { "Describe one simple semantic action in prompt; aim for 25 words or fewer.", "Represent exact body pose, root position, effector targets, duration, path, loop, and Clip windows in their explicit fields when required.", "Save request_id and use generation.get to poll; do not resubmit a running request." },
-                    new[] { "The accepted response contains request_id, status, non-blocking check results, and warnings. Pose/effect safety preflight runs only when the same point constraint explicitly contains both pose and effect; effect-only constraints skip it.", "On completion, generation.get returns the generated Clip metadata, asset path, animation_id, generation diagnostics, and one full animation.analyze result under post_analysis. Analysis failure is reported separately and does not invalidate the generated Clip." },
+                    new[] { "The accepted response contains request_id, status, preflight check results, and warnings. Root speed above 7 m/s warns; above 10 m/s blocks generation. Root acceleration above 15 m/s² warns. Pose/effector safety preflight runs only when the same point constraint explicitly contains both pose and effector; effector requires pose or root as explicit root context.", "On completion, generation.get returns the generated Clip metadata, asset path, animation_id, generation diagnostics, and one full animation.analyze result under post_analysis. Analysis failure is reported separately and does not invalidate the generated Clip." },
                     new[] { "A completed result is appended as a Timeline Clip; existing completed Clips are retained.", "The first scene pose is used as the automatic starting anchor unless explicit first-frame or In/Out samples take precedence." },
                     new[] { "Trajectory overrides require an explicit requirement or confirmed scene/analysis evidence; prompt words do not select path options.", "analysis_option is lightweight generation-time analysis, not the full animation.analyze command.", "Command checks validate supported request boundaries; they do not judge semantic or artistic quality." },
                     SceneContextCommand, PoseGetCommand, GetGenerationCommand, CancelGenerationCommand, AnimationAnalyzeCommand),
@@ -154,7 +154,7 @@ namespace KimodoUnityBridge.Command
                     new[] { "Call pose.get for the desired scene or Timeline frame first, then pass its returned pose reference.", "Use targets when a contact or reach criterion needs a numerical pass/fail check; target positions and tolerances are in meters in world space." },
                     new[] { "Returns measured joint world positions, optional target distances and tolerance results, and an overall status.", "This samples the evaluated Pose rig; it does not judge whether the pose looks natural or whether a generated Clip plays smoothly." },
                     new[] { "Read-only with respect to the scene, Timeline, Pose slot, and animation assets; evaluation uses a transient preview rig." },
-                    new[] { "pose.test explicitly measures the actual joints in any sampled Pose, including after effect-only generation. Generation-time pose/effect safety preflight is separate and runs only when the same constraint explicitly includes both pose and effect.", "Requires a valid Humanoid character and a Pose reference from the current context." },
+                    new[] { "pose.test explicitly measures the actual joints in any sampled Pose, including after Effector-constrained generation. Generation-time pose/effector safety preflight is separate and runs only when the same constraint explicitly includes both pose and effector.", "Requires a valid Humanoid character and a Pose reference from the current context." },
                     PoseGetCommand, TransformCaptureCommand, GenerateAnimationCommand),
                 PoseSetCommand => CommandDocumentation(
                     "Update the root transform, muscle channels, or effector targets of an existing External Pose slot.",
@@ -673,13 +673,6 @@ namespace KimodoUnityBridge.Command
         private static PropertyDefinition OptionalConstraints(string name, string description)
         {
             JObject poseReference = PoseReferenceSchema();
-            JObject vector2 = new JObject
-            {
-                ["type"] = "array",
-                ["items"] = new JObject { ["type"] = "number" },
-                ["minItems"] = 2,
-                ["maxItems"] = 2
-            };
             JObject effectTarget = new JObject
             {
                 ["type"] = "object",
@@ -690,13 +683,13 @@ namespace KimodoUnityBridge.Command
                     {
                         ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3,
                         ["items"] = new JObject { ["type"] = "number" },
-                        ["description"] = "World-space target position [x,y,z]."
+                        ["description"] = "World-space target position [x,y,z]. Omitted channels retain sampled values."
                     },
                     ["rotation"] = new JObject
                     {
-                        ["type"] = "array", ["minItems"] = 4, ["maxItems"] = 4,
+                        ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3,
                         ["items"] = new JObject { ["type"] = "number" },
-                        ["description"] = "Target rotation quaternion [x,y,z,w]."
+                        ["description"] = "Rotation in Euler degrees [x,y,z], converted with Unity Quaternion.Euler. Omitted channels retain sampled values."
                     }
                 },
                 ["anyOf"] = new JArray(
@@ -720,27 +713,6 @@ namespace KimodoUnityBridge.Command
                     new JObject { ["required"] = new JArray("left_foot") },
                     new JObject { ["required"] = new JArray("right_foot") })
             };
-            JObject root = new JObject
-            {
-                ["type"] = "object",
-                ["additionalProperties"] = false,
-                ["properties"] = new JObject
-                {
-                    ["position"] = new JObject { ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3, ["items"] = new JObject { ["type"] = "number" } },
-                    ["rotation"] = new JObject { ["type"] = "array", ["minItems"] = 4, ["maxItems"] = 4, ["items"] = new JObject { ["type"] = "number" } }
-                },
-                ["minProperties"] = 1
-            };
-            JObject muscles = new JObject
-            {
-                ["type"] = "object",
-                ["additionalProperties"] = new JObject { ["type"] = "number" },
-                ["minProperties"] = 1
-            };
-            JObject root2dPosition = (JObject)vector2.DeepClone();
-            root2dPosition["description"] = "World-space planar root position [x,z].";
-            JObject root2dHeading = (JObject)vector2.DeepClone();
-            root2dHeading["description"] = "World-space planar heading direction [x,z].";
             var pointItem = new JObject
             {
                 ["type"] = "object",
@@ -749,25 +721,19 @@ namespace KimodoUnityBridge.Command
                 {
                     ["frame"] = new JObject { ["type"] = "integer", ["minimum"] = 0 },
                     ["pose"] = poseReference.DeepClone(),
-                    ["root2d"] = new JObject
-                    {
-                        ["type"] = "object",
-                        ["description"] = "World-space planar root position and heading constraint; supply both channels together.",
-                        ["additionalProperties"] = false,
-                        ["properties"] = new JObject
-                        {
-                            ["position"] = root2dPosition,
-                            ["heading"] = root2dHeading
-                        },
-                        ["required"] = new JArray("position", "heading")
-                    },
-                    ["effect"] = effectors.DeepClone()
+                    ["root"] = effectTarget.DeepClone(),
+                    ["effector"] = effectors.DeepClone()
                 },
                 ["required"] = new JArray("frame"),
-                ["anyOf"] = new JArray(
+                ["description"] = "Sample, assert concrete type from explicit inputs, then overlay data. root is Root2D; pose with optional root/effector is FullBody after IK; root + effector without pose is Effector. effector alone is invalid. Transforms accept position and/or Euler rotation; omitted channels retain sampled values. Empty transforms are invalid.",
+                ["oneOf"] = new JArray(
                     new JObject { ["required"] = new JArray("pose") },
-                    new JObject { ["required"] = new JArray("root2d") },
-                    new JObject { ["required"] = new JArray("effect") })
+                    new JObject { ["required"] = new JArray("root", "effector"),
+                        ["not"] = new JObject { ["required"] = new JArray("pose") } },
+                    new JObject { ["required"] = new JArray("root"),
+                        ["not"] = new JObject { ["anyOf"] = new JArray(
+                            new JObject { ["required"] = new JArray("pose") },
+                            new JObject { ["required"] = new JArray("effector") }) } })
             };
             var rootPathItem = new JObject
             {

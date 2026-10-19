@@ -36,10 +36,10 @@ namespace KimodoUnityBridge.Command
                         @"{'character':'<character>','prompt':'<short action for one Clip>','duration_frames':120,'loop':false,'constraints':[{'inout':{'in':{'source':{'clip':'<previous clip>'},'window_frames':30,'sample_count':5},'out':{'source':{'clip':'<next clip>'},'window_frames':12,'sample_count':3}}}]}"),
                     Example("Keep sampled opening and closing windows inside the returned Clip.",
                         @"{'character':'<character>','prompt':'<short action for one Clip>','duration_frames':120,'loop':false,'constraints':[{'inout':{'mode':'inside','in':{'source':{'clip':'<reference clip>','frame':0},'window_frames':12,'sample_count':3},'out':{'source':{'clip':'<reference clip>'},'window_frames':12,'sample_count':3}}}]}"),
-                    Example("Set one Root2D point. The selected data fields determine the constraint family; no type tag is needed.",
-                        @"{'character':'<character>','prompt':'<short action for one Clip>','duration_frames':120,'constraints':[{'frame':60,'root2d':{'position':[2.4,5.0],'heading':[0,1]}}]}"),
-                    Example("Mix a FullBody pose, Root2D root override, and hand target at one frame. Root2D overlays the pose root channels and effect overlays the named hand target.",
-                        @"{'character':'<character>','prompt':'<short action for one Clip>','duration_frames':180,'loop':false,'constraints':[{'frame':90,'pose':{'track':'<pose track>','index':0},'root2d':{'position':[2.4,5.0],'heading':[0,1]},'effect':{'right_hand':{'position':[2.55,0.95,5.35]}}}]}"));
+                    Example("Create a Root2D constraint from a complete World root transform with Euler rotation in degrees.",
+                        @"{'character':'<character>','prompt':'<short action for one Clip>','duration_frames':120,'constraints':[{'frame':60,'root':{'position':[2.4,0.95,5.0],'rotation':[0,0,0]}}]}"),
+                    Example("Create an IK-solved FullBody constraint from a referenced pose, root override, and hand target.",
+                        @"{'character':'<character>','prompt':'<short action for one Clip>','duration_frames':180,'loop':false,'constraints':[{'frame':90,'pose':{'track':'<pose track>','index':0},'root':{'position':[2.4,0.95,5.0],'rotation':[0,0,0]},'effector':{'right_hand':{'position':[2.55,0.95,5.35]}}}]}"));
                 case PoseGetCommand: return new JArray(
                     Example("Capture a pose at an absolute Timeline-global frame. Analyze the Clip first, then add its local frame offset to start_timeline_frame_60.",
                         @"{'source':{'character':'<character>','timeline_frame_60':90},'full_data':true}"),

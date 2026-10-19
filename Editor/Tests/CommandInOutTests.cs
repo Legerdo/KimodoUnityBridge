@@ -390,16 +390,16 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(manual["inputSchema"]?["required"]?.Values<string>(), Does.Contain("pose"));
             Assert.That(manual["inputSchema"]?["properties"]?["targets"]?["items"]?["properties"]?["tolerance_m"]?.Value<double>("default"), Is.EqualTo(0.05));
             Assert.That(string.Join(" ", manual["documentation"]?["result_notes"]?.Values<string>() ?? Enumerable.Empty<string>()), Does.Contain("measured").IgnoreCase);
-            Assert.That(string.Join(" ", manual["documentation"]?["limits"]?.Values<string>() ?? Enumerable.Empty<string>()), Does.Contain("Generation-time warnings").IgnoreCase);
+            Assert.That(string.Join(" ", manual["documentation"]?["limits"]?.Values<string>() ?? Enumerable.Empty<string>()), Does.Contain("Generation-time pose/effector safety preflight").IgnoreCase);
         }
 
-        [TestCase("{'pose':{'track':'poses','index':0},'effect':{'right_hand':{'position':[1,2,3]}}}", true)]
-        [TestCase("{'effect':{'right_hand':{'position':[1,2,3]}}}", false)]
+        [TestCase("{'pose':{'track':'poses','index':0},'effector':{'right_hand':{'position':[1,2,3]}}}", true)]
+        [TestCase("{'effector':{'right_hand':{'position':[1,2,3]}}}", false)]
         [TestCase("{'pose':{'track':'poses','index':0}}", false)]
-        [TestCase("{'root2d':{'position':[0,0],'heading':[0,1]},'effect':{'right_hand':{'position':[1,2,3]}}}", false)]
-        public void PoseEffectSafetyPreflight_RequiresExplicitPoseAndEffect(string json, bool expected)
+        [TestCase("{'root':{'position':[0,1,0],'rotation':[0,0,0]},'effector':{'right_hand':{'position':[1,2,3]}}}", false)]
+        public void PoseEffectorSafetyPreflight_RequiresExplicitPoseAndEffector(string json, bool expected)
         {
-            Assert.That(command_context.HasPoseAndEffect(JObject.Parse(json)), Is.EqualTo(expected));
+            Assert.That(command_context.HasPoseAndEffector(JObject.Parse(json)), Is.EqualTo(expected));
         }
     }
 }

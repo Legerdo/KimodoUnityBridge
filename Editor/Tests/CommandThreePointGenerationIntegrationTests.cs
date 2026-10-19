@@ -97,22 +97,22 @@ namespace KimodoUnityBridge.Command.Tests
                         {
                             ["frame"] = MidFrame,
                             ["pose"] = poseRef.DeepClone(),
-                            ["root2d"] = new JObject
+                            ["root"] = new JObject
                             {
-                                ["position"] = new JArray(5.0, 0.0),
-                                ["heading"] = new JArray(0.0, 1.0)
+                                ["position"] = new JArray(5.0, 0.95, 0.0),
+                                ["rotation"] = new JArray(0.0, 0.0, 0.0)
                             }
                         },
                         new JObject
                         {
                             ["frame"] = EndFrame,
                             ["pose"] = poseRef.DeepClone(),
-                            ["root2d"] = new JObject
+                            ["root"] = new JObject
                             {
-                                ["position"] = new JArray(10.0, 0.0),
-                                ["heading"] = new JArray(0.0, 1.0)
+                                ["position"] = new JArray(10.0, 0.95, 0.0),
+                                ["rotation"] = new JArray(0.0, 0.0, 0.0)
                             },
-                            ["effect"] = new JObject
+                            ["effector"] = new JObject
                             {
                                 ["right_hand"] = new JObject
                                 {
@@ -143,11 +143,11 @@ namespace KimodoUnityBridge.Command.Tests
                 Assert.That(start.rootOverride.t.x, Is.EqualTo(defaultRoot[0].Value<float>()).Within(0.001f));
                 Assert.That(start.rootOverride.t.y, Is.EqualTo(defaultRoot[1].Value<float>()).Within(0.001f));
                 Assert.That(start.rootOverride.t.z, Is.EqualTo(defaultRoot[2].Value<float>()).Within(0.001f));
-                Assert.That(middle.constraintMode, Is.EqualTo("mix"));
+                Assert.That(middle.constraintMode, Is.EqualTo("fullbody"));
                 Assert.That(middle.rootOverride.t.x, Is.EqualTo(5f).Within(0.001f));
                 Assert.That(middle.rootOverride.t.y, Is.EqualTo(defaultRoot[1].Value<float>()).Within(0.001f),
                     "Root2D overlays planar channels while retaining the FullBody pose height.");
-                Assert.That(end.constraintMode, Is.EqualTo("mix"));
+                Assert.That(end.constraintMode, Is.EqualTo("fullbody"));
                 Assert.That(end.rootOverride.t.x, Is.EqualTo(10f).Within(0.001f));
                 Assert.That(end.rootOverride.t.y, Is.EqualTo(defaultRoot[1].Value<float>()).Within(0.001f));
                 Assert.That(end.effectors.rightHand.t, Is.EqualTo(new Vector3(10f, 1f, 1f)));
@@ -173,9 +173,9 @@ namespace KimodoUnityBridge.Command.Tests
                 Assert.That(constraintLoss, Is.Not.Null, status.ToString());
                 Assert.That(constraintLoss.Value<int>("compared_count"), Is.GreaterThan(0), constraintLoss.ToString());
                 Assert.That(constraintLoss["frames"].Values<JObject>().Any(frame =>
-                    frame.Value<string>("constraint_type") == "mix" && frame["effectors"]?["right_hand"] != null),
+                    frame.Value<string>("constraint_type") == "fullbody" && frame["effectors"]?["right_hand"] != null),
                     Is.True,
-                    "Returned constraint loss should include the generated frame with the mixed Root2D and right-hand constraint.");
+                    "Returned constraint loss should include the generated frame with the FullBody with planar root override and right-hand IK edits.");
                 AssertGenerationResolvesCachedCharacterByNameAndId(character);
                 string path = status["clip"]?.Value<string>("asset_path");
                 Assert.That(path, Is.Not.Null.And.Not.Empty, status.ToString());
