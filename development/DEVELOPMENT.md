@@ -1,8 +1,8 @@
 # 开发备忘录 / Development memo
 
-> Temporary development snapshot; use the root Skill and command catalog for execution details.
+> Temporary development snapshot; use [tools/common.md](../tools/common.md) and the command catalog for execution details.
 >
-> 当前文件只是临时开发快照。日常任务从 [SKILL.md](../SKILL.md) 路由，命令定义位于 [Command/help.json](../Command/help.json)。
+> 当前文件只是临时开发快照。日常任务的执行规则位于 [tools/common.md](../tools/common.md)，命令定义位于 [Command/help.json](../Command/help.json)。
 
 ## Current command surface (主要命令面)
 

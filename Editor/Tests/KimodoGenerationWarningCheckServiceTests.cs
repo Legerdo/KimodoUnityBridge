@@ -50,24 +50,32 @@ namespace KimodoBridge.Editor.Tests
                 .Any(issue => issue.Value<string>("code") == "speed_hard_limit"), Is.True);
         }
 
-        [Test]
-        public void RootTrajectory_AboveFifteenMetersPerSecondSquaredWarnsWithoutBlocking()
+        [TestCase(9.99f, false, false)]
+        [TestCase(10f, false, false)]
+        [TestCase(10.01f, true, false)]
+        [TestCase(14.99f, true, false)]
+        [TestCase(15f, true, false)]
+        [TestCase(15.01f, true, true)]
+        [TestCase(16f, true, true)]
+        public void RootTrajectory_AccelerationThresholds(float acceleration, bool warning, bool blocking)
         {
             JObject args = new JObject
             {
                 ["constraints"] = new JArray
                 {
                     new JObject { ["frame"] = 0, ["root"] = Root(0f, 0f) },
-                    new JObject { ["frame"] = 15, ["root"] = Root(1f, 0f) }
+                    new JObject { ["frame"] = 30, ["root"] = Root(acceleration * 0.25f, 0f) }
                 }
             };
 
             JObject result = KimodoGenerationWarningCheckService.Build(args, 60, 60f);
 
-            Assert.That(result.Value<bool>("blocking"), Is.False);
-            Assert.That(result["root_trajectory"].Value<float>("max_acceleration_mps2"), Is.GreaterThan(15f));
-            Assert.That(result["root_trajectory"]["issues"].ToObject<JArray>()
-                .Any(issue => issue.Value<string>("code") == "acceleration_limit"), Is.True);
+            Assert.That(result.Value<bool>("blocking"), Is.EqualTo(blocking));
+            Assert.That(result.Value<string>("overall"), Is.EqualTo(blocking ? "error" : warning ? "warning" : "ok"));
+            Assert.That(result["root_trajectory"].Value<float>("max_acceleration_mps2"), Is.EqualTo(acceleration).Within(0.001f));
+            JArray issues = result["root_trajectory"]["issues"].ToObject<JArray>();
+            Assert.That(issues.Any(issue => issue.Value<string>("code") == "acceleration_limit"), Is.EqualTo(warning));
+            Assert.That(issues.Any(issue => issue.Value<string>("code") == "acceleration_hard_limit"), Is.EqualTo(blocking));
         }
 
         [Test]

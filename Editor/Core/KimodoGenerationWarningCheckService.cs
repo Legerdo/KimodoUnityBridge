@@ -16,11 +16,13 @@ namespace KimodoBridge.Editor
     {
         public const float MaxSpeedMetersPerSecond = 7f;
         public const float MaxBlockingSpeedMetersPerSecond = 10f;
-        public const float MaxAccelerationMetersPerSecondSquared = 15f;
+        public const float MaxAccelerationMetersPerSecondSquared = 10f;
+        public const float MaxBlockingAccelerationMetersPerSecondSquared = 15f;
         private const float PositionToleranceMeters = 0.05f;
         private const float HeadingToleranceDegrees = 5f;
         private const float HeadingJumpWarningDegrees = 45f;
         private const float RootYJumpWarningMeters = 0.25f;
+        private const string RootMotionLimitSuggestion = " Try splitting the action into multiple animation generations. For each following clip, use an In constraint (constraints[].inout.in) referencing the preceding clip.";
 
         public static JObject Build(
             JObject arguments,
@@ -36,7 +38,8 @@ namespace KimodoBridge.Editor
                 JObject overlap = BuildConstraintOverlap(arguments, frameRate, generatedSamples);
                 JObject effectors = BuildEffectorChecks(
                     arguments, characterName, modelName, frameRate, generatedSamples);
-                bool blocking = rootTrajectory.Value<float>("max_speed_mps") > MaxBlockingSpeedMetersPerSecond;
+                bool blocking = rootTrajectory.Value<float>("max_speed_mps") > MaxBlockingSpeedMetersPerSecond
+                    || rootTrajectory.Value<float>("max_acceleration_mps2") > MaxBlockingAccelerationMetersPerSecondSquared;
                 bool warning = HasWarning(rootTrajectory) || HasWarning(overlap) || HasWarning(effectors);
                 return new JObject
                 {
@@ -115,11 +118,13 @@ namespace KimodoBridge.Editor
 
                 bool sourceChanged = !string.Equals(previous.Source, current.Source, StringComparison.OrdinalIgnoreCase);
                 if (speed > MaxSpeedMetersPerSecond)
-                    AddIssue(issues, "speed_limit", current.Frame, $"Root speed {speed:F3} m/s exceeds {MaxSpeedMetersPerSecond:F1} m/s.", previous.Source, current.Source);
+                    AddIssue(issues, "speed_limit", current.Frame, $"Root speed {speed:F3} m/s exceeds {MaxSpeedMetersPerSecond:F1} m/s." + RootMotionLimitSuggestion, previous.Source, current.Source);
                 if (speed > MaxBlockingSpeedMetersPerSecond)
-                    AddIssue(issues, "speed_hard_limit", current.Frame, $"Root speed {speed:F3} m/s exceeds the hard limit of {MaxBlockingSpeedMetersPerSecond:F1} m/s.", previous.Source, current.Source);
+                    AddIssue(issues, "speed_hard_limit", current.Frame, $"Root speed {speed:F3} m/s exceeds the hard limit of {MaxBlockingSpeedMetersPerSecond:F1} m/s." + RootMotionLimitSuggestion, previous.Source, current.Source);
                 if (acceleration > MaxAccelerationMetersPerSecondSquared)
-                    AddIssue(issues, sourceChanged ? "constraint_jump" : "acceleration_limit", current.Frame, $"Root acceleration {acceleration:F3} m/s² exceeds {MaxAccelerationMetersPerSecondSquared:F1} m/s².", previous.Source, current.Source);
+                    AddIssue(issues, sourceChanged ? "constraint_jump" : "acceleration_limit", current.Frame, $"Root acceleration {acceleration:F3} m/s² exceeds {MaxAccelerationMetersPerSecondSquared:F1} m/s²." + RootMotionLimitSuggestion, previous.Source, current.Source);
+                if (acceleration > MaxBlockingAccelerationMetersPerSecondSquared)
+                    AddIssue(issues, "acceleration_hard_limit", current.Frame, $"Root acceleration {acceleration:F3} m/s² exceeds the hard limit of {MaxBlockingAccelerationMetersPerSecondSquared:F1} m/s²." + RootMotionLimitSuggestion, previous.Source, current.Source);
                 if (sourceChanged && (speed > MaxSpeedMetersPerSecond || acceleration > MaxAccelerationMetersPerSecondSquared))
                     AddIssue(issues, "constraint_jump", current.Frame, "Adjacent constraints introduce a large root trajectory jump.", previous.Source, current.Source);
                 if (headingJump > HeadingJumpWarningDegrees)

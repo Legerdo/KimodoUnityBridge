@@ -20,9 +20,9 @@
 | `development/AGENTS.md` | 仓库协作规则、文档所有权和验证要求 |
 | `../README.md` | 人类用户的安装与入门说明 |
 | `../README.zh-CN.md` | `README.md` 的简体中文版本 |
-| `../SKILL.md` | 安装门槛、任务入口、通用动画循环和能力工具编排 |
+| `../SKILL.md` | 用途、安装和文档导航 |
 | `../Command/help.json` | 维护命令、参数、必选关系和嵌套 schema |
-| `../tools/common.md` | 通用循环、命令入口、异步状态、证据、识别、比较和修正决策 |
+| `../tools/common.md` | 范围、任务分流、能力编排、通用循环、命令入口、异步状态、证据、识别、比较和修正决策 |
 | `../archive/skill-legacy-20261013/` | 被新阶段手册替换的历史说明，仅供追溯 |
 | `DEVELOPMENT.md` | 临时开发快照，不是执行契约 |
 | `README.md` | 面向维护者的文档导航页 |
