@@ -897,23 +897,15 @@ namespace KimodoUnityBridge.Command
             return match;
         }
 
-        public static string AnimationAnalyze(string argumentsJson)
+        public static string AnimationAnalysis(string argumentsJson)
         {
             return Execute(argumentsJson, arguments =>
-                Ok(AnimationAnalyzeCore(arguments, allowActiveGenerationRange: false)));
+                Ok(AnimationAnalysisCore(arguments, allowActiveGenerationRange: false)));
         }
 
-        public static string NewAnalysis(string argumentsJson)
-        {
-            return Execute(argumentsJson, arguments =>
-                Ok(AnimationAnalyzeCore(arguments, allowActiveGenerationRange: false, newPictureContract: true)));
-        }
-
-        private static JObject AnimationAnalyzeCore(
+        private static JObject AnimationAnalysisCore(
             JObject arguments,
-            bool allowActiveGenerationRange,
-            bool newPictureContract = false,
-            bool layoutOnly = false)
+            bool allowActiveGenerationRange)
         {
             TimelineSessionRecord session = RequireTimelineSession(arguments);
             JArray clips = arguments["clips"] as JArray;
@@ -950,17 +942,10 @@ namespace KimodoUnityBridge.Command
             int endFrame = startFrame + Math.Max(1, Mathf.RoundToInt((float)(animation.TimelineDurationSeconds * SessionFrameRate)));
             if (!allowActiveGenerationRange)
             {
-                ThrowIfGenerationRangeLocked(session, character, startFrame, endFrame, AnimationAnalyzeCommand);
+                ThrowIfGenerationRangeLocked(session, character, startFrame, endFrame, AnimationAnalysisCommand);
             }
 
-            JObject picture = newPictureContract
-                ? new JObject
-                {
-                    ["tiles"] = new JArray("3d_track", "height_time_track", "3d_ghost", "3d_ghost_track", "key_pose", "step_pose"),
-                    ["output"] = "composite",
-                    ["environment"] = new JObject { ["mode"] = "isolated" }
-                }
-                : AnalysisPictureRequest.Parse(arguments["picture"] as JObject).ToJson();
+            JObject cameraOptions = arguments["camera"] as JObject ?? new JObject();
             int pictureResolution = ResolveAnalysisPictureResolution(arguments["resolution"]);
             JObject requestedAnalysisOptions = null;
             string requestedAnalysisOptionsJson = ParseAnalysisOptionsJson(arguments);
@@ -1006,14 +991,15 @@ namespace KimodoUnityBridge.Command
                 EnsureEndpointPoseComparison(session, character, animation, record, startFrame, endFrame);
             }
             var subject = new AnalysisSubject(character, animation, record, startFrame, endFrame);
-            JObject pictures = layoutOnly
-                ? new JObject()
-                : RenderAnalysisPictures(session, new[] { subject }, picture, pictureResolution);
+            JObject pictures = RenderAnalysisPictures(session, new[] { subject }, pictureResolution, cameraOptions);
+            record.Pictures = pictures != null ? (JObject)pictures.DeepClone() : new JObject();
+            AnalysisCache[record.Id] = record;
+            WriteJsonAtomically(AnalysisCachePath(session, record.Id), record.ToJson());
             SaveTimelineSession(session);
             string analysisImagePath = pictures?.Value<string>("image_path") ?? string.Empty;
             var analysisLog = new JObject
             {
-                ["picture"] = picture.DeepClone(),
+                ["camera"] = cameraOptions.DeepClone(),
                 ["clip"] = new JObject
                 {
                     ["character"] = subject.Character?.Name ?? string.Empty,
@@ -1028,13 +1014,13 @@ namespace KimodoUnityBridge.Command
             Debug.Log("[Kimodo][Analysis] " + analysisLog.ToString(Formatting.None));
             return new JObject
             {
-                ["analysis_schema_version"] = newPictureContract ? "analysis.new.v1" : AnalysisContractVersion,
-                ["clip"] = BuildAnimationAnalyzeClipResult(subject),
+                ["analysis_schema_version"] = AnalysisContractVersion,
+                ["clip"] = BuildAnimationAnalysisClipResult(subject),
                 ["pictures"] = BuildPublicPictureMetadata(pictures, subject)
             };
         }
 
-        private static JObject BuildAnimationAnalyzeClipResult(AnalysisSubject subject)
+        private static JObject BuildAnimationAnalysisClipResult(AnalysisSubject subject)
         {
             bool humanoid = IsHumanoidCharacter(subject.Character);
             var result = new JObject

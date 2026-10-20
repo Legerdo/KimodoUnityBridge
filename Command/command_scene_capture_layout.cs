@@ -10,36 +10,11 @@ namespace KimodoUnityBridge.Command
 {
     internal static partial class command_context
     {
-        private static SceneAnalysisLayout CreateSceneAnalysisLayout(JObject arguments)
-        {
-            // A repeated asset-path capture should reuse its loaded Timeline clip.
-            var currentSession = RequireTimelineSession(arguments);
-            JObject reference = (arguments["clips"] as JArray)?.FirstOrDefault() as JObject;
-            var currentCharacter = currentSession.Characters.FirstOrDefault(item => item.Name == reference?.Value<string>("character"));
-            string sourcePath = reference?.Value<string>("clip");
-            var loaded = currentCharacter?.Animations.FirstOrDefault(item => item.Clip != null && AssetDatabase.GetAssetPath(item.Clip) == sourcePath);
-            if (loaded != null)
-            {
-                arguments = (JObject)arguments.DeepClone();
-                arguments["clips"][0]["clip"] = loaded.Name;
-            }
-            JObject analysis = AnimationAnalyzeCore(arguments, false, true, layoutOnly: true);
-            var session = RequireTimelineSession(arguments);
-            JObject clip = (JObject)analysis["clip"];
-            var character = session.Characters.First(item => item.Name == clip.Value<string>("character"));
-            var animation = character.Animations.First(item => item.Name == clip.Value<string>("name"));
-            var subject = new AnalysisSubject(character, animation, GetCachedAnalysis(session, clip.Value<string>("analysis_id")),
-                clip.Value<int>("start_timeline_frame_60"), clip.Value<int>("end_timeline_frame_60_exclusive"));
-            JObject camera = arguments["camera"] as JObject;
-            bool includeScene = camera?.Value<bool?>("include_scene") ?? false;
-            return CreateSceneAnalysisLayout(session, subject, ResolveAnalysisPictureResolution(arguments["resolution"]), includeScene);
-        }
-
         private static SceneAnalysisLayout CreateSceneAnalysisLayout(
             TimelineSessionRecord session,
             AnalysisSubject subject,
             int width,
-            bool includeScene)
+            JObject cameraOptions)
         {
             SubjectPictureData data = BuildSubjectPictureData(session, subject);
             EnsurePhaseTrack(data);
@@ -48,7 +23,7 @@ namespace KimodoUnityBridge.Command
             try
             {
                 captureSessionRoot = session.SessionRoot;
-                layout.Initialize(data, width, BuildAnimationAnalyzeClipResult(subject), includeScene);
+                layout.Initialize(data, width, BuildAnimationAnalysisClipResult(subject), cameraOptions);
                 return layout;
             }
             catch { layout.Dispose(); throw; }
@@ -66,24 +41,26 @@ namespace KimodoUnityBridge.Command
             private readonly List<RectInt> rects = new List<RectInt>();
             private readonly List<List<GameObject>> lines = new List<List<GameObject>>();
             private readonly List<Tuple<Renderer, bool>> hidden = new List<Tuple<Renderer, bool>>();
-            private readonly List<TestVirtualPose> visible = new List<TestVirtualPose>();
+            private readonly List<AnalysisPreviewPose> visible = new List<AnalysisPreviewPose>();
             private readonly Dictionary<int, Vector3> heightTargets = new Dictionary<int, Vector3>();
             private readonly List<Material> ownedMaterials = new List<Material>();
             private readonly List<Mesh> ownedMeshes = new List<Mesh>();
-            private NewAnalysisPosePool pool;
+            private CapturePosePool pool;
             private SubjectPictureData data;
             private List<int> heightFrames;
             private string title;
             private string distanceText;
             private string durationText;
             private bool includeScene;
+            private JObject cameraOptions;
             private bool disposed;
 
-            public void Initialize(SubjectPictureData subject, int width, JObject clip, bool includeScene)
+            public void Initialize(SubjectPictureData subject, int width, JObject clip, JObject cameraOptions)
             {
                 data = subject;
                 Clip = clip;
-                this.includeScene = includeScene;
+                this.cameraOptions = cameraOptions ?? new JObject();
+                includeScene = string.Equals(this.cameraOptions.Value<string>("scope"), "scene", StringComparison.Ordinal);
                 DateTimeOffset capturedAt = DateTimeOffset.Now;
                 title = "Motion Analysis  |  " + (data.Subject.Animation.Clip != null ? data.Subject.Animation.Clip.name : data.Subject.Animation.Name)
                     + "  |  " + capturedAt.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture);
@@ -93,7 +70,7 @@ namespace KimodoUnityBridge.Command
                 int durationFrames = Clip["root_trajectory"]?.Value<int?>("duration_frames")
                     ?? Clip.Value<int>("end_timeline_frame_60_exclusive") - Clip.Value<int>("start_timeline_frame_60");
                 durationText = (durationFrames / SessionFrameRate).ToString("0.00", CultureInfo.InvariantCulture) + " s";
-                Tiles = BuildTestAnalysisTiles(data);
+                Tiles = BuildAnalysisTiles(data);
                 // Preserve authored visibility, including renderers that were already hidden.
                 // In the default isolated mode every scene renderer is hidden so
                 // unrelated geometry cannot change framing or contaminate a tile.
@@ -107,7 +84,7 @@ namespace KimodoUnityBridge.Command
                     hidden.Add(Tuple.Create(renderer, renderer.forceRenderingOff));
                     renderer.forceRenderingOff = true;
                 }
-                pool = new NewAnalysisPosePool(Tiles);
+                pool = new CapturePosePool(Tiles);
                 int height = Mathf.Max(36, Mathf.RoundToInt(width * 9f / 16f));
                 Canvas = new Texture2D(width, height, TextureFormat.RGBA32, false);
                 Fill(Canvas, new Color(.12f, .12f, .12f, 1));
@@ -133,7 +110,7 @@ namespace KimodoUnityBridge.Command
                 foreach (int frame in Tiles[0].TrajectoryFrames.Union(Tiles[0].PrimaryFrames))
                 {
                     bool primary = Tiles[0].PrimaryFrames.Contains(frame);
-                    Color color = !primary ? Color.gray : frame == 0 ? TestStartFrameTint : frame == ground.Length - 1 ? TestEndFrameTint : TestKeyframeTint;
+                    Color color = !primary ? Color.gray : frame == 0 ? AnalysisStartFrameTint : frame == ground.Length - 1 ? AnalysisEndFrameTint : AnalysisKeyframeTint;
                     CreateGroundMarker(lines[0], ground[frame], primary ? .13f : .08f, color);
                     if (primary) CreateHeadingArrow(lines[0], ground[frame], SampleRootForward(data, frame), .45f, color);
                 }
@@ -154,10 +131,10 @@ namespace KimodoUnityBridge.Command
                 {
                     float z = grid * length / 5;
                     float y = Mathf.Lerp(heightBounds.min.y, heightBounds.max.y, grid / 5f);
-                    CreateWorldLine(lines[1], new Vector3(0, heightBounds.min.y, z), new Vector3(0, heightBounds.max.y, z), .015f, Color.gray, true);
-                    CreateWorldLine(lines[1], new Vector3(0, y, 0), new Vector3(0, y, length), .015f, Color.gray, true);
+                    CreateWorldLine(lines[1], new Vector3(0, heightBounds.min.y, z), new Vector3(0, heightBounds.max.y, z), .015f, Color.gray);
+                    CreateWorldLine(lines[1], new Vector3(0, y, 0), new Vector3(0, y, length), .015f, Color.gray);
                 }
-                CreateTestBodyTrajectories(lines[3], data);
+                CreateAnalysisBodyTrajectories(lines[3], data);
                 foreach (GameObject item in lines.SelectMany(group => group))
                 {
                     foreach (Renderer renderer in item.GetComponentsInChildren<Renderer>())
@@ -173,7 +150,7 @@ namespace KimodoUnityBridge.Command
                     descriptions.Add(new JObject
                     {
                         ["id"] = index < 4 ? $"1.{index + 1}" : index < 12 ? $"2.{index - 3}" : $"3.{index - 11}",
-                        ["tile"] = Tiles[index].TestTileType,
+                        ["tile"] = Tiles[index].TileType,
                         ["header"] = BuildHeader(index),
                         ["rect"] = new JObject { ["x"] = rect.x, ["y"] = rect.y, ["width"] = rect.width, ["height"] = rect.height },
                         ["description"] = Tiles[index].Description.DeepClone()
@@ -182,7 +159,7 @@ namespace KimodoUnityBridge.Command
                 Metadata = BuildPublicPictureMetadata(new JObject
                 {
                     ["tile_count"] = Tiles.Count, ["images"] = descriptions, ["width"] = width, ["height"] = height,
-                    ["render_version"] = "capture.scene.20-sceneview-headers-metrics", ["aspect"] = "16:9",
+                    ["render_version"] = "animation.analysis.20-sceneview-headers-metrics", ["aspect"] = "16:9",
                     ["header_height"] = height - rects[0].yMax
                 }, data.Subject);
                 Metadata["title"] = title;
@@ -226,11 +203,11 @@ namespace KimodoUnityBridge.Command
             {
                 PictureTile tile = Tiles[index];
                 string text = index == 0 ? "Ground Path - " + distanceText : index == 1 ? "Height over Time - " + durationText
-                    : index == 2 ? $"Key Poses - {FramesFor(index).Count()} Characters"
-                    : index == 3 ? $"Step Poses - {FramesFor(index).Count()} Characters"
+                    : index == 2 ? $"Key Poses - {FramesFor(index).Count()}"
+                    : index == 3 ? $"Step Poses - {FramesFor(index).Count()}"
                     : tile.IsEmpty ? "No Frame" : $"Frame {data.Subject.StartFrame + tile.Frame}";
                 Color color = index < 4 || tile.IsEmpty ? new Color(.18f, .22f, .27f, 1)
-                    : ResolveSingleTestPoseTint(tile, tile.Frame);
+                    : ResolveAnalysisPoseTint(tile, tile.Frame);
                 RectInt rect = rects[index];
                 return new JObject
                 {
@@ -264,14 +241,14 @@ namespace KimodoUnityBridge.Command
 
             public void ShowNext(SceneView view)
             {
-                foreach (TestVirtualPose pose in visible) SetPreviewRenderersEnabled(pose.Preview, false);
+                foreach (AnalysisPreviewPose pose in visible) SetPreviewRenderersEnabled(pose.Preview, false);
                 visible.Clear();
                 foreach (GameObject item in lines.SelectMany(group => group)) item.SetActive(false);
                 foreach (GameObject item in lines[Index]) item.SetActive(true);
                 PictureTile tile = Tiles[Index];
                 foreach (int frame in FramesFor(Index))
                 {
-                    TestVirtualPose pose = pool.Get(data, frame);
+                    AnalysisPreviewPose pose = pool.Get(data, frame);
                     var snapshot = pool.GetPlan(data).Get(frame);
                     pose.Preview.transform.SetPositionAndRotation(Index == 1 ? heightTargets[frame] : snapshot.RootPosition, snapshot.RootRotation);
                     SetPreviewRenderersEnabled(pose.Preview, true);
@@ -285,7 +262,7 @@ namespace KimodoUnityBridge.Command
                     hasBounds = true;
                     foreach (Vector3 point in data.Pelvis) bounds.Encapsulate(new Vector3(point.x, 0, point.z));
                 }
-                foreach (TestVirtualPose pose in visible)
+                foreach (AnalysisPreviewPose pose in visible)
                 {
                     Bounds poseBounds = CalculateSceneTargetBounds(pose.Preview.transform);
                     if (!hasBounds) { bounds = poseBounds; hasBounds = true; }
@@ -299,9 +276,11 @@ namespace KimodoUnityBridge.Command
                     }
                 if (!hasBounds) bounds = data.Bounds;
                 bounds.Expand(Index == 0 ? new Vector3(.8f, .2f, .8f) : Vector3.one * .1f);
-                Vector3 direction = Index == 1 ? Vector3.right : tile.Direction;
+                Vector3 direction = cameraOptions?["direction"] != null
+                    ? ReadSceneVector(cameraOptions["direction"], "camera.direction", tile.Direction)
+                    : Index == 1 ? Vector3.right : tile.Direction;
                 if (direction.sqrMagnitude < .001f) direction = new Vector3(1, .75f, -1);
-                FrameSceneView(view, bounds, direction, true, 1.1f, rects[Index].width / (float)rects[Index].height);
+                FrameSceneView(view, bounds, direction, cameraOptions, rects[Index].width / (float)rects[Index].height);
             }
 
             public bool AddTile(Texture2D image)

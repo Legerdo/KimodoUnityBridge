@@ -151,7 +151,7 @@ namespace KimodoUnityBridge.Command
             }
         }
 
-        private static Texture2D RenderPictureTile(PictureTile tile, int width, int height, TrajectoryScale trajectoryScale, NewAnalysisPosePool posePool = null)
+        private static Texture2D RenderPictureTile(PictureTile tile, int width, int height, TrajectoryScale trajectoryScale, CapturePosePool posePool = null)
         {
             if (tile.Presentation == "test_empty_pose")
             {
@@ -317,7 +317,7 @@ namespace KimodoUnityBridge.Command
         }
 
         private static Texture2D RenderTestHeightTimeTile(
-            PictureTile tile, int width, int height, NewAnalysisPosePool posePool = null)
+            PictureTile tile, int width, int height, CapturePosePool posePool = null)
         {
             SubjectPictureData subject = tile.Subject;
             int lastFrame = Math.Max(0, subject.Pelvis.Length - 1);
@@ -660,7 +660,7 @@ namespace KimodoUnityBridge.Command
             int width,
             int height,
             TrajectoryScale trajectoryScale,
-            NewAnalysisPosePool posePool = null)
+            CapturePosePool posePool = null)
         {
             int lastFrame = Math.Max(0, tile.Subject.Pelvis.Length - 1);
             var requestedFrames = tile.TrajectoryFrames;
@@ -763,7 +763,7 @@ namespace KimodoUnityBridge.Command
             int targetHeight,
             TrajectoryScale trajectoryScale,
             int supersample,
-            NewAnalysisPosePool posePool = null)
+            CapturePosePool posePool = null)
         {
             int scale = Mathf.Max(1, supersample);
             if (scale == 1)
@@ -804,7 +804,7 @@ namespace KimodoUnityBridge.Command
         }
 
         private static Texture2D RenderTestPoseTile(
-            PictureTile tile, int targetWidth, int targetHeight, NewAnalysisPosePool posePool = null)
+            PictureTile tile, int targetWidth, int targetHeight, CapturePosePool posePool = null)
         {
             int frame = Mathf.Clamp(tile.Frame, 0, Math.Max(0, tile.Subject.Pelvis.Length - 1));
             Vector3[] viewPoints =

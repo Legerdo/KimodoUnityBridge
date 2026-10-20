@@ -55,6 +55,15 @@ namespace KimodoBridge.Editor
                 built.CombinedSamples.AddRange(endSamples);
             }
 
+            if (!KimodoGenerationWarningCheckService.TryValidateRootMotionConstraints(
+                    built.CombinedSamples,
+                    KimodoMotionModelProfiles.ResolveGenerationFrameRate(request.ModelName),
+                    out error))
+            {
+                error = $"Boundary constraints violate root motion limits: {error}";
+                return false;
+            }
+
             double normalizationAnchorWindowSeconds = request.AutoBeginAnchor
                 ? AutoBeginAnchorWindowSeconds
                 : double.PositiveInfinity;
@@ -69,8 +78,19 @@ namespace KimodoBridge.Editor
             }
             else if (autoBegin != null)
             {
-                built.CombinedSamples.Insert(0, autoBegin);
-                built.HasSyntheticAutoBeginConstraint = true;
+                var withAutoBegin = new List<KimodoMarkerSampleResult>(built.CombinedSamples.Count + 1)
+                {
+                    autoBegin
+                };
+                withAutoBegin.AddRange(built.CombinedSamples);
+                if (KimodoGenerationWarningCheckService.TryValidateRootMotionConstraints(
+                        withAutoBegin,
+                        KimodoMotionModelProfiles.ResolveGenerationFrameRate(request.ModelName),
+                        out _))
+                {
+                    built.CombinedSamples.Insert(0, autoBegin);
+                    built.HasSyntheticAutoBeginConstraint = true;
+                }
             }
 
             float generationFrameRate = KimodoMotionModelProfiles.ResolveGenerationFrameRate(request.ModelName);

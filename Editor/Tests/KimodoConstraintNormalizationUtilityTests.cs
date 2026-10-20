@@ -128,6 +128,80 @@ namespace KimodoBridge.Editor.Tests
             }
         }
 
+        [Test]
+        public void AutoBegin_IsSkippedWhenItWouldExceedRootMotionLimits()
+        {
+            using (AutoBeginSceneFixture fixture = CreateAutoBeginSceneFixture())
+            {
+                var fastBoundary = new KimodoMarkerSampleResult
+                {
+                    sampleValid = true,
+                    constraintMode = "root2d",
+                    sampleTime = 1.1,
+                    rootOverride = new KimodoUnityBridge.KimodoRigidTransform
+                    {
+                        t = new Vector3(9f, 0.8879f, 0f),
+                        q = Quaternion.identity
+                    },
+                    enableMask = KimodoConstraintMask.ForType("root2d")
+                };
+
+                Assert.That(KimodoInOutConstraintComposer.TryBuild(
+                    CreateAutoBeginRequest(fixture, fastBoundary),
+                    out var result, out _, out var error), Is.True, error);
+                Assert.That(result.HasSyntheticAutoBeginConstraint, Is.False);
+                Assert.That(result.CombinedSamples, Has.Count.EqualTo(1));
+                Assert.That(result.CombinedSamples[0].sampleTime, Is.EqualTo(1.1));
+            }
+        }
+
+        [Test]
+        public void ConstraintComposer_RejectsBoundaryMotionAboveSpeedLimit()
+        {
+            using (AutoBeginSceneFixture fixture = CreateAutoBeginSceneFixture())
+            {
+                var request = CreateAutoBeginRequest(fixture,
+                    new KimodoMarkerSampleResult
+                    {
+                        sampleValid = true, sampleTime = 0.0,
+                        rootOverride = new KimodoUnityBridge.KimodoRigidTransform { t = Vector3.zero }
+                    },
+                    new KimodoMarkerSampleResult
+                    {
+                        sampleValid = true, sampleTime = 0.5,
+                        rootOverride = new KimodoUnityBridge.KimodoRigidTransform { t = new Vector3(5f, 0f, 0f) }
+                    });
+                request.AutoBeginAnchor = false;
+
+                Assert.That(KimodoInOutConstraintComposer.TryBuild(request,
+                    out _, out _, out string error), Is.False);
+                StringAssert.Contains("Boundary constraints", error);
+                StringAssert.Contains("7.0 m/s", error);
+            }
+        }
+
+        [Test]
+        public void BoundaryConstraints_AreRejectedWhenTheyExceedAccelerationLimit()
+        {
+            var samples = new List<KimodoMarkerSampleResult>
+            {
+                new KimodoMarkerSampleResult
+                {
+                    sampleValid = true, sampleTime = 0.0,
+                    rootOverride = new KimodoUnityBridge.KimodoRigidTransform { t = Vector3.zero }
+                },
+                new KimodoMarkerSampleResult
+                {
+                    sampleValid = true, sampleTime = 1.0,
+                    rootOverride = new KimodoUnityBridge.KimodoRigidTransform { t = new Vector3(2f, 0f, 2f) }
+                }
+            };
+
+            Assert.That(KimodoGenerationWarningCheckService.TryValidateRootMotionConstraints(
+                samples, 60f, out string error), Is.False);
+            StringAssert.Contains("10.0 m/s²", error);
+        }
+
         [TestCase(KimodoConstraintMode.FullBody)]
         [TestCase(KimodoConstraintMode.Root2D)]
         [TestCase(KimodoConstraintMode.Effector)]
