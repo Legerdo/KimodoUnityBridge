@@ -84,10 +84,31 @@ namespace KimodoUnityBridge.Command.Tests
                 Assert.That(analysis["clips"], Is.Null);
                 Assert.That(analysis["pictures"]?.Value<string>("aspect"), Is.EqualTo("16:9"));
                 Assert.That(analysis["pictures"]?.Value<int>("tile_count"), Is.EqualTo(20));
-                Assert.That(analysis["pictures"]?.Value<string>("render_version"), Is.EqualTo("63-height-time-ratio5-dim-hdrp-lights"));
-                Assert.That(analysis["pictures"]?["title"], Is.Null);
-                Assert.That(analysis["pictures"]?["header"], Is.Null);
-                Assert.That(analysis["pictures"]?["headers"], Is.Null);
+                Assert.That(analysis["pictures"]?.Value<string>("render_version"), Is.EqualTo("capture.scene.20-sceneview-headers-metrics"));
+                Assert.That(analysis["pictures"]?.Value<string>("title"), Is.Not.Empty);
+                Assert.That(analysis["pictures"]?.Value<int?>("header_height"), Is.GreaterThan(0));
+                Assert.That(analysis["pictures"]?["images"]?.Count(), Is.EqualTo(20));
+
+                JObject newAnalysis = Require("analysis.new", new JObject
+                {
+                    ["clips"] = new JArray(new JObject
+                    {
+                        ["character"] = character.name,
+                        ["clip"] = ArcWalkPath
+                    }),
+                    ["resolution"] = TestAnalysisResolution
+                });
+                Assert.That(newAnalysis.Value<string>("analysis_schema_version"), Is.EqualTo("analysis.new.v1"));
+                Assert.That(newAnalysis["pictures"]?.Value<int>("tile_count"), Is.EqualTo(20));
+                Assert.That(newAnalysis["pictures"]?.Value<string>("render_version"), Is.EqualTo("capture.scene.20-sceneview-headers-metrics"));
+                Assert.That(newAnalysis["pictures"]?.Value<string>("title"), Is.Not.Empty);
+                Assert.That(newAnalysis["pictures"]?.Value<string>("screenshot_generated_at"), Is.Not.Empty);
+                Assert.That(newAnalysis["pictures"]?["images"]?.Count(), Is.EqualTo(20));
+                foreach (JObject panel in (newAnalysis["pictures"]?["images"] as JArray).OfType<JObject>())
+                {
+                    Assert.That(panel["rect"]?["width"]?.Value<int>(), Is.GreaterThan(0));
+                    Assert.That(panel["rect"]?["height"]?.Value<int>(), Is.GreaterThan(0));
+                }
 
                 JObject compactContext = Require("scene.context", new JObject());
                 Assert.That(compactContext["history"], Is.Null, "History should be omitted from the default scene context response.");
@@ -143,9 +164,16 @@ namespace KimodoUnityBridge.Command.Tests
                     ? string.Empty
                     : Path.GetFullPath(Path.Combine(Application.dataPath, "..", relativePng));
                 Assert.That(relativePng, Is.Not.Null.And.EndsWith(".png"));
-                Assert.That(relativePng.Replace('\\', '/'), Does.StartWith("Library/KimodoData/"));
+                Assert.That(relativePng.Replace('\\', '/'), Does.StartWith("Assets/KimodoGeneratedClips/SceneCaptures/"));
                 Assert.That(File.Exists(absolutePng), Is.True, "animation.analyze did not write its composite PNG.");
                 Assert.That(new FileInfo(absolutePng).Length, Is.GreaterThan(0));
+                string newRelativePng = newAnalysis["pictures"]?.Value<string>("image_path");
+                string newAbsolutePng = string.IsNullOrWhiteSpace(newRelativePng)
+                    ? string.Empty
+                    : Path.GetFullPath(Path.Combine(Application.dataPath, "..", newRelativePng));
+                Assert.That(newRelativePng, Is.Not.Null.And.EndsWith(".png"));
+                Assert.That(File.Exists(newAbsolutePng), Is.True, "analysis.new did not write its composite PNG.");
+                Assert.That(new FileInfo(newAbsolutePng).Length, Is.GreaterThan(0));
             }
             finally
             {

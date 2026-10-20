@@ -31,7 +31,9 @@ namespace KimodoUnityBridge.Command
                 [MocapVideoAnalysisCommand] = AnalyzeMocapVideo,
                 [MocapPictureAnalysisCommand] = AnalyzeMocapPicture,
                 [AnimationAnalyzeCommand] = AnimationAnalyze,
+                [NewAnalysisCommand] = NewAnalysis,
                 [TransformCaptureCommand] = TransformCapture,
+                [SceneCaptureCommand] = SceneCapture,
                 [RetargetAnimationCommand] = RetargetAnimation,
                 [GenerateAnimationCommand] = GenerateAnimationAsset,
                 [PoseGetCommand] = PoseGet,
@@ -115,19 +117,33 @@ namespace KimodoUnityBridge.Command
                     new[] { "Installation requests cannot be canceled with generation.cancel." },
                     GetGenerationCommand),
                 AnimationAnalyzeCommand => CommandDocumentation(
-                    "Analyze one loaded animation Clip and produce structured motion data with renderable image evidence.",
+                    "Analyze one loaded animation Clip and produce structured motion data with the fixed 20-tile SceneView image evidence.",
                     new[] { "Use the scene character and a loaded Clip name or an Assets/Packages asset path.", "Open returned pictures before making visual claims; use structured fields for measurements and temporal positions." },
-                    new[] { "Returns one clip analysis and one pictures object; analysis frame positions use Timeline-global 60 FPS coordinates." },
+                    new[] { "Returns one clip analysis and one pictures object from the same synchronous SceneView pipeline as capture.clip; analysis frame positions use Timeline-global 60 FPS coordinates." },
                     new[] { "An external Clip asset is appended to the character's Kimodo Timeline for analysis; the source asset is not modified." },
                     new[] { "The clips array must contain exactly one Clip.", "Static pictures do not establish playback continuity, velocity smoothness, foot sliding, or other time-continuous properties." },
                     SceneContextCommand, PoseGetCommand, TransformCaptureCommand),
+                NewAnalysisCommand => CommandDocumentation(
+                    "Analyze one loaded scene Clip and render the fixed 20-tile SceneView evidence layout.",
+                    new[] { "Pass exactly one scene character and one loaded Clip name or Assets/Packages asset path.", "The layout contains 4 overview tiles, 8 key poses, and 8 step poses; the layout and line overlays are fixed." },
+                    new[] { "Returns one structured Clip analysis plus an image path, tile rectangles, title, timestamp, and colored headers.", "Sampled characters render with their original opaque materials." },
+                    new[] { "An external Clip asset is appended to the character's Kimodo Timeline for analysis; the source asset is not modified." },
+                    new[] { "The clips array must contain exactly one Clip.", "Static pictures do not establish playback continuity, velocity smoothness, foot sliding, or other time-continuous properties." },
+                    SceneContextCommand, AnimationAnalyzeCommand),
                 TransformCaptureCommand => CommandDocumentation(
-                    "Render a four-view image or a temporary scene-camera image and world-space joint measurements for a scene character or a sampled External Pose, optionally framed with scene objects.",
+                    "Render a four-view image or a synchronous real SceneView image and world-space joint measurements for a scene character or a sampled External Pose, optionally limited to requested objects.",
                     new[] { "Use character_path for the current scene character, a Pose reference returned by pose.get, or character_path plus timeline_frame_60 for direct single-frame sampling.", "Use @pose or @pose/<relative bone path> to include the evaluated Pose in the capture." },
-                    new[] { "Returns image_path, view/tile metadata, target references, and evaluated joint positions in world space. camera.mode=scene clones the requested camera in memory and never saves its temporary framing." },
+                    new[] { "Returns image_path, view/tile metadata, target references, and evaluated joint positions in world space. camera.mode=scene synchronously invokes the SceneView internal renderer and returns the image without a request_id. auto_frame adjusts the live SceneView camera around the requested transforms." },
                     new[] { "Creates image evidence but does not change scene poses. A direct timeline_frame_60 capture temporarily evaluates and then restores the Timeline time." },
                     new[] { "timeline_frame_60 and pose are mutually exclusive; transforms must resolve in the current scene or Pose." },
                     PoseGetCommand, SceneContextCommand),
+                SceneCaptureCommand => CommandDocumentation(
+                    "Synchronously capture the active Scene View; optional targets and camera settings can auto-frame the real SceneView camera with analysis-style projected bounds.",
+                    new[] { "Open the Scene View. Pass clips for a 20-tile 4+8+8 composite, or target paths for a single auto-framed viewport. capture.clip returns the image directly without a request_id." },
+                    new[] { "The image is rendered synchronously through the SceneView internal renderer using the real SceneView camera. Auto-framing changes the live SceneView state and intentionally leaves it in place for follow-up inspection.", "Clips composites include a centered animation title with capture time and timezone, and a colored header covering the top one-eighth of each tile. Pose headers use the original start/end/keyframe/foot-event palette and Timeline-global 60 FPS frame numbers. Ground Path shows analysis.root_trajectory.path_length_xz in meters and colors its trajectory by speed (green below 3.5 m/s, yellow from 3.5 to below 7 m/s, red at or above 7 m/s). Height over Time shows analysis.root_trajectory.duration_frames / 60 in seconds and colors its curve by acceleration magnitude (green below 5 m/s², yellow from 5 to below 10 m/s², red at or above 10 m/s²). Other overview headers show actual character counts. Fonts use 4x coverage sampling; source character materials are unchanged." },
+                    new[] { "No second Camera.Render pass is used. Clips mode only lays out pooled source-material characters and LineRenderers, and restores other renderer visibility after completion or failure. Scene lighting is unchanged; clips mode defaults to the SceneView preview light. Set camera.include_scene=true to keep environment geometry in the SceneView while hiding the authored source character; use camera.scene_lighting=true for Lit scene materials. The SceneView camera is left at the last tile." },
+                    new[] { "clips and targets are mutually exclusive. Clips mode uses orthographic framing per tile and center crops the real render without stretching. Empty pose slots stay blank. Editor GUI overlays are excluded." },
+                    SceneContextCommand),
                 RetargetAnimationCommand => CommandDocumentation(
                     "Retarget one loaded source Clip to another character in the current scene context.",
                     new[] { "Resolve both characters and the source Clip from current scene context before submission." },
@@ -247,7 +263,9 @@ namespace KimodoUnityBridge.Command
                 InstallServerCommand => new[] { "request_id", "status" },
                 MocapVideoAnalysisCommand or MocapPictureAnalysisCommand => new[] { "request_id", "status" },
                 AnimationAnalyzeCommand => new[] { "analysis_schema_version", "clip", "pictures" },
-                TransformCaptureCommand => new[] { "image_path", "width", "height", "tile_size", "tile_border_px", "camera_mode", "tiles", "source", "targets", "evaluated_joints_world" },
+                NewAnalysisCommand => new[] { "analysis_schema_version", "clip", "pictures" },
+                TransformCaptureCommand => new[] { "image_path", "width", "height", "tile_size", "tile_border_px", "camera_mode", "capture_type", "scene_view_camera", "scope", "tiles", "source", "targets", "evaluated_joints_world" },
+                SceneCaptureCommand => new[] { "image_path", "width", "height", "capture_type", "auto_framed", "projection", "targets", "tile_count", "pictures", "clip" },
                 RetargetAnimationCommand => new[] { "retargeted", "source_character", "character", "animation" },
                 GenerateAnimationCommand => new[] { "request_id", "status", "check", "warnings" },
                 PoseGetCommand => new[] { "pose", "source", "character_root", "data" },
@@ -295,7 +313,9 @@ namespace KimodoUnityBridge.Command
                     return new JObject { ["type"] = "string" };
                 case "camera_mode":
                     return new JObject { ["type"] = "string", ["enum"] = new JArray("auto", "scene") };
-                case "width": case "height": case "duration_frames_60": case "current_frame_60":
+                case "draw_mode": case "error_message": case "capture_type": case "projection":
+                    return new JObject { ["type"] = "string" };
+                case "width": case "height": case "tile_count": case "completed_tiles": case "duration_frames_60": case "current_frame_60":
                 case "destroyed_context_count": case "duration_frames": case "progress_current": case "progress_total": case "count": case "seed":
                 case "source_frame_count": case "frame_count": case "source_frame":
                     return new JObject { ["type"] = "integer" };
@@ -305,7 +325,8 @@ namespace KimodoUnityBridge.Command
                     return new JObject { ["type"] = "number" };
                 case "eta_seconds": case "progress_rate":
                     return NullableSchema(new JObject { ["type"] = "number" });
-                case "ok": case "retargeted": case "cleared": case "server_connected": case "canceled": case "target_alive":
+                case "ok": case "retargeted": case "cleared": case "server_connected": case "canceled": case "target_alive": case "auto_framed":
+                case "scene_lighting": case "show_skybox": case "show_gizmos":
                     return new JObject { ["type"] = "boolean" };
                 case "manual":
                     return new JObject { ["oneOf"] = new JArray(new JObject { ["type"] = "string" }, new JObject { ["type"] = "object" }) };
@@ -322,14 +343,24 @@ namespace KimodoUnityBridge.Command
                 case "animation":
                     return ObjectSchema("animation_id", "name", "character", "source", "kind", "start_timeline_frame_60", "duration_frames", "segments", "transition");
                 case "clip":
-                    return command == AnimationAnalyzeCommand
+                    return command == AnimationAnalyzeCommand || command == NewAnalysisCommand || command == SceneCaptureCommand
                         ? ObjectSchema("analysis_id", "session_id", "character", "name", "start_timeline_frame_60", "end_timeline_frame_60_exclusive", "analysis_mode", "phase_track_version", "phase_track", "keyframes", "foot_contacts", "root_trajectory", "endpoint_pose_comparison", "motion_profile")
                         : ObjectSchema("name", "character", "asset_path", "start_timeline_frame_60", "end_timeline_frame_60_exclusive");
                 case "picture": return ObjectSchema("tiles", "output", "environment");
                 case "pictures":
                 {
-                    JObject schema = ObjectSchema("picture", "level", "aspect", "tile_count", "render_version", "image_path", "width", "height", "resolution", "supersample", "images", "tile_paths", "cached", "header_height", "screenshot_generated_at");
+                    JObject schema = command == AnimationAnalyzeCommand || command == NewAnalysisCommand || command == SceneCaptureCommand
+                        ? ObjectSchema("picture", "level", "aspect", "tile_count", "render_version", "image_path", "width", "height", "images", "cached")
+                        : ObjectSchema("picture", "level", "aspect", "tile_count", "render_version", "image_path", "width", "height", "resolution", "supersample", "images", "tile_paths", "cached", "header_height", "screenshot_generated_at");
                     schema["properties"]["picture"] = ObjectSchema("tiles", "output", "environment");
+                    if (command == AnimationAnalyzeCommand || command == NewAnalysisCommand || command == SceneCaptureCommand)
+                    {
+                        schema["properties"]["title"] = new JObject { ["type"] = "string" };
+                        schema["properties"]["screenshot_generated_at"] = new JObject { ["type"] = "string", ["format"] = "date-time" };
+                        schema["properties"]["header_height"] = new JObject { ["type"] = "integer" };
+                        schema["properties"]["images"] = ArraySchema("object", "id", "tile", "rect", "description", "header");
+                        schema["properties"]["images"]["items"]["properties"]["header"] = ObjectSchema("text", "color", "height", "character_count");
+                    }
                     return schema;
                 }
                 case "animations": return ArraySchema("object", "animation_id", "name", "character", "source", "kind", "start_timeline_frame_60", "duration_frames", "segments", "transition");
@@ -344,7 +375,9 @@ namespace KimodoUnityBridge.Command
                     return schema;
                 }
                 case "tiles": return ArraySchema("object", "tile", "view", "projection", "transforms", "bounds");
-                case "targets": return ArraySchema("object", "key", "world_position");
+                case "targets": return command == SceneCaptureCommand
+                    ? ArraySchema("string")
+                    : ArraySchema("object", "key", "world_position");
                 case "joints":
                 {
                     JObject schema = ArraySchema("object", "joint", "world_position", "target_position", "distance_m", "tolerance_m", "status");
@@ -970,7 +1003,7 @@ namespace KimodoUnityBridge.Command
             }, true);
         }
 
-        private static PropertyDefinition RequiredAnalysisClips()
+        private static PropertyDefinition RequiredAnalysisClips(bool required = true)
         {
             return new PropertyDefinition("clips", new JObject
             {
@@ -989,7 +1022,7 @@ namespace KimodoUnityBridge.Command
                     },
                     ["required"] = new JArray("character", "clip")
                 }
-            }, true);
+            }, required);
         }
 
         private static PropertyDefinition Enum(string name, params string[] values)

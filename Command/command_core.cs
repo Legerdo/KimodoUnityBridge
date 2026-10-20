@@ -24,9 +24,11 @@ namespace KimodoUnityBridge.Command
         public const string InstallServerCommand = "server.install";
         public const string GenerateAnimationCommand = "animation.generate";
         public const string AnimationAnalyzeCommand = "animation.analyze";
+        public const string NewAnalysisCommand = "analysis.new";
         public const string MocapVideoAnalysisCommand = "analysis.video";
         public const string MocapPictureAnalysisCommand = "analysis.picture";
-        public const string TransformCaptureCommand = "transform.capture";
+        public const string TransformCaptureCommand = "capture.transform";
+        public const string SceneCaptureCommand = "capture.clip";
         public const string RetargetAnimationCommand = "animation.retarget";
         public const string PoseGetCommand = "pose.get";
         public const string PoseTestCommand = "pose.test";
@@ -69,7 +71,7 @@ namespace KimodoUnityBridge.Command
                         "Start an asynchronous project-local QuickServer installation task. Returns only request_id and status; poll that request with generation.get. Models and the Python environment are preserved.",
                         Properties()),
                     CommandDefinition(AnimationAnalyzeCommand,
-                        "Analyze one animation clip at 60 FPS and render graph-space picture evidence. Pass a clips array containing exactly one scene character and one loaded Clip name or Assets/Packages Clip path. The result contains one clip analysis and one pictures evidence object; temporal positions use absolute Timeline-global 60 FPS frames. External Clips are appended to the character's Kimodo Timeline and never modified.",
+                        "Analyze one animation clip at 60 FPS and render the fixed 20-tile SceneView picture evidence. Pass a clips array containing exactly one scene character and one loaded Clip name or Assets/Packages Clip path. The result contains one clip analysis and one pictures evidence object; temporal positions use absolute Timeline-global 60 FPS frames. External Clips are appended to the character's Kimodo Timeline and never modified.",
                         Properties(
                             RequiredAnalysisClips(),
                             new PropertyDefinition("picture", new JObject
@@ -83,6 +85,18 @@ namespace KimodoUnityBridge.Command
                                 ["minimum"] = 64,
                                 ["maximum"] = 4096,
                                 ["description"] = "Final picture tile resolution in pixels; accepts 64 through 4096. Rendering uses a 2x supersample and downsamples to this size. Defaults to 1920."
+                            }, false))),
+                    CommandDefinition(NewAnalysisCommand,
+                        "Analyze one scene Clip and render the fixed 20-tile SceneView analysis layout. The result returns the image path, tile rectangles, headers, and the structured Clip analysis.",
+                        Properties(
+                            RequiredAnalysisClips(),
+                            new PropertyDefinition("resolution", new JObject
+                            {
+                                ["type"] = "integer",
+                                ["minimum"] = 64,
+                                ["maximum"] = 4096,
+                                ["default"] = 1920,
+                                ["description"] = "Final composite width in pixels; the fixed 16:9 layout is rendered at the matching height."
                             }, false))),
                     CommandDefinition(MocapVideoAnalysisCommand,
                         "Estimate a per-frame SMPL-X pose sequence from a local video. This starts an asynchronous analysis job; poll generation.get with its request_id. The result includes raw SMPL-X poses and matching FullBody constraints in the existing raw constraint format; it does not create or apply a Unity animation.",
@@ -99,7 +113,7 @@ namespace KimodoUnityBridge.Command
                         Properties(
                             Required("image_path", "string", "Absolute path to a local PNG or JPEG readable by QuickServer."))),
                     CommandDefinition(TransformCaptureCommand,
-                        "Capture the current scene or an External Pose returned by pose.get together with scene objects, in world space. Optionally sample one absolute Timeline-global 60 FPS frame directly with timeline_frame_60. Returns a four-view image by default, or a single scene-camera image when camera.mode is scene; restores the original Timeline time and never saves temporary camera changes.",
+                        "Synchronously capture the current scene or an External Pose returned by pose.get together with scene objects, in world space. Optionally sample one absolute Timeline-global 60 FPS frame directly with timeline_frame_60. Returns a four-view image by default, or a direct SceneView image when camera.mode is scene.",
                         Properties(
                             Optional("character_path", "string", "Active-scene character hierarchy path; required unless pose is supplied."),
                             new PropertyDefinition("pose", PoseReferenceSchema(), false),
@@ -119,21 +133,50 @@ namespace KimodoUnityBridge.Command
                             {
                                 ["type"] = "object",
                                 ["additionalProperties"] = false,
-                                ["description"] = "Optional temporary scene-camera capture. The source camera is cloned, adjusted in memory, rendered, and discarded; the scene camera is never saved.",
+                                    ["description"] = "Optional SceneView capture using the real SceneView camera. Scene mode supports automatic framing around the requested transforms.",
                                 ["properties"] = new JObject
                                 {
                                     ["mode"] = new JObject { ["type"] = "string", ["enum"] = new JArray("auto", "scene"), ["default"] = "auto", ["description"] = "Use the existing four-view renderer (auto) or a scene camera (scene)." },
-                                    ["path"] = new JObject { ["type"] = "string", ["description"] = "Active-scene camera hierarchy path; defaults to Main Camera when mode is scene." },
-                                    ["auto_frame"] = new JObject { ["type"] = "boolean", ["default"] = true, ["description"] = "Temporarily frame the requested transforms while preserving the source camera's viewing direction." },
-                                    ["resolution"] = new JObject { ["type"] = "array", ["minItems"] = 2, ["maxItems"] = 2, ["items"] = new JObject { ["type"] = "integer", ["minimum"] = 64, ["maximum"] = 4096 }, ["description"] = "Scene-camera output [width,height]." },
-                                    ["position"] = new JObject { ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3, ["items"] = new JObject { ["type"] = "number" }, ["description"] = "Optional temporary world position [x,y,z]." },
-                                    ["rotation"] = new JObject { ["type"] = "array", ["minItems"] = 4, ["maxItems"] = 4, ["items"] = new JObject { ["type"] = "number" }, ["description"] = "Optional temporary world rotation quaternion [x,y,z,w]." },
-                                    ["field_of_view"] = new JObject { ["type"] = "number", ["minimum"] = 1, ["maximum"] = 179, ["description"] = "Optional temporary perspective field of view." },
-                                    ["near_clip"] = new JObject { ["type"] = "number", ["minimum"] = 0.001, ["description"] = "Optional temporary near clip plane." },
-                                    ["far_clip"] = new JObject { ["type"] = "number", ["minimum"] = 0.01, ["description"] = "Optional temporary far clip plane." },
-                                    ["orthographic"] = new JObject { ["type"] = "boolean", ["description"] = "Optional temporary projection mode." },
-                                    ["orthographic_size"] = new JObject { ["type"] = "number", ["minimum"] = 0.01, ["description"] = "Optional temporary orthographic size." },
-                                    ["background"] = new JObject { ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 4, ["items"] = new JObject { ["type"] = "number", ["minimum"] = 0, ["maximum"] = 1 }, ["description"] = "Temporary clear color [r,g,b] or [r,g,b,a]." }
+                                    ["auto_frame"] = new JObject { ["type"] = "boolean", ["default"] = true, ["description"] = "Frame requested transforms through the live SceneView camera." },
+                                    ["scope"] = new JObject { ["type"] = "string", ["enum"] = new JArray("targets", "scene"), ["default"] = "targets", ["description"] = "Render only requested transforms or leave the complete current scene visible." },
+                                    ["direction"] = new JObject { ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3, ["items"] = new JObject { ["type"] = "number" }, ["description"] = "Camera-to-target direction used for framing [x,y,z]." },
+                                    ["orthographic"] = new JObject { ["type"] = "boolean", ["default"] = true, ["description"] = "Projection mode for an auto-framed SceneView." },
+                                    ["padding"] = new JObject { ["type"] = "number", ["minimum"] = 0.01, ["default"] = 1.1, ["description"] = "Projected bounds multiplier used for framing." }
+                                }
+                            }, false))),
+                    CommandDefinition(SceneCaptureCommand,
+                        "Synchronously capture the real SceneView. Pass clips for the original 4+8+8 analysis layout: pooled source-material poses and trajectories are enabled per tile, captured sequentially and composited. Otherwise capture the current viewport, optionally framing targets. Viewport settings remain in place.",
+                        Properties(
+                            RequiredAnalysisClips(false),
+                            new PropertyDefinition("resolution", new JObject
+                            {
+                                ["type"] = "integer", ["minimum"] = 64, ["maximum"] = 4096, ["default"] = 1920,
+                                ["description"] = "Composite width for clips mode (16:9). No effect on a single viewport capture."
+                            }, false),
+                            new PropertyDefinition("targets", new JObject
+                            {
+                                ["type"] = "array",
+                                ["minItems"] = 1,
+                                ["items"] = new JObject { ["type"] = "string" },
+                                ["description"] = "Optional active-scene hierarchy paths used to calculate the SceneView framing bounds."
+                            }, false),
+                            new PropertyDefinition("camera", new JObject
+                            {
+                                ["type"] = "object",
+                                ["additionalProperties"] = false,
+                                ["properties"] = new JObject
+                                {
+                                    ["auto_frame"] = new JObject { ["type"] = "boolean", ["default"] = false, ["description"] = "Frame the supplied targets through the real SceneView camera." },
+                                    ["direction"] = new JObject { ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3, ["items"] = new JObject { ["type"] = "number" }, ["description"] = "Camera-to-target direction used for analysis-style framing [x,y,z]." },
+                                    ["orthographic"] = new JObject { ["type"] = "boolean", ["default"] = true, ["description"] = "Projection mode for an auto-framed SceneView." },
+                                    ["padding"] = new JObject { ["type"] = "number", ["minimum"] = 0.01, ["default"] = 1.1, ["description"] = "Projected bounds multiplier used for framing." },
+                                    ["near_clip"] = new JObject { ["type"] = "number", ["minimum"] = 0.001, ["description"] = "Optional SceneView camera near clip plane." },
+                                    ["far_clip"] = new JObject { ["type"] = "number", ["minimum"] = 0.01, ["description"] = "Optional SceneView camera far clip plane." },
+                                    ["scene_lighting"] = new JObject { ["type"] = "boolean", ["default"] = true, ["description"] = "Whether SceneView uses scene lighting. Clips layout mode defaults to false to preserve source material colors." },
+                                    ["show_skybox"] = new JObject { ["type"] = "boolean", ["default"] = false, ["description"] = "Whether SceneView shows the skybox." },
+                                    ["include_scene"] = new JObject { ["type"] = "boolean", ["default"] = false, ["description"] = "Clips mode only: keep environment renderers from the active scene visible while hiding the authored source character. Temporary sampled poses and LineRenderers are still instantiated in the active scene." },
+                                    ["show_gizmos"] = new JObject { ["type"] = "boolean", ["default"] = false, ["description"] = "Whether SceneView gizmos are visible." },
+                                    ["show_grid"] = new JObject { ["type"] = "boolean", ["default"] = false, ["description"] = "Whether the SceneView grid is visible." }
                                 }
                             }, false))),
                     CommandDefinition(RetargetAnimationCommand,
@@ -273,6 +316,7 @@ namespace KimodoUnityBridge.Command
                         Route("analyze a video for SMPL-X poses", MocapVideoAnalysisCommand, "then " + GetGenerationCommand),
                         Route("analyze a picture for one SMPL-X pose", MocapPictureAnalysisCommand, "then " + GetGenerationCommand),
                         Route("analyze and render motion", AnimationAnalyzeCommand, "returns one composite picture and self-describing tiles"),
+                        Route("analyze and render the fixed 20-tile SceneView layout", NewAnalysisCommand, "returns image_path, tile rectangles, headers, and structured Clip analysis"),
                         Route("materialize or edit a pose", PoseGetCommand, "then pose.set"),
                         Route("measure actual joint positions or test contact reach", PoseGetCommand, "then " + PoseTestCommand),
                         Route("obtain a reusable root trajectory", AnimationAnalyzeCommand, "then reference root_trajectory.path from a generation root_path constraint"),

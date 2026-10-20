@@ -38,6 +38,41 @@ namespace KimodoUnityBridge.Command
             objects.Add(lineObject);
         }
 
+        private static Color MetricColor(float value, float redThreshold)
+        {
+            float yellowThreshold = redThreshold * .5f;
+            if (value >= redThreshold) return new Color(.95f, .08f, .08f, 1f);
+            if (value >= yellowThreshold) return new Color(1f, .9f, .04f, 1f);
+            return new Color(.1f, .85f, .25f, 1f);
+        }
+
+        private static void CreateMetricLine(
+            List<GameObject> objects,
+            IReadOnlyList<Vector3> points,
+            IReadOnlyList<float> metrics,
+            float redThreshold,
+            float width)
+        {
+            if (points == null || metrics == null || points.Count < 2) return;
+            int segmentCount = Mathf.Min(points.Count - 1, metrics.Count);
+            if (segmentCount < 1) return;
+
+            var run = new List<Vector3> { points[0] };
+            Color runColor = MetricColor(Mathf.Abs(metrics[0]), redThreshold);
+            for (int segment = 0; segment < segmentCount; segment++)
+            {
+                Color color = MetricColor(Mathf.Abs(metrics[segment]), redThreshold);
+                if (segment > 0 && color != runColor)
+                {
+                    CreateWorldLine(objects, run, runColor, width);
+                    run = new List<Vector3> { points[segment] };
+                    runColor = color;
+                }
+                run.Add(points[segment + 1]);
+            }
+            if (run.Count >= 2) CreateWorldLine(objects, run, runColor, width);
+        }
+
         private static void CreateGroundMarker(
             List<GameObject> objects,
             Vector3 position,
@@ -88,6 +123,15 @@ namespace KimodoUnityBridge.Command
             var snapshots = new Dictionary<int, TestPoseSnapshot>();
             try
             {
+                // The retarget preview factory owns material copies; analysis poses use the source references.
+                Transform originalRoot = subject.Subject.Character.Animator.transform;
+                foreach (Renderer original in originalRoot.GetComponentsInChildren<Renderer>(true))
+                {
+                    string path = AnimationUtility.CalculateTransformPath(original.transform, originalRoot);
+                    Transform target = string.IsNullOrEmpty(path) ? source.Root.transform : source.Root.transform.Find(path);
+                    Renderer renderer = target != null ? target.GetComponent(original.GetType()) as Renderer : null;
+                    if (renderer != null) renderer.sharedMaterials = original.sharedMaterials;
+                }
                 foreach (int frame in frames.Distinct().OrderBy(item => item))
                 {
                     KimodoMarkerSampleResult sample = subject.GetSample(frame);
@@ -126,6 +170,21 @@ namespace KimodoUnityBridge.Command
             return CreateSnapshotVirtualPose(snapshot, tint, alpha, targetPosition, true);
         }
 
+        private static TestVirtualPose CreateTestVirtualPose(
+            TestPoseSnapshot snapshot,
+            Color tint,
+            float alpha,
+            Vector3? targetPosition,
+            bool applyTint)
+        {
+            return CreateSnapshotVirtualPose(snapshot, tint, alpha, targetPosition, applyTint);
+        }
+
+        private static TestVirtualPose CreatePooledOriginalMaterialPose(TestPoseSnapshot snapshot)
+        {
+            return CreateSnapshotVirtualPose(snapshot, Color.white, 1f, null, false, false);
+        }
+
         private static TestVirtualPose CreateGhostVirtualPose(
             TestPoseSnapshot snapshot,
             Color tint,
@@ -140,7 +199,8 @@ namespace KimodoUnityBridge.Command
             Color tint,
             float alpha,
             Vector3? targetPosition,
-            bool useGhostMaterial)
+            bool useGhostMaterial,
+            bool cloneMaterials = true)
         {
             GameObject preview = MoveToAnalysisSessionRoot(UnityEngine.Object.Instantiate(snapshot.SourcePrefab));
             preview.name = "Kimodo Test Virtual Pose";
@@ -155,7 +215,10 @@ namespace KimodoUnityBridge.Command
             snapshot.Apply(preview);
             var transientMaterials = new List<Material>();
             var originalMaterials = new List<Tuple<Renderer, Material[]>>();
-            ApplyPoseMaterials(preview, tint, useGhostMaterial, transientMaterials, originalMaterials);
+            if (cloneMaterials)
+            {
+                ApplyPoseMaterials(preview, tint, useGhostMaterial, transientMaterials, originalMaterials);
+            }
             SetPreviewRenderersEnabled(preview, false);
             TestVirtualPose result = targetPosition.HasValue
                 ? new TestVirtualPose(preview, transientMaterials, alpha, targetPosition.Value)
@@ -188,7 +251,6 @@ namespace KimodoUnityBridge.Command
                 if (renderer is SkinnedMeshRenderer skinned)
                 {
                     skinned.updateWhenOffscreen = true;
-                    skinned.localBounds = new Bounds(Vector3.zero, Vector3.one * 100f);
                 }
                 renderer.enabled = enabled;
             }
@@ -209,10 +271,8 @@ namespace KimodoUnityBridge.Command
 
         private static Bounds CalculateRawPreviewPoseBounds(SubjectPictureData subject, int localFrame)
         {
-            using (EvaluatedPosePreview preview = CreateAnalysisPosePreview(subject, localFrame))
-            {
-                return CalculateSkinnedBounds(preview.Root);
-            }
+            // Bounds were sampled with these same poses before layout began.
+            return subject.PoseBounds[Mathf.Clamp(localFrame, 0, subject.PoseBounds.Length - 1)];
         }
 
         private static EvaluatedPosePreview CreateAnalysisPosePreview(SubjectPictureData subject, int localFrame)
@@ -259,7 +319,6 @@ namespace KimodoUnityBridge.Command
             foreach (SkinnedMeshRenderer renderer in preview.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
                 renderer.updateWhenOffscreen = true;
-                renderer.localBounds = new Bounds(Vector3.zero, Vector3.one * 100f);
             }
             return preview;
         }

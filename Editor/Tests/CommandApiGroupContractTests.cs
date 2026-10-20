@@ -25,7 +25,7 @@ namespace KimodoUnityBridge.Command.Tests
             JObject document = Definitions();
             JObject poseGet = Tool(document, "pose.get");
             JObject poseSet = Tool(document, "pose.set");
-            JObject transformCapture = Tool(document, "transform.capture");
+            JObject transformCapture = Tool(document, "capture.transform");
             JObject generation = Tool(document, "animation.generate");
 
             JObject poseReference = (JObject)poseGet["inputSchema"]["properties"]["source"];
@@ -49,6 +49,8 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(camera["properties"]?["path"]?.Value<string>("type"), Is.EqualTo("string"));
             Assert.That(camera["properties"]?["resolution"]?["minItems"]?.Value<int>(), Is.EqualTo(2));
             Assert.That(camera["properties"]?["resolution"]?["maxItems"]?.Value<int>(), Is.EqualTo(2));
+            Assert.That(transformCapture["outputSchema"]?["properties"]?["image_path"]?.Value<string>("type"), Is.EqualTo("string"));
+            Assert.That(((JObject)transformCapture["outputSchema"]["properties"]).Property("request_id"), Is.Null);
 
             JObject point = ((JArray)generation["inputSchema"]["properties"]["constraints"]["items"]["oneOf"])
                 .Values<JObject>()
@@ -60,6 +62,31 @@ namespace KimodoUnityBridge.Command.Tests
         }
 
         [Test]
+        [Category("Capture")]
+        public void SceneCapture_IsSynchronousAndHasNoPollCommand()
+        {
+            JObject document = Definitions();
+            JObject capture = Tool(document, "capture.clip");
+
+            Assert.That(capture["inputSchema"]?["properties"]?["targets"]?["type"]?.Value<string>(), Is.EqualTo("array"));
+            Assert.That(capture["inputSchema"]?["properties"]?["clips"]?["minItems"]?.Value<int>(), Is.EqualTo(1));
+            Assert.That(capture["inputSchema"]?["properties"]?["clips"]?["maxItems"]?.Value<int>(), Is.EqualTo(1));
+            Assert.That(((JArray)capture["inputSchema"]?["required"]).Values<string>(), Does.Not.Contain("clips"));
+            Assert.That(capture["inputSchema"]?["properties"]?["resolution"]?["default"]?.Value<int>(), Is.EqualTo(1920));
+            JObject sceneCamera = (JObject)capture["inputSchema"]?["properties"]?["camera"];
+            Assert.That(sceneCamera, Is.Not.Null);
+            Assert.That(sceneCamera["properties"]?["auto_frame"]?.Value<string>("type"), Is.EqualTo("boolean"));
+            Assert.That(sceneCamera["properties"]?["direction"]?["minItems"]?.Value<int>(), Is.EqualTo(3));
+            Assert.That(sceneCamera["properties"]?["orthographic"]?.Value<string>("type"), Is.EqualTo("boolean"));
+            Assert.That(capture["outputSchema"]?["properties"]?["request_id"], Is.Null);
+            Assert.That(capture["outputSchema"]?["properties"]?["image_path"]?.Value<string>("type"), Is.EqualTo("string"));
+            Assert.That(capture["outputSchema"]?["properties"]?["tile_count"]?.Value<string>("type"), Is.EqualTo("integer"));
+            Assert.That(capture["outputSchema"]?["properties"]?["pictures"]?.Value<string>("type"), Is.EqualTo("object"));
+            string[] removedPollCommands = { "transform.capture.get", "capture.scene.get", "capture.transform.get", "capture.clip.get" };
+            Assert.That(document["tools"]?.Values<JObject>().Any(tool => removedPollCommands.Contains(tool.Value<string>("name"))), Is.False);
+        }
+
+        [Test]
         [Category("Generation")]
         public void GenerationCommands_ShareRequestIdLifecycleContract()
         {
@@ -68,6 +95,7 @@ namespace KimodoUnityBridge.Command.Tests
             JObject get = Tool(document, "generation.get");
             JObject cancel = Tool(document, "generation.cancel");
             JObject analyze = Tool(document, "animation.analyze");
+            JObject newAnalysis = Tool(document, "analysis.new");
             JObject videoAnalysis = Tool(document, "analysis.video");
             JObject pictureAnalysis = Tool(document, "analysis.picture");
             JObject retarget = Tool(document, "animation.retarget");
@@ -83,6 +111,15 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(analyzeClips?["items"]?["properties"]?["clip"], Is.Not.Null);
             Assert.That(analyze["description"]?.Value<string>(), Does.Contain("one scene character"));
             Assert.That(analyze["description"]?.Value<string>(), Does.Contain("Timeline-global 60 FPS frames"));
+            JObject newClips = (JObject)newAnalysis["inputSchema"]?["properties"]?["clips"];
+            Assert.That(newClips?.Value<int>("minItems"), Is.EqualTo(1));
+            Assert.That(newClips?.Value<int>("maxItems"), Is.EqualTo(1));
+            Assert.That(newAnalysis["inputSchema"]?["properties"]?["picture"], Is.Null);
+            Assert.That(newAnalysis["description"]?.Value<string>(), Does.Contain("fixed 20-tile"));
+            Assert.That(newAnalysis["outputSchema"]?["properties"]?["pictures"]?["properties"]?["image_path"], Is.Not.Null);
+            Assert.That(newAnalysis["outputSchema"]?["properties"]?["pictures"]?["properties"]?["images"], Is.Not.Null);
+            Assert.That(newAnalysis["outputSchema"]?["properties"]?["pictures"]?["properties"]?["title"], Is.Null);
+            Assert.That(newAnalysis["outputSchema"]?["properties"]?["pictures"]?["properties"]?["header"], Is.Null);
             Assert.That(videoAnalysis["inputSchema"]?["properties"]?["video_path"], Is.Not.Null);
             Assert.That(pictureAnalysis["inputSchema"]?["properties"]?["image_path"], Is.Not.Null);
             Assert.That(videoAnalysis["inputSchema"]?["properties"]?["person"]?["enum"], Is.Not.Null);
@@ -220,12 +257,12 @@ namespace KimodoUnityBridge.Command.Tests
             Assert.That(analyze["outputSchema"]?["properties"]?["clip"]?["properties"]?["analysis_id"]?.Value<string>("type"), Is.EqualTo("string"));
             Assert.That(analyze["outputSchema"]?["properties"]?["clip"]?["properties"]?["session_id"]?.Value<string>("type"), Is.EqualTo("string"));
             Assert.That(analyze["outputSchema"]?["properties"]?["clip"]?["properties"]?["analysis_schema_version"], Is.Null);
-            Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["title"], Is.Null);
-            Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["header"], Is.Null);
+            Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["title"], Is.Not.Null);
+            Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["header_height"], Is.Not.Null);
 
             JObject poll2 = Tool(document, "generation.get");
             Assert.That(poll2["outputSchema"]?["properties"]?["animation_id"]?.Value<string>("type"), Is.EqualTo("string"));
-            Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["headers"], Is.Null);
+            Assert.That(analyze["outputSchema"]?["properties"]?["pictures"]?["properties"]?["images"], Is.Not.Null);
 
             JObject error = (JObject)poll2["outputSchema"]["properties"]["error"];
             Assert.That(error.Value<string>("type"), Is.EqualTo("object"));
