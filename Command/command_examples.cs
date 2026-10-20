@@ -23,10 +23,15 @@ namespace KimodoUnityBridge.Command
                     @"{'image_path':'C:/data/pose.jpg'}");
                 case AnimationAnalyzeCommand: return Examples("Analyze one returned Clip; open the returned image to inspect it.",
                     @"{'clips':[{'character':'<character>','clip':'<clip>'}],'picture':{'output':'composite'},'resolution':512}");
+                case NewAnalysisCommand: return Examples("Render the fixed opaque six-panel analysis image for one Clip.",
+                    @"{'clips':[{'character':'<character>','clip':'<clip>'}],'resolution':1920}");
                 case RetargetAnimationCommand: return Examples("Retarget a loaded Clip to another scene character.",
                     @"{'source_character':'<source character>','animation':'<clip>','target_character':'<target character>','output':{'name':'RetargetedMotion'}}");
                 case TransformCaptureCommand: return Examples("Capture the External Pose returned by pose.get together with scene objects, without moving the scene character.",
                     @"{'pose':{'track':'<returned pose track>','index':0},'transforms':['@pose','<table hierarchy path>','<apple hierarchy path>'],'resolution':768}");
+                case SceneCaptureCommand: return new JArray(
+                    Example("Capture the original 20-tile layout through successive real SceneView repaints.", @"{'clips':[{'character':'UnityChanSSU','clip':'Packages/com.unity.kimodo_unity_motion_tools/Editor/Tests/Fixtures/arc_walk_left_loop.anim'}],'resolution':1920}"),
+                    Example("Capture one real SceneView repaint, optionally auto-framed on scene targets.", @"{'targets':['CharacterRoot'],'camera':{'auto_frame':true,'direction':[1,0.75,-1],'orthographic':true,'padding':1.1,'scene_lighting':false,'show_skybox':false,'show_gizmos':false}}"));
                 case GenerateAnimationCommand: return new JArray(
                     Example("Submit one Clip request; use the returned request_id with generation.get.",
                         @"{'character':'<character>','prompt':'<short action for one Clip>','duration_frames':120}"),

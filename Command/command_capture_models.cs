@@ -102,6 +102,7 @@ namespace KimodoUnityBridge.Command
                 Vector3[] head,
                 bool[] leftContacts,
                 bool[] rightContacts,
+                Bounds[] poseBounds,
                 Bounds firstBounds,
                 Bounds lastBounds,
                 Bounds bounds,
@@ -121,6 +122,7 @@ namespace KimodoUnityBridge.Command
                 Head = head;
                 LeftContacts = leftContacts;
                 RightContacts = rightContacts;
+                PoseBounds = poseBounds;
                 FirstBounds = firstBounds;
                 LastBounds = lastBounds;
                 Bounds = bounds;
@@ -148,6 +150,7 @@ namespace KimodoUnityBridge.Command
             public Vector3[] Head { get; }
             public bool[] LeftContacts { get; }
             public bool[] RightContacts { get; }
+            public Bounds[] PoseBounds { get; }
             public Bounds FirstBounds { get; }
             public Bounds LastBounds { get; }
             public Bounds Bounds { get; }
@@ -675,9 +678,16 @@ namespace KimodoUnityBridge.Command
             public GameObject Preview { get; }
             private EvaluatedPosePreview EvaluatedPreview { get; }
             public IReadOnlyList<Material> TransientMaterials { get; }
-            public float Alpha { get; }
-            public Vector3 TargetPosition { get; }
-            public bool HasTargetPosition { get; }
+            public float Alpha { get; private set; }
+            public Vector3 TargetPosition { get; private set; }
+            public bool HasTargetPosition { get; private set; }
+
+            public void Configure(float alpha, Vector3? targetPosition = null)
+            {
+                Alpha = alpha;
+                HasTargetPosition = targetPosition.HasValue;
+                TargetPosition = targetPosition.GetValueOrDefault();
+            }
 
             private readonly List<Tuple<Renderer, Material[]>> originalMaterials =
                 new List<Tuple<Renderer, Material[]>>();
@@ -700,6 +710,83 @@ namespace KimodoUnityBridge.Command
                 }
                 if (EvaluatedPreview != null) EvaluatedPreview.Dispose();
                 else if (Preview != null) UnityEngine.Object.DestroyImmediate(Preview);
+            }
+        }
+
+        /// <summary>
+        /// Owns every transient pose object used by one analysis.new composite.
+        /// The renderer only enables one of these objects (or a selected subset)
+        /// for each tile; it never instantiates the same frame twice.
+        /// </summary>
+        private sealed class NewAnalysisPosePool : IDisposable
+        {
+            private readonly Dictionary<SubjectPictureData, TestPosePlan> plans =
+                new Dictionary<SubjectPictureData, TestPosePlan>();
+            private readonly Dictionary<SubjectPictureData, Dictionary<int, TestVirtualPose>> poses =
+                new Dictionary<SubjectPictureData, Dictionary<int, TestVirtualPose>>();
+
+            public NewAnalysisPosePool(IReadOnlyList<PictureTile> tiles)
+            {
+                var framesBySubject = new Dictionary<SubjectPictureData, HashSet<int>>();
+                foreach (PictureTile tile in tiles ?? Array.Empty<PictureTile>())
+                {
+                    if (tile?.Subject == null) continue;
+                    if (!framesBySubject.TryGetValue(tile.Subject, out HashSet<int> frames))
+                    {
+                        frames = new HashSet<int>();
+                        framesBySubject[tile.Subject] = frames;
+                    }
+
+                    int last = Math.Max(0, tile.Subject.Pelvis.Length - 1);
+                    frames.Add(0);
+                    frames.Add(last);
+                    foreach (int frame in tile.TrajectoryFrames ?? new List<int>()) frames.Add(Mathf.Clamp(frame, 0, last));
+                    if (tile.Presentation == "test_pose") frames.Add(Mathf.Clamp(tile.Frame, 0, last));
+                    if (tile.TestTileType == "height_time_track")
+                    {
+                        foreach (int frame in BuildHeightTimePoseFrames(tile.Subject)) frames.Add(Mathf.Clamp(frame, 0, last));
+                    }
+                }
+
+                foreach (KeyValuePair<SubjectPictureData, HashSet<int>> item in framesBySubject)
+                {
+                    List<int> frames = item.Value.OrderBy(frame => frame).ToList();
+                    TestPosePlan plan = BuildTestPosePlan(item.Key, frames);
+                    plans[item.Key] = plan;
+                    var subjectPoses = new Dictionary<int, TestVirtualPose>();
+                    foreach (int frame in frames)
+                    {
+                        // Reuse the source material and color for every pooled pose.
+                        subjectPoses[frame] = CreatePooledOriginalMaterialPose(plan.Get(frame));
+                    }
+                    poses[item.Key] = subjectPoses;
+                }
+            }
+
+            public TestPosePlan GetPlan(SubjectPictureData subject)
+            {
+                return subject != null && plans.TryGetValue(subject, out TestPosePlan plan) ? plan : null;
+            }
+
+            public TestVirtualPose Get(SubjectPictureData subject, int frame, Vector3? targetPosition = null)
+            {
+                if (subject == null || !poses.TryGetValue(subject, out Dictionary<int, TestVirtualPose> subjectPoses) ||
+                    !subjectPoses.TryGetValue(frame, out TestVirtualPose pose))
+                {
+                    throw new InvalidOperationException($"Analysis pose pool is missing frame {frame}.");
+                }
+                pose.Configure(1f, targetPosition);
+                return pose;
+            }
+
+            public void Dispose()
+            {
+                foreach (Dictionary<int, TestVirtualPose> subjectPoses in poses.Values)
+                    foreach (TestVirtualPose pose in subjectPoses.Values)
+                        pose?.Dispose();
+                foreach (TestPosePlan plan in plans.Values) plan?.Dispose();
+                poses.Clear();
+                plans.Clear();
             }
         }
 

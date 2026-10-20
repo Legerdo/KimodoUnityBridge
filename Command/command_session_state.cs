@@ -713,6 +713,15 @@ namespace KimodoUnityBridge.Command
             Scene activeScene = SceneManager.GetActiveScene();
             RequireSingleSceneSession(activeScene);
             GameObject sceneRoot = GetSceneSessionRoots(activeScene).SingleOrDefault();
+            // A domain reload can preserve the hidden scene workspace while
+            // clearing the static registration table. Re-scan persisted metadata
+            // before attempting to create a second context in the same scene.
+            if (currentTimelineSession == null && sceneRoot != null && timelineSessionsRestored)
+            {
+                firstTimelineSession = null;
+                lock (TimelineSessionsLock) TimelineSessions.Clear();
+                timelineSessionsRestored = false;
+            }
             if (currentTimelineSession != null &&
                 (currentTimelineSession.SessionRoot == null ||
                  currentTimelineSession.SessionRoot.scene != activeScene ||
@@ -894,7 +903,17 @@ namespace KimodoUnityBridge.Command
                 Ok(AnimationAnalyzeCore(arguments, allowActiveGenerationRange: false)));
         }
 
-        private static JObject AnimationAnalyzeCore(JObject arguments, bool allowActiveGenerationRange)
+        public static string NewAnalysis(string argumentsJson)
+        {
+            return Execute(argumentsJson, arguments =>
+                Ok(AnimationAnalyzeCore(arguments, allowActiveGenerationRange: false, newPictureContract: true)));
+        }
+
+        private static JObject AnimationAnalyzeCore(
+            JObject arguments,
+            bool allowActiveGenerationRange,
+            bool newPictureContract = false,
+            bool layoutOnly = false)
         {
             TimelineSessionRecord session = RequireTimelineSession(arguments);
             JArray clips = arguments["clips"] as JArray;
@@ -934,7 +953,14 @@ namespace KimodoUnityBridge.Command
                 ThrowIfGenerationRangeLocked(session, character, startFrame, endFrame, AnimationAnalyzeCommand);
             }
 
-            JObject picture = AnalysisPictureRequest.Parse(arguments["picture"] as JObject).ToJson();
+            JObject picture = newPictureContract
+                ? new JObject
+                {
+                    ["tiles"] = new JArray("3d_track", "height_time_track", "3d_ghost", "3d_ghost_track", "key_pose", "step_pose"),
+                    ["output"] = "composite",
+                    ["environment"] = new JObject { ["mode"] = "isolated" }
+                }
+                : AnalysisPictureRequest.Parse(arguments["picture"] as JObject).ToJson();
             int pictureResolution = ResolveAnalysisPictureResolution(arguments["resolution"]);
             JObject requestedAnalysisOptions = null;
             string requestedAnalysisOptionsJson = ParseAnalysisOptionsJson(arguments);
@@ -980,7 +1006,9 @@ namespace KimodoUnityBridge.Command
                 EnsureEndpointPoseComparison(session, character, animation, record, startFrame, endFrame);
             }
             var subject = new AnalysisSubject(character, animation, record, startFrame, endFrame);
-            JObject pictures = RenderAnalysisPictures(session, new[] { subject }, picture, pictureResolution);
+            JObject pictures = layoutOnly
+                ? new JObject()
+                : RenderAnalysisPictures(session, new[] { subject }, picture, pictureResolution);
             SaveTimelineSession(session);
             string analysisImagePath = pictures?.Value<string>("image_path") ?? string.Empty;
             var analysisLog = new JObject
@@ -1000,7 +1028,7 @@ namespace KimodoUnityBridge.Command
             Debug.Log("[Kimodo][Analysis] " + analysisLog.ToString(Formatting.None));
             return new JObject
             {
-                ["analysis_schema_version"] = AnalysisContractVersion,
+                ["analysis_schema_version"] = newPictureContract ? "analysis.new.v1" : AnalysisContractVersion,
                 ["clip"] = BuildAnimationAnalyzeClipResult(subject),
                 ["pictures"] = BuildPublicPictureMetadata(pictures, subject)
             };
@@ -1047,11 +1075,8 @@ namespace KimodoUnityBridge.Command
         {
             if (pictures == null) return new JObject();
             JObject result = (JObject)pictures.DeepClone();
-            // Keep the public picture result focused on render evidence. Older
-            // cached records may still contain the legacy title/header copies.
-            result.Remove("title");
-            result.Remove("header");
-            result.Remove("headers");
+            // SceneView captures expose their title, timestamp, and per-tile
+            // headers as part of the public evidence metadata.
             foreach (JObject image in (result["images"] as JArray ?? new JArray()).OfType<JObject>())
             {
                 if (image["description"] is not JObject description) continue;
