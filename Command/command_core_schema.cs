@@ -102,8 +102,8 @@ namespace KimodoUnityBridge.Command
                 SceneContextCommand => CommandDocumentation(
                     "Read the active Unity scene, its Kimodo Timeline, character handles, and current Session identity.",
                     new[] { "Use returned scene object references for later commands instead of guessing from names or asset paths.", "Set include_history only when the Session-wide animation, generation, and analysis index is needed." },
-                    new[] { "Returns current scene and director details, character/Clip references, frame-rate metadata, and Session identifiers.", "Character discovery uses the generation Avatar resolver: check Animator, importer and cache, then try automatic Avatar generation. Only valid Humanoid Avatars matching the character skeleton are indexed; resolution or generation failures skip the object.", "When requested, history includes compact animation, generation, and analysis records." },
-                    new[] { "May initialize the scene Session and generate missing Humanoid Avatars, including model importer updates and reimports. Existing animation clips are preserved." },
+                    new[] { "Returns the current live scene context, director details, character/Clip references, frame-rate metadata, and Session identifiers without creating or replacing a context.", "Character discovery uses already assigned, imported, or cached Humanoid Avatars; this read command does not generate an Avatar or reimport a model.", "When requested, history includes compact animation, generation, and analysis records." },
+                    new[] { "Requires an existing live scene Session; it does not create or reset one. History is read from the existing Session metadata and analysis index." },
                     new[] { "Context reflects the active loaded scene and current Session; history is omitted by default.", "A Clip asset path is asset metadata and is not itself a scene Clip handle." },
                     GenerateAnimationCommand, AnimationAnalysisCommand, PoseGetCommand),
                 InstallServerCommand => CommandDocumentation(

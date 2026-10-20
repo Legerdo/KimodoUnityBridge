@@ -92,8 +92,11 @@ namespace KimodoUnityBridge.Command.Tests
 
                 JObject compactContext = Require("scene.context", new JObject());
                 Assert.That(compactContext["history"], Is.Null, "History should be omitted from the default scene context response.");
+                string sessionIdBeforeHistory = compactContext["session"]?.Value<string>("session_id");
                 JObject sceneContext = Require("scene.context", new JObject { ["include_history"] = true });
                 Assert.That(sceneContext["session"]?.Value<string>("session_id"), Is.Not.Empty);
+                Assert.That(sceneContext["session"]?.Value<string>("session_id"), Is.EqualTo(sessionIdBeforeHistory),
+                    "A history query must inspect the existing context without replacing it.");
                 Assert.That(sceneContext["session"]?.Value<int>("session_revision"), Is.GreaterThan(0));
                 JObject indexedAnalysis = (sceneContext["history"]?["analyses"] as JArray)?.Values<JObject>()
                     .SingleOrDefault(item => item.Value<string>("analysis_id") == analysis["clip"]?.Value<string>("analysis_id"));

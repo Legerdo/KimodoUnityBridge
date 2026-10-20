@@ -111,10 +111,10 @@ namespace KimodoUnityBridge.Command
 
                 GameObject sessionRoot = new GameObject($"KimodoSession_{safeName}");
                 sessionRoot.layer = SessionCaptureLayer;
-                sessionRoot.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
+                sessionRoot.hideFlags = HideFlags.DontSaveInEditor;
                 GameObject directorObject = new GameObject($"{KimodoRuntimeUtility.SessionDirectorPrefix}{safeName}");
                 directorObject.transform.SetParent(sessionRoot.transform, false);
-                directorObject.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
+                directorObject.hideFlags = HideFlags.DontSaveInEditor;
                 PlayableDirector director = directorObject.AddComponent<PlayableDirector>();
                 director.playableAsset = timelineAsset;
                 director.time = 0.0;
@@ -146,6 +146,16 @@ namespace KimodoUnityBridge.Command
             if (timelineCharacter != source) throw new InvalidOperationException("Timeline preview must bind the original scene character directly.");
             ArchiveLegacyGhostPreviews(session, source);
             if (animator == null || track == null || session?.Director == null) return;
+            UnityEngine.Object existingBinding = session.Director.GetGenericBinding(track);
+            if (existingBinding != null && !BindingMatches(existingBinding, animator))
+            {
+                Debug.LogWarning($"[Kimodo] Preserved existing binding on track '{track.name}' instead of replacing it.");
+                return;
+            }
+            if (existingBinding != null)
+            {
+                return;
+            }
             KimodoTimelinePreviewRefreshUtility.InitializeSceneOffset(track, animator);
             session.Director.SetGenericBinding(track, animator);
         }
@@ -163,7 +173,7 @@ namespace KimodoUnityBridge.Command
             if (archive == null)
             {
                 var archiveObject = new GameObject("Archive_GhostPreviews");
-                archiveObject.hideFlags = HideFlags.DontSaveInBuild | HideFlags.DontSaveInEditor;
+                archiveObject.hideFlags = HideFlags.DontSaveInEditor;
                 archiveObject.transform.SetParent(session.SessionRoot.transform, false);
                 archive = archiveObject.transform;
             }
@@ -213,7 +223,7 @@ namespace KimodoUnityBridge.Command
                 .Where(item => isPath
                     ? string.Equals(GetSceneHierarchyPath(item), requestedName, StringComparison.OrdinalIgnoreCase)
                     : string.Equals(item.name, requestedName, StringComparison.OrdinalIgnoreCase))
-                .Where(IsIndexableHumanoidCharacter)
+                .Where(item => IsIndexableHumanoidCharacter(item))
                 .ToArray();
         }
 
@@ -223,7 +233,7 @@ namespace KimodoUnityBridge.Command
                 .Any(renderer => renderer is MeshRenderer || renderer is SkinnedMeshRenderer);
         }
 
-        private static bool IsIndexableHumanoidCharacter(GameObject root)
+        private static bool IsIndexableHumanoidCharacter(GameObject root, bool allowAvatarGeneration = true)
         {
             if (root == null || EditorUtility.IsPersistent(root) || !root.scene.IsValid() || IsSessionObject(root))
             {
@@ -232,7 +242,7 @@ namespace KimodoUnityBridge.Command
 
             Animator animator = root.GetComponentInChildren<Animator>(true);
             return animator != null &&
-                KimodoLocalAvatarUtility.ResolveAvatarFromGameObject(root).IsHumanoid;
+                KimodoLocalAvatarUtility.ResolveAvatarFromGameObject(root, allowAvatarGeneration).IsHumanoid;
         }
 
         private static Animator ResolveAutomaticSceneCharacter()
@@ -241,14 +251,15 @@ namespace KimodoUnityBridge.Command
                 ?? Selection.activeGameObject?.GetComponentInParent<Animator>()
                 ?? Selection.activeGameObject?.GetComponentInChildren<Animator>(true);
             if (selected != null && selected.gameObject.scene == SceneManager.GetActiveScene() &&
-                IsIndexableHumanoidCharacter(selected.transform.root.gameObject))
+                IsIndexableHumanoidCharacter(selected.transform.root.gameObject, allowAvatarGeneration: false))
             {
                 return selected;
             }
 
             return SceneManager.GetActiveScene().GetRootGameObjects()
                 .SelectMany(root => root.GetComponentsInChildren<Animator>(true))
-                .FirstOrDefault(animator => IsIndexableHumanoidCharacter(animator.transform.root.gameObject));
+                .FirstOrDefault(animator => IsIndexableHumanoidCharacter(
+                    animator.transform.root.gameObject, allowAvatarGeneration: false));
         }
 
         private static string GetSceneHierarchyPath(GameObject gameObject)
@@ -1850,7 +1861,13 @@ namespace KimodoUnityBridge.Command
         private static string SceneContextGet(string argumentsJson) => Execute(argumentsJson, arguments =>
         {
             bool includeHistory = arguments.Value<bool?>("include_history") ?? false;
-            TimelineSessionRecord session = RequireCurrentTimelineSession();
+            RefreshSceneContextBinding();
+            EnsureTimelineSessionsRestored();
+            TimelineSessionRecord session = currentTimelineSession;
+            if (!IsTimelineSessionValid(session))
+            {
+                throw new InvalidOperationException("No live scene context is available. scene.context is read-only and will not create or reset one.");
+            }
             PlayableDirector commandDirector = session.Director;
             TimelineAsset timeline = session.TimelineAsset;
             var characters = new JArray();
