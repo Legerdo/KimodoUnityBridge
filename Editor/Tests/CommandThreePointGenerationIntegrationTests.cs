@@ -66,7 +66,7 @@ namespace KimodoUnityBridge.Command.Tests
                     ["source"] = new JObject
                     {
                         ["character"] = character.name,
-                        ["scene_time_seconds"] = 0.0
+                        ["mode"] = "skeleton_rest_pose"
                     },
                     ["full_data"] = true
                 });
