@@ -463,6 +463,10 @@ namespace KimodoUnityBridge.Command
             // samples still take precedence during constraint normalization;
             // the synthetic anchor is removed when a real boundary exists.
             playableClip.autoBeginAnchor = true;
+            // Command generation uses the two-pass Out alignment by default so
+            // boundary constraints are calibrated against the original Timeline
+            // pose before the final trajectory pass.
+            playableClip.postApplyOutConstraint = true;
             if (useExplicitInOut)
             {
                 // Explicit sources own the boundaries; retain point markers

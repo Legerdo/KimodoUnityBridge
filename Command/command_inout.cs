@@ -141,6 +141,10 @@ namespace KimodoUnityBridge.Command
                             throw new InvalidOperationException($"In/Out pose capture failed: {error}");
                         sample.constraintMode = "fullbody";
                         request.ConstraintSamples.Add(sample);
+                        if (!plan.IsIn)
+                        {
+                            request.DeferredOutConstraintSamples.Add(sample);
+                        }
                     }
                 }
             }

@@ -108,6 +108,8 @@ namespace KimodoBridge
         public bool enableInConstraint = true;
         [Tooltip("Generate the Out boundary constraint when InOut Constraint is Inside or Outside.")]
         public bool enableOutConstraint = true;
+        [Tooltip("Defer the Out constraint until after the first trajectory generation, align it in SOMA Root2D space, then use it for the second generation pass.")]
+        public bool postApplyOutConstraint;
         [Min(1), Tooltip("Number of model-rate frames covered by the In constraint window.")]
         public int inConstraintWindowFrames = 1;
         [Min(1), Tooltip("Number of evenly spaced FullBody samples in the In window, including its endpoints.")]

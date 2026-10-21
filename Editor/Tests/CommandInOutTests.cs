@@ -138,7 +138,10 @@ namespace KimodoUnityBridge.Command.Tests
                     Reject(60, new List<KimodoMarkerSampleResult> { new KimodoMarkerSampleResult { sampleTime = 0 } }, "conflicts");
                 var external = (KimodoExternalConstraintRequest)build.Invoke(null,
                     new object[] { arguments, trace, model, 60, 30f, false, new List<KimodoMarkerSampleResult>() });
-                Assert.That(external.ConstraintSamples.Count, Is.EqualTo(8));
+                Assert.That(external.ConstraintSamples.Count, Is.EqualTo(8),
+                    "Command diagnostics retain both explicit In and Out samples.");
+                Assert.That(external.DeferredOutConstraintSamples.Count, Is.EqualTo(3),
+                    "Explicit Out samples are deferred for postapply calibration.");
                 Assert.That(director.time, Is.EqualTo(0).Within(1e-8), "Sampling must restore Timeline time.");
                 var diagnostics = (JObject)traceType.GetProperty("InOutSampling").GetValue(trace);
                 Assert.That(diagnostics["in"]["source_times_seconds"], Is.Null);
@@ -159,15 +162,26 @@ namespace KimodoUnityBridge.Command.Tests
                 playable.bridgeModelName = model;
                 Assert.That(playable.enableInConstraint || playable.enableOutConstraint, Is.False,
                     "Explicit sources must not mix with automatically inferred Session boundaries.");
+                Assert.That(playable.postApplyOutConstraint, Is.True,
+                    "Command-created clips enable Postapply Out without exposing a command option.");
                 Assert.That(playable.autoBeginAnchor, Is.True,
                     "Command-created clips must retain the automatic begin anchor; real explicit samples take precedence during normalization.");
-                var request = KimodoPlayableClipGenerationHostService.BuildRequest(playable, "stand", external, CancellationToken.None, timelineClipOverride: output);
+                var request = KimodoPlayableClipGenerationHostService.BuildRequest(
+                    playable, "stand", external, CancellationToken.None,
+                    timelineClipOverride: output,
+                    deferOutConstraint: true);
                 Assert.That(request.TargetFrameCount, Is.EqualTo(60));
                 Assert.That(request.RuntimeFrameCount, Is.EqualTo(inside ? 60 : 81));
                 Assert.That(request.RuntimeTrimStartFrame, Is.EqualTo(inside ? 0 : 15));
                 var exported = JArray.Parse(request.Constraints.json).Values<JObject>().Single(c => c.Value<string>("type") == "fullbody");
-                var expectedFrames = diagnostics["in"]["runtime_model_frames"].Values<int>().Concat(diagnostics["out"]["runtime_model_frames"].Values<int>());
-                CollectionAssert.AreEqual(expectedFrames.ToArray(), exported["frame_indices"].Values<int>().ToArray());
+                CollectionAssert.AreEqual(
+                    diagnostics["in"]["runtime_model_frames"].Values<int>().ToArray(),
+                    exported["frame_indices"].Values<int>().ToArray());
+                var deferredOut = JArray.Parse(request.DeferredOutConstraintJson)
+                    .Values<JObject>().Single(c => c.Value<string>("type") == "fullbody");
+                CollectionAssert.AreEqual(
+                    diagnostics["out"]["runtime_model_frames"].Values<int>().ToArray(),
+                    deferredOut["frame_indices"].Values<int>().ToArray());
                 Assert.That(output.duration, Is.EqualTo(2));
                 var before = external.ConstraintSamples[0].sampleTime;
                 Assert.That(before, Is.EqualTo(inside ? 0 : -0.5).Within(1e-8), "Provider must not mutate source snapshots.");

@@ -25,7 +25,8 @@ namespace KimodoBridge.Editor
             bool deferConstraintNormalization = false,
             bool enableAutoBeginAnchor = true,
             TimelineClip timelineClipOverride = null,
-            bool? generateLoopOverride = null)
+            bool? generateLoopOverride = null,
+            bool deferOutConstraint = false)
         {
             if (clip == null)
             {
@@ -103,9 +104,40 @@ namespace KimodoBridge.Editor
                     deferConstraintNormalization,
                     enableAutoBeginAnchor,
                     runtimeSampleOffsetSeconds,
-                    timelineClip);
+                    timelineClip,
+                    deferOutConstraint);
             string constraintsJson = constraintResult.ConstraintsJson;
+            string deferredOutConstraintJson = constraintResult.DeferredOutConstraintJson;
+            if (deferOutConstraint)
+            {
+                KimodoInOutConstraintResult deferredOut =
+                    ConstraintProvider.BuildDeferredOutConstraintOrThrow(
+                        clip,
+                        runtimeFrameCount,
+                        disableTimelineInOut,
+                        runtimeSampleOffsetSeconds,
+                        timelineClip);
+                if (!string.IsNullOrWhiteSpace(deferredOut.ConstraintsJson))
+                {
+                    deferredOutConstraintJson = CombineConstraintJson(
+                        deferredOutConstraintJson,
+                        deferredOut.ConstraintsJson);
+                }
+            }
             List<KimodoMarkerSampleResult> constraintSamples = constraintResult.CombinedSamples;
+            if (deferOutConstraint && externalConstraint?.Enabled == true &&
+                externalConstraint.DeferredOutConstraintSamples?.Count > 0)
+            {
+                constraintSamples = new List<KimodoMarkerSampleResult>(constraintSamples);
+                KimodoInOutConstraintComposer.AppendSamples(
+                    externalConstraint.DeferredOutConstraintSamples,
+                    constraintSamples);
+                int immediateCount = constraintResult.CombinedSamples.Count;
+                for (int i = immediateCount; i < constraintSamples.Count; i++)
+                {
+                    constraintSamples[i].sampleTime += runtimeSampleOffsetSeconds;
+                }
+            }
             bool hasSyntheticAutoBeginConstraint = constraintResult.HasSyntheticAutoBeginConstraint;
 
             ArdyEditorHistorySource initialHistorySource = null;
@@ -174,6 +206,7 @@ namespace KimodoBridge.Editor
                     clip.diffusionSteps),
                 EffectiveSeed = effectiveSeed,
                 Constraints = new KimodoConstraintPayload { json = constraintsJson, clips = clipConstraints },
+                DeferredOutConstraintJson = deferredOutConstraintJson,
                 AnalysisOptionsJson = string.IsNullOrWhiteSpace(externalConstraint?.AnalysisOptionsJson)
                     ? clip.analysisOptionsJson ?? string.Empty
                     : externalConstraint.AnalysisOptionsJson,
@@ -197,6 +230,15 @@ namespace KimodoBridge.Editor
                     ? Mathf.Clamp01(clip.ardyHistoryWeight)
                     : (double?)null
             };
+        }
+
+        private static string CombineConstraintJson(string first, string second)
+        {
+            if (string.IsNullOrWhiteSpace(first)) return second ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(second)) return first;
+            var combined = JArray.Parse(first);
+            combined.Merge(JArray.Parse(second));
+            return combined.ToString(Newtonsoft.Json.Formatting.None);
         }
 
         // TODO: expose an internal generation entry that supplies an AvatarMask when Clip Constraint is ready.

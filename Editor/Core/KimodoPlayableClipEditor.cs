@@ -36,6 +36,7 @@ namespace KimodoBridge.Editor
         private SerializedProperty inOutConstraintModeProp;
         private SerializedProperty enableInConstraint;
         private SerializedProperty enableOutConstraint;
+        private SerializedProperty postApplyOutConstraint;
         private SerializedProperty inConstraintWindowFrames;
         private SerializedProperty inConstraintSampleCount;
         private SerializedProperty outConstraintWindowFrames;
@@ -139,6 +140,7 @@ namespace KimodoBridge.Editor
             inOutConstraintModeProp = serializedObject.FindProperty("inOutConstraintMode");
             enableInConstraint = serializedObject.FindProperty("enableInConstraint");
             enableOutConstraint = serializedObject.FindProperty("enableOutConstraint");
+            postApplyOutConstraint = serializedObject.FindProperty("postApplyOutConstraint");
             inConstraintWindowFrames = serializedObject.FindProperty("inConstraintWindowFrames");
             inConstraintSampleCount = serializedObject.FindProperty("inConstraintSampleCount");
             outConstraintWindowFrames = serializedObject.FindProperty("outConstraintWindowFrames");
@@ -424,6 +426,13 @@ namespace KimodoBridge.Editor
                         EditorGUIUtility.labelWidth = 36f;
                         EditorGUILayout.PropertyField(enableOutConstraint, new GUIContent("Out"), GUILayout.Width(60f));
                         EditorGUIUtility.labelWidth = previousLabelWidth;
+                        if (enableOutConstraint.boolValue)
+                        {
+                            EditorGUILayout.PropertyField(
+                                postApplyOutConstraint,
+                                new GUIContent("Post", "Defer Out until after the first trajectory pass, align it in SOMA Root2D space, then apply it in the second pass."),
+                                GUILayout.Width(70f));
+                        }
                     }
                 }
             }
