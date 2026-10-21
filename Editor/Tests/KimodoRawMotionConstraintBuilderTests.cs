@@ -257,14 +257,14 @@ namespace KimodoBridge.Editor.Tests
                 {
                     ["type"] = "fullbody",
                     ["frame_indices"] = new JArray(1),
-                    ["root_positions"] = new JArray(new JArray(100f, 0f, 200f))
+                    ["root_positions"] = new JArray { new JArray(100f, 0f, 200f) }
                 },
                 new JObject
                 {
                     ["type"] = "root2d",
                     ["frame_indices"] = new JArray(1),
-                    ["smooth_root_2d"] = new JArray(new JArray(-9f, 11f)),
-                    ["global_root_heading"] = new JArray(new JArray(1f, 0f))
+                    ["smooth_root_2d"] = new JArray { new JArray(-9f, 11f) },
+                    ["global_root_heading"] = new JArray { new JArray(1f, 0f) }
                 }).ToString();
 
             JArray constraints = JArray.Parse(KimodoRawMotionConstraintBuilder.BuildHeadingOverrideConstraintJson(

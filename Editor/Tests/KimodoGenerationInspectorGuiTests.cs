@@ -37,7 +37,7 @@ namespace KimodoBridge.Editor.Tests
                 for (int i = 0; i < poses.Length; i++)
                 {
                     poses[i] = pose.Clone();
-                    poses[i].SetRoot(rootPosition + Vector3.right * (i / 30f), rootRotation);
+                    poses[i].SetRoot(rootPosition + Vector3.right * (i / 240f), rootRotation);
                 }
                 Assert.That(KimodoRetargetSamplingUtility.TryCreateTransientMuscleClip(poses, 30,
                     out animation, out poseError), Is.True, poseError);

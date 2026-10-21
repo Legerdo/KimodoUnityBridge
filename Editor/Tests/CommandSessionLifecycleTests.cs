@@ -275,10 +275,8 @@ namespace KimodoUnityBridge.Command.Tests
         [Test]
         public void DestroySceneSessionRoots_DestroysTemporaryContexts()
         {
-            Scene previousScene = SceneManager.GetActiveScene();
-            Scene testScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
+            Scene testScene = SceneManager.GetActiveScene();
             GameObject contextRoot = new GameObject("KimodoSession_DestroyTest");
-            SceneManager.MoveGameObjectToScene(contextRoot, testScene);
 
             try
             {
@@ -290,11 +288,7 @@ namespace KimodoUnityBridge.Command.Tests
             }
             finally
             {
-                if (testScene.IsValid())
-                {
-                    SceneManager.SetActiveScene(previousScene);
-                    EditorSceneManager.CloseScene(testScene, true);
-                }
+                if (contextRoot != null) UnityEngine.Object.DestroyImmediate(contextRoot);
             }
         }
 

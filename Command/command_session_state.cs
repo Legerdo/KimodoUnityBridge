@@ -1553,9 +1553,9 @@ namespace KimodoUnityBridge.Command
 
         private static GameObject ResolveSourceCharacterRoot(TimelineCharacterRecord character)
         {
-            if (character == null || string.IsNullOrWhiteSpace(character.CharacterRef)) return null;
+            if (character == null) return null;
             UnityEngine.Object source = ResolveObject(character.CharacterRef);
-            return source as GameObject ?? (source as Animator)?.gameObject;
+            return source as GameObject ?? (source as Animator)?.gameObject ?? character.Root;
         }
 
 

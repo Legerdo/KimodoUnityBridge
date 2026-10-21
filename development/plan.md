@@ -112,6 +112,7 @@
 
 ## 代码清理待办（暂缓，由后续处理）
 
+- [ ] 检查 `KimodoHandEffectorGoalTests` 中 AnimationHumanStream goal 与 Avatar post rotation 的 180° 偏差；确认是测试公式、Unity 版本差异还是运行时手部约束方向错误。
 - [ ] 将 FullDemo `5.RuntimeArdyDemo.unity` 中仍序列化到 `targetHumanoidAnimator` 的 8 个目标迁入 `targetHumanoidAnimators`，然后验证 ARDY 场景能启动；当前代码只读取新列表。
 - [ ] 为运行时生成失败定义退避或阻塞策略，避免 QuickServer 不可用或请求持续失败时每帧重试并重复写日志。
 - [ ] 调整 `SegmentReady` 通知与生成状态提交顺序，避免订阅者异常导致已接受的段播放、但段号和约束 revision 未提交。
