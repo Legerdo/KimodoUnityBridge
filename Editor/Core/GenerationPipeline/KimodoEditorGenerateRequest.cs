@@ -53,8 +53,6 @@ namespace KimodoBridge.Editor
         internal KimodoTimelineInOutConstraintContext TimelineContextSnapshot;
         public ArdyEditorHistorySource InitialArdyHistorySource;
         public double? ArdyHistoryWeight;
-        public double? ArdyMaxSpeed;
-        public double? ArdyMaxAcceleration;
 
         public int EffectiveRuntimeFrameCount =>
             RuntimeFrameCount > 0 ? RuntimeFrameCount : TargetFrameCount;

@@ -8,6 +8,20 @@ namespace KimodoBridge.Editor.Tests
     public sealed class KimodoRawMotionConstraintBuilderTests
     {
         [Test]
+        public void KimodoBezierUtility_EvaluatesCubicMidpoint()
+        {
+            Vector2 midpoint = KimodoBezierUtility.EvaluateCubic(
+                Vector2.zero,
+                new Vector2(4f, 0f),
+                new Vector2(4f, 2f),
+                new Vector2(0f, 2f),
+                0.5f);
+
+            Assert.That(midpoint.x, Is.EqualTo(3f).Within(1e-5f));
+            Assert.That(midpoint.y, Is.EqualTo(1f).Within(1e-5f));
+        }
+
+        [Test]
         public void BuildLoopConstraintJson_UsesRawMotionWithoutCharacterSpaceSamples()
         {
             const string model = KimodoMotionModelProfiles.ArdyCoreModelName;

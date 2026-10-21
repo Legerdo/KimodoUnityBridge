@@ -283,7 +283,7 @@ namespace KimodoUnityBridge.Command.Tests
                     "timeline_frame_60=72 pose root world position");
                 KimodoTimelineTrackOffsetUtility.ResolveWorldOffset(
                     track, skeleton.animator, out Vector3 resolvedTrackPosition,
-                    out Quaternion resolvedTrackRotation, out bool resolvedSceneOffset);
+                    out _, out bool resolvedSceneOffset);
 
                 Assert.That(Vector3.Distance(actual.rootOverride.t, expected.rootOverride.t), Is.LessThan(0.1f),
                     $"hips world position actual={actual.rootOverride.t} expected={expected.rootOverride.t} " +

@@ -252,7 +252,7 @@ namespace KimodoBridge.Editor.Tests
         }
 
         [Test]
-        public void ArdyRequest_UsesAutoHistoryAndClipMotionLimits()
+        public void ArdyRequest_UsesAutoHistoryWithoutRetiredMotionLimits()
         {
             TimelineAsset timeline = ScriptableObject.CreateInstance<TimelineAsset>();
             GameObject directorRoot = new GameObject("KimodoArdyAutoHistoryRequestTest");
@@ -269,8 +269,6 @@ namespace KimodoBridge.Editor.Tests
                 clip.bridgeModelName = KimodoMotionModelProfiles.ArdyCoreModelName;
                 clip.inOutConstraintMode = KimodoInOutConstraintMode.None;
                 clip.autoBeginAnchor = false;
-                clip.ardyTargetMaxSpeed = 2.25f;
-                clip.ardyTargetMaxAcceleration = 3.5f;
 
                 KimodoEditorGenerateRequest request = KimodoPlayableClipGenerationHostService.BuildRequest(
                     clip,
@@ -284,8 +282,6 @@ namespace KimodoBridge.Editor.Tests
 
                 Assert.That(request.ConstraintSamples, Is.Empty);
                 Assert.That(generation.ardy_history_weight, Is.Null);
-                Assert.That(generation.ardy_max_speed, Is.EqualTo(2.25));
-                Assert.That(generation.ardy_max_acceleration, Is.EqualTo(3.5));
             }
             finally
             {
@@ -327,8 +323,6 @@ namespace KimodoBridge.Editor.Tests
                     clip.bridgeModelName).GenerationRequest;
 
                 Assert.That(generation.ardy_history_weight, Is.EqualTo(0.25));
-                Assert.That(generation.ardy_max_speed, Is.EqualTo(1.25));
-                Assert.That(generation.ardy_max_acceleration, Is.EqualTo(1.5));
             }
             finally
             {

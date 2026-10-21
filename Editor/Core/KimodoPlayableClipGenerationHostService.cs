@@ -190,12 +190,6 @@ namespace KimodoBridge.Editor
                 InitialArdyHistorySource = initialHistorySource,
                 ArdyHistoryWeight = isArdy && !clip.ardyAutoHistory
                     ? Mathf.Clamp01(clip.ardyHistoryWeight)
-                    : (double?)null,
-                ArdyMaxSpeed = isArdy
-                    ? Mathf.Max(0.01f, clip.ardyTargetMaxSpeed)
-                    : (double?)null,
-                ArdyMaxAcceleration = isArdy
-                    ? Mathf.Max(0.01f, clip.ardyTargetMaxAcceleration)
                     : (double?)null
             };
         }
