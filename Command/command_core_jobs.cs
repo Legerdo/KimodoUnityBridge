@@ -63,7 +63,6 @@ namespace KimodoUnityBridge.Command
             {
                 throw new InvalidOperationException($"Character '{sessionCharacter.Name}' has no resolvable scene source.");
             }
-            KimodoTimelinePreviewRefreshUtility.InitializeSceneOffset(sessionCharacter.Track, animator);
             return new ResolvedCharacter(root, animator, sessionCharacter.Avatar, sessionCharacter.Name);
         }
 

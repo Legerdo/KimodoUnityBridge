@@ -156,7 +156,6 @@ namespace KimodoUnityBridge.Command
             {
                 return;
             }
-            KimodoTimelinePreviewRefreshUtility.InitializeSceneOffset(track, animator);
             session.Director.SetGenericBinding(track, animator);
         }
 
@@ -223,7 +222,7 @@ namespace KimodoUnityBridge.Command
                 .Where(item => isPath
                     ? string.Equals(GetSceneHierarchyPath(item), requestedName, StringComparison.OrdinalIgnoreCase)
                     : string.Equals(item.name, requestedName, StringComparison.OrdinalIgnoreCase))
-                .Where(item => IsIndexableHumanoidCharacter(item))
+                .Where(item => IsIndexableHumanoidCharacter(item, allowAvatarGeneration: true))
                 .ToArray();
         }
 
@@ -337,8 +336,8 @@ namespace KimodoUnityBridge.Command
             }
 
             AnimationTrack track = session.TimelineAsset.CreateTrack<AnimationTrack>(null, characterName);
-            // Match Timeline's "Apply Scene Offsets" using the original scene pose.
-            track.trackOffset = TrackOffset.ApplySceneOffsets;
+            // Keep command-created tracks independent from the character's scene pose.
+            track.trackOffset = TrackOffset.ApplyTransformOffsets;
             AnimationTrack poseCacheTrack = session.TimelineAsset.CreateTrack<AnimationTrack>(
                 track,
                 MakeUniqueSessionObjectName(session, $"{characterName}.Poses"));

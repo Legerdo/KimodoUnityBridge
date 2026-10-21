@@ -242,6 +242,7 @@ namespace KimodoBridge.Editor
             if (hasTimelineDuration)
             {
                 EditorGUILayout.LabelField("Timeline Duration", $"{timelineClip.duration:F2}s");
+                KimodoGenerationInspectorGui.DrawDurationWarning((float)timelineClip.duration);
             }
             else
             {

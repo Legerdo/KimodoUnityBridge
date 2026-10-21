@@ -684,13 +684,17 @@ namespace KimodoUnityBridge.Command
                     arguments, character, durationFrames, (float)SessionFrameRate, modelName, poseConstraints);
                 if (generationCheck.Value<bool>("blocking"))
                 {
-                    string blockingMessage = generationCheck["root_trajectory"]?["issues"]?
+                    string blockingMessage = generationCheck["duration"]?["issues"]?
+                        .OfType<JObject>()
+                        .FirstOrDefault(issue => string.Equals(issue.Value<string>("code"), "duration_below_minimum", StringComparison.OrdinalIgnoreCase))?
+                        .Value<string>("message")
+                        ?? generationCheck["root_trajectory"]?["issues"]?
                         .OfType<JObject>()
                         .FirstOrDefault(issue => string.Equals(issue.Value<string>("code"), "speed_hard_limit", StringComparison.OrdinalIgnoreCase)
                             || string.Equals(issue.Value<string>("code"), "acceleration_hard_limit", StringComparison.OrdinalIgnoreCase))?
                         .Value<string>("message");
                     throw new InvalidOperationException(string.IsNullOrWhiteSpace(blockingMessage)
-                        ? "Generation preflight failed because the requested root speed or acceleration exceeds a hard limit."
+                        ? "Generation preflight failed because the requested duration or root speed/acceleration exceeds a hard limit."
                         : blockingMessage);
                 }
                 TimelineGenerationTrace trace = PrepareGenerationTrace(arguments, character, duration);
@@ -766,8 +770,17 @@ namespace KimodoUnityBridge.Command
                 Remember(character.Target, generation, trace);
                 PersistGenerationJobStatus(generation);
                 var accepted = new JObject { ["check"] = generationCheck };
-                if (poseWarnings != null && poseWarnings.Count > 0)
-                    accepted["warnings"] = new JArray(poseWarnings);
+                var warnings = new JArray();
+                if (poseWarnings != null)
+                    foreach (string warning in poseWarnings)
+                        warnings.Add(warning);
+                foreach (JObject issue in generationCheck["duration"]?["issues"]?.OfType<JObject>() ?? Enumerable.Empty<JObject>())
+                {
+                    if (!string.Equals(issue.Value<string>("code"), "duration_below_minimum", StringComparison.OrdinalIgnoreCase))
+                        warnings.Add(issue.Value<string>("message"));
+                }
+                if (warnings.Count > 0)
+                    accepted["warnings"] = warnings;
                 return Started(generation, accepted);
             });
         }

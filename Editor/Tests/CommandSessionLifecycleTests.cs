@@ -187,6 +187,9 @@ namespace KimodoUnityBridge.Command.Tests
                 object[] arguments = { session, root, animator, true, null, true };
                 Assert.That((bool)add.Invoke(null, arguments), Is.True, arguments[4] as string);
                 Assert.That(timeline.GetRootTracks().Count(), Is.EqualTo(1));
+                Assert.That(timeline.GetRootTracks().OfType<AnimationTrack>().Single().trackOffset,
+                    Is.EqualTo(TrackOffset.ApplyTransformOffsets),
+                    "Command-created character tracks must not apply scene offsets.");
             }
             finally
             {
@@ -260,7 +263,7 @@ namespace KimodoUnityBridge.Command.Tests
             AnimationTrack track = timeline.CreateTrack<AnimationTrack>(null, "TestCharacter");
             AnimationTrack otherTrack = timeline.CreateTrack<AnimationTrack>(null, "OtherCharacter");
             director.SetGenericBinding(otherTrack, otherAnimator);
-            track.trackOffset = TrackOffset.ApplySceneOffsets;
+            track.trackOffset = TrackOffset.ApplyTransformOffsets;
             MethodInfo bindMethod = context.GetMethod("BindTimelineCharacter", BindingFlags.Static | BindingFlags.NonPublic);
 
             try

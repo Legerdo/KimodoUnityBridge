@@ -45,9 +45,14 @@ namespace KimodoBridge.Editor
             int targetFrameCount = Mathf.Max(
                 KimodoMotionModelProfiles.MinGenerationFrames,
                 KimodoFrameTimeUtility.SecondsToFrameCount(timelineClip.duration, targetFrameRate));
+            int generationFrameCount = Mathf.Max(
+                targetFrameCount,
+                KimodoFrameTimeUtility.SecondsToFrameCount(
+                    KimodoGenerationWarningCheckService.MinimumGenerationDurationSeconds,
+                    targetFrameRate));
             int sourceSessionFrameCount = Mathf.Max(1, Mathf.RoundToInt((float)(timelineClip.duration * 60.0)));
             bool isLoopGeneration = (generateLoopOverride ?? clip.generateLoop) && sourceSessionFrameCount <= 300;
-            int loopPaddingFrames = isLoopGeneration ? targetFrameCount / 2 : 0;
+            int loopPaddingFrames = isLoopGeneration ? generationFrameCount / 2 : 0;
             bool useOutsideGuardFrame = ShouldUseOutsideGuardFrame(
                 clip,
                 externalConstraint,
@@ -66,7 +71,7 @@ namespace KimodoBridge.Editor
                 contextBefore = Math.Max(contextBefore, externalConstraint.ContextBeforeFrames);
                 contextAfter = Math.Max(contextAfter, externalConstraint.ContextAfterFrames);
             }
-            int runtimeFrameCount = (isLoopGeneration ? targetFrameCount * 2 : targetFrameCount) +
+            int runtimeFrameCount = (isLoopGeneration ? generationFrameCount * 2 : generationFrameCount) +
                 contextBefore + contextAfter;
             int runtimeTrimStartFrame = loopPaddingFrames + contextBefore;
             double runtimeSampleOffsetSeconds = runtimeTrimStartFrame / (double)targetFrameRate;

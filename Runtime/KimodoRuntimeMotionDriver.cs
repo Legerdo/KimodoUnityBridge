@@ -56,7 +56,7 @@ namespace KimodoBridge
 
         private const string IdlePrompt = "idle";
         private const string KimodoFolderName = "NvlabKimodoQuickServer~";
-        private const float MinGenerationDurationSeconds = 1f;
+        private const float MinGenerationDurationSeconds = 1.5f;
         private const float MaxGenerationDurationSeconds = 10f;
 
         private readonly KimodoRuntimeGenerationSession generationSession =
