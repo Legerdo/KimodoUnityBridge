@@ -139,7 +139,6 @@ namespace KimodoUnityBridge.Command
                             bones[i], sampler.TargetCache, model, "fullbody", plan.Window.OutputFrames[i] / (double)fps,
                             out var sample, out error))
                             throw new InvalidOperationException($"In/Out pose capture failed: {error}");
-                        sample.enableMask = new KimodoConstraintMask { muscle = true };
                         sample.constraintMode = "fullbody";
                         request.ConstraintSamples.Add(sample);
                     }

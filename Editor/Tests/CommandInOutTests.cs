@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Threading;
 using KimodoBridge;
 using KimodoBridge.Editor;
+using UnityEditor;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -92,7 +93,7 @@ namespace KimodoUnityBridge.Command.Tests
                 pose.GetRoot(out var position, out var rotation);
                 var frames = Enumerable.Range(0, 121).Select(i =>
                 {
-                    var frame = pose.Clone(); frame.SetRoot(position + Vector3.forward * (i / 30f), rotation); return frame;
+                    var frame = pose.Clone(); frame.SetRoot(position + Vector3.forward * (i / 240f), rotation); return frame;
                 }).ToArray();
                 Assert.That(KimodoRetargetSamplingUtility.TryCreateTransientMuscleClip(frames, 30, out sourceClip, out error), Is.True, error);
                 // Initialize native clip bindings before Timeline detects root curves.
@@ -208,7 +209,7 @@ namespace KimodoUnityBridge.Command.Tests
                 var frames = Enumerable.Range(0, 121).Select(i =>
                 {
                     var frame = pose.Clone();
-                    frame.SetRoot(position + Vector3.forward * (i / 30f), rotation);
+                    frame.SetRoot(position + Vector3.forward * (i / 240f), rotation);
                     return frame;
                 }).ToArray();
                 Assert.That(KimodoRetargetSamplingUtility.TryCreateTransientMuscleClip(frames, 30, out sourceClip, out error), Is.True, error);
@@ -230,8 +231,9 @@ namespace KimodoUnityBridge.Command.Tests
                 timelineClip.duration = 2.0;
                 timelineClip.clipIn = 0.25;
                 timelineClip.timeScale = 1.2;
+                string sourceObjectRef = GlobalObjectId.GetGlobalObjectIdSlow(skeleton.root).ToString();
                 var character = new command_context.TimelineCharacterRecord(
-                    "PoseGetCharacter", skeleton.root, skeleton.animator, avatar, track, poseTrack, "");
+                    sourceObjectRef, skeleton.root, skeleton.animator, avatar, track, poseTrack, "");
                 character.Animations.Add(new command_context.TimelineAnimationRecord(
                     Guid.NewGuid(), "Sample", "test", sourceClip, timelineClip, null, null, 0, 120));
 
@@ -283,7 +285,7 @@ namespace KimodoUnityBridge.Command.Tests
                     "timeline_frame_60=72 pose root world position");
                 KimodoTimelineTrackOffsetUtility.ResolveWorldOffset(
                     track, skeleton.animator, out Vector3 resolvedTrackPosition,
-                    out Quaternion resolvedTrackRotation, out bool resolvedSceneOffset);
+                    out _, out bool resolvedSceneOffset);
 
                 Assert.That(Vector3.Distance(actual.rootOverride.t, expected.rootOverride.t), Is.LessThan(0.1f),
                     $"hips world position actual={actual.rootOverride.t} expected={expected.rootOverride.t} " +
@@ -304,6 +306,7 @@ namespace KimodoUnityBridge.Command.Tests
                 Vector3 sceneRootPosition = new Vector3(8f, 1.5f, -4f);
                 Quaternion sceneRootRotation = Quaternion.Euler(0f, 27f, 0f);
                 skeleton.root.transform.SetPositionAndRotation(sceneRootPosition, sceneRootRotation);
+                Vector3 expectedScenePoseRoot = skeleton.animator.GetBoneTransform(HumanBodyBones.Hips).position;
                 JObject scenePoseResponse = JObject.Parse(command_context.PoseGet(
                     "{'source':{'character':'PoseGetCharacter','timeline_frame_60':60}}"));
                 Assert.That(scenePoseResponse.Value<bool>("ok"), Is.True, scenePoseResponse.ToString());
@@ -333,9 +336,9 @@ namespace KimodoUnityBridge.Command.Tests
                     sceneRootRotation.x, sceneRootRotation.y, sceneRootRotation.z, sceneRootRotation.w
                 }));
                 JArray sampledRootPosition = (JArray)scenePoseCapture["data"]?["root"]?["t"];
-                Assert.That(sampledRootPosition[0].Value<float>(), Is.EqualTo(sceneRootPosition.x).Within(0.1f));
-                Assert.That(sampledRootPosition[1].Value<float>(), Is.EqualTo(sceneRootPosition.y).Within(0.1f));
-                Assert.That(sampledRootPosition[2].Value<float>(), Is.EqualTo(sceneRootPosition.z).Within(0.1f));
+                Assert.That(sampledRootPosition[0].Value<float>(), Is.EqualTo(expectedScenePoseRoot.x).Within(0.1f));
+                Assert.That(sampledRootPosition[1].Value<float>(), Is.EqualTo(expectedScenePoseRoot.y).Within(0.1f));
+                Assert.That(sampledRootPosition[2].Value<float>(), Is.EqualTo(expectedScenePoseRoot.z).Within(0.1f));
             }
             finally
             {
