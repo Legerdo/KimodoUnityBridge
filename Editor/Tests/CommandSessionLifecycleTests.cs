@@ -535,20 +535,32 @@ namespace KimodoUnityBridge.Command.Tests
         [Test]
         public void DestroySceneSessionRoots_DestroysTemporaryContexts()
         {
-            Scene testScene = SceneManager.GetActiveScene();
+            SceneSetup[] previousSceneSetup = EditorSceneManager.GetSceneManagerSetup();
+            Scene testScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             GameObject contextRoot = new GameObject("KimodoSession_DestroyTest");
+            GameObject legacyArchive = new GameObject("KimodoSessionArchive");
+            GameObject legacyArchivedSession = new GameObject("Archive_KimodoSession_DestroyTest");
+            legacyArchivedSession.transform.SetParent(legacyArchive.transform, false);
 
             try
             {
                 Type context = typeof(command_dispatcher).Assembly.GetType("KimodoUnityBridge.Command.command_context");
                 MethodInfo destroy = context.GetMethod("DestroySceneSessionRoots", BindingFlags.Static | BindingFlags.NonPublic);
 
-                Assert.That((int)destroy.Invoke(null, new object[] { testScene }), Is.EqualTo(1));
+                Assert.That((int)destroy.Invoke(null, new object[] { testScene }), Is.EqualTo(2));
                 Assert.That(contextRoot == null, Is.True);
+                Assert.That(legacyArchive == null, Is.True,
+                    "session.clear should clean up the legacy archive container and its archived transient contexts.");
+                Assert.That(legacyArchivedSession == null, Is.True);
             }
             finally
             {
                 if (contextRoot != null) UnityEngine.Object.DestroyImmediate(contextRoot);
+                if (legacyArchive != null) UnityEngine.Object.DestroyImmediate(legacyArchive);
+                if (previousSceneSetup.Any(setup => setup.isLoaded))
+                    EditorSceneManager.RestoreSceneManagerSetup(previousSceneSetup);
+                else
+                    EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             }
         }
 

@@ -120,6 +120,7 @@ namespace KimodoUnityBridge.Command.Tests
                 var sessionType = typeof(command_context).GetNestedType("TimelineSessionRecord", BindingFlags.NonPublic);
                 var session = Activator.CreateInstance(sessionType, new object[] { Guid.NewGuid(), "InOutTest", director, timeline, "", false, null, directorObject });
                 ((List<command_context.TimelineCharacterRecord>)sessionType.GetProperty("Characters").GetValue(session)).Add(character);
+                character.NextStartSeconds = 8.0;
                 var traceType = typeof(command_context).GetNestedType("TimelineGenerationTrace", BindingFlags.NonPublic);
                 var trace = Activator.CreateInstance(traceType, new object[] { session, character, 8.0, 2.0 });
                 var arguments = JObject.Parse(@"{'constraints':[{'inout':{'in':{'source':{'clip':'Previous'},'window_frames':30,'sample_count':5},'out':{'source':{'clip':'Next'},'window_frames':12,'sample_count':3}}}]}");
@@ -188,9 +189,38 @@ namespace KimodoUnityBridge.Command.Tests
                 Assert.That(Vector3.Distance(external.ConstraintSamples[0].rootOverride.t, expected.rootOverride.t), Is.LessThan(0.001f), "Batch and single-frame sampling must agree.");
                 Assert.That(Math.Abs(external.ConstraintSamples[0].rootOverride.t.x), Is.GreaterThan(1f), "Track offset must be retained in Character world samples.");
 
+                typeof(command_context).GetMethod("PrepareCommandOutsideEvidencePosition", PrivateStatic)
+                    .Invoke(null, new object[] { trace });
                 var playable = (KimodoPlayableClip)typeof(command_context).GetMethod("CreateGenerationPlayableClip", PrivateStatic)
                     .Invoke(null, new object[] { trace, "CommandOutput", true });
                 var output = (TimelineClip)traceType.GetProperty("TimelineClip").GetValue(trace);
+                typeof(command_context).GetMethod("CreateCommandOutsideEvidenceClips", PrivateStatic)
+                    .Invoke(null, new object[] { trace });
+                TimelineClip[] evidenceClips = track.GetClips()
+                    .Where(clip => clip.asset is AnimationPlayableAsset && !(clip.asset is KimodoPlayableClip))
+                    .Where(clip => (clip.displayName ?? string.Empty).StartsWith("InOut ", StringComparison.Ordinal))
+                    .OrderBy(clip => clip.start)
+                    .ToArray();
+                Assert.That(evidenceClips, Has.Length.EqualTo(inside ? 0 : 2));
+                if (!inside)
+                {
+                    Assert.That(output.start, Is.EqualTo(8.5).Within(1e-8),
+                        "The evidence In clip gets a non-overlapping Timeline window before generation.");
+                    Assert.That(evidenceClips[0].end, Is.EqualTo(output.start).Within(1e-8));
+                    Assert.That(evidenceClips[1].start, Is.EqualTo(output.end).Within(1e-8));
+                    Assert.That(((AnimationPlayableAsset)evidenceClips[0].asset).clip, Is.SameAs(sourceClip));
+                    Assert.That(((AnimationPlayableAsset)evidenceClips[1].asset).clip, Is.SameAs(sourceClip));
+                    Assert.That(evidenceClips[0].duration, Is.EqualTo(0.5).Within(1e-8));
+                    Assert.That(evidenceClips[1].duration, Is.EqualTo(0.2).Within(1e-8));
+                    Assert.That(evidenceClips[0].timeScale, Is.EqualTo(1.2).Within(1e-8));
+                    Assert.That(evidenceClips[1].timeScale, Is.EqualTo(1.2).Within(1e-8));
+                    Assert.That(evidenceClips[0].clipIn, Is.EqualTo(character.Animations[0].TimelineClip.ToLocalTime(1.5)).Within(1e-8));
+                    Assert.That(evidenceClips[1].clipIn, Is.EqualTo(character.Animations[1].TimelineClip.ToLocalTime(4.0)).Within(1e-8));
+                    Assert.That(character.Animations[0].TimelineClip.start, Is.EqualTo(0));
+                    Assert.That(character.Animations[0].TimelineClip.duration, Is.EqualTo(2));
+                    Assert.That(character.Animations[1].TimelineClip.start, Is.EqualTo(4));
+                    Assert.That(character.Animations[1].TimelineClip.duration, Is.EqualTo(2));
+                }
                 playable.bridgeModelName = model;
                 Assert.That(playable.enableInConstraint || playable.enableOutConstraint, Is.False,
                     "Explicit sources must not mix with automatically inferred Session boundaries.");

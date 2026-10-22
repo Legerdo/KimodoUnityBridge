@@ -75,6 +75,14 @@ namespace KimodoBridge.Editor
                 throw new InvalidOperationException(string.IsNullOrWhiteSpace(bakeError) ? "Bake failed." : bakeError);
             }
 
+            // Normalize the baked root Transform before conversion to Humanoid
+            // muscle curves. The Timeline Clip offset carries the requested
+            // World-space placement afterwards.
+            if (request.UseRelativeOffset)
+            {
+                KimodoPlayableClipGenerationHostService.NormalizeRootTranslationToFrameZero(request.TargetClip);
+            }
+
             ThrowIfCanceled(request);
             EditorUtility.SetDirty(request.TargetClip);
 

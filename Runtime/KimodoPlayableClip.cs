@@ -93,6 +93,10 @@ namespace KimodoBridge
         public bool overrideHeading;
         [Tooltip("Absolute Unity yaw in degrees. Positive turns right; negative turns left; zero faces Unity forward.")]
         public float headingDegrees;
+        [Tooltip("Normalize the generated root translation to frame zero before Humanoid conversion, then apply the requested World-space target position as the Timeline Clip offset.")]
+        public bool useRelativeOffset;
+        [Tooltip("World-space target position for the generated Clip's first root pose.")]
+        public Vector3 relativeOffset;
         [Tooltip("Backend analysis options serialized as JSON and applied to this generation clip.")]
         public string analysisOptionsJson = string.Empty;
         [Tooltip("Optional generated AnimationClip asset name without extension.")]
@@ -131,6 +135,10 @@ namespace KimodoBridge
         public bool autoBeginAnchor = true;
         public bool isGenerated;
         public string lastGeneratedPrompt;
+        [SerializeField, HideInInspector]
+        internal string commandGenerationStatus = string.Empty;
+        [SerializeField, HideInInspector]
+        internal string commandGenerationError = string.Empty;
         [Header("Bake Options")]
         [Tooltip("Auto retarget baked animation according to timeline binding animator.")]
         public bool autoRetargetOnBinding = true;

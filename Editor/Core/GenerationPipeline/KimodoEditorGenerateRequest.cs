@@ -51,6 +51,8 @@ namespace KimodoBridge.Editor
         public string DeferredOutConstraintJson = string.Empty;
         public TimelineClip TimelineClipSnapshot;
         public bool ResetTimelineTimeScaleAfterGeneration;
+        public bool UseRelativeOffset;
+        public Vector3 RelativeOffset;
         public PlayableDirector TimelineDirectorSnapshot;
         internal KimodoTimelineInOutConstraintContext TimelineContextSnapshot;
         public ArdyEditorHistorySource InitialArdyHistorySource;

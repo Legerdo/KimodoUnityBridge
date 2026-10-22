@@ -33,6 +33,10 @@ namespace KimodoBridge.Editor
         private SerializedProperty pathDistanceProp;
         private SerializedProperty overrideHeadingProp;
         private SerializedProperty headingDegreesProp;
+        private SerializedProperty useRelativeOffsetProp;
+        private SerializedProperty relativeOffsetProp;
+        private SerializedProperty commandGenerationStatusProp;
+        private SerializedProperty commandGenerationErrorProp;
         private SerializedProperty inOutConstraintModeProp;
         private SerializedProperty enableInConstraint;
         private SerializedProperty enableOutConstraint;
@@ -138,6 +142,10 @@ namespace KimodoBridge.Editor
             pathDistanceProp = serializedObject.FindProperty("pathDistance");
             overrideHeadingProp = serializedObject.FindProperty("overrideHeading");
             headingDegreesProp = serializedObject.FindProperty("headingDegrees");
+            useRelativeOffsetProp = serializedObject.FindProperty("useRelativeOffset");
+            relativeOffsetProp = serializedObject.FindProperty("relativeOffset");
+            commandGenerationStatusProp = serializedObject.FindProperty("commandGenerationStatus");
+            commandGenerationErrorProp = serializedObject.FindProperty("commandGenerationError");
             inOutConstraintModeProp = serializedObject.FindProperty("inOutConstraintMode");
             enableInConstraint = serializedObject.FindProperty("enableInConstraint");
             enableOutConstraint = serializedObject.FindProperty("enableOutConstraint");
@@ -202,6 +210,7 @@ namespace KimodoBridge.Editor
             PullBridgeStatusSnapshot();
             SyncRequestHandleState();
             serializedObject.UpdateIfRequiredOrScript();
+            DrawCommandGenerationStatus();
             DrawGenerationSection();
             DrawBakeSection();
             DrawErrorSection();
@@ -211,6 +220,23 @@ namespace KimodoBridge.Editor
             {
                 serializedObject.ApplyModifiedProperties();
             }
+        }
+
+        private void DrawCommandGenerationStatus()
+        {
+            string status = commandGenerationStatusProp?.stringValue ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(status) || string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            string error = commandGenerationErrorProp?.stringValue ?? string.Empty;
+            MessageType messageType = string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase)
+                ? MessageType.Error
+                : string.Equals(status, "canceled", StringComparison.OrdinalIgnoreCase)
+                    ? MessageType.Warning
+                    : MessageType.Info;
+            string message = $"Command generation {status}.";
+            if (!string.IsNullOrWhiteSpace(error)) message += $"\n{error}";
+            EditorGUILayout.HelpBox(message, messageType);
         }
 
         private void DrawGenerationSection()
@@ -504,6 +530,18 @@ namespace KimodoBridge.Editor
                     if (overridePathDistanceProp != null && overridePathDistanceProp.boolValue && pathDistanceProp != null)
                         EditorGUILayout.PropertyField(pathDistanceProp, new GUIContent("Distance", "Path length in Unity units."));
                     EditorGUI.indentLevel--;
+                }
+            }
+            if (useRelativeOffsetProp != null)
+            {
+                EditorGUILayout.PropertyField(
+                    useRelativeOffsetProp,
+                    new GUIContent("Relative Offset", "Normalize the generated root Transform to frame zero before Humanoid conversion, then apply the World-space target position as the Timeline Clip offset."));
+                if (useRelativeOffsetProp.boolValue && relativeOffsetProp != null)
+                {
+                    EditorGUILayout.PropertyField(
+                        relativeOffsetProp,
+                        new GUIContent("World Position", "World-space target position for the generated Clip's first root pose."));
                 }
             }
             if (overrideHeadingProp != null)

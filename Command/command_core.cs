@@ -105,6 +105,12 @@ namespace KimodoUnityBridge.Command
                         "Return the command manual, detailed parameter documentation for one command, or currently viable model configurations.",
                         Properties(
                             Optional("command", "string", "Command name whose full manual entry should be returned."),
+                            new PropertyDefinition("compact", new JObject
+                            {
+                                ["type"] = "boolean",
+                                ["default"] = false,
+                                ["description"] = "For section=models, return only model, text_encoder_model, and default for each configuration."
+                            }, false),
                             new PropertyDefinition("section", new JObject
                             {
                                 ["type"] = "string",
@@ -211,7 +217,7 @@ namespace KimodoUnityBridge.Command
                         "Modify an External Pose slot. Supply root, muscles, effector, or any combination.",
                         PoseSetSchema()),
                     CommandDefinition(GetGenerationCommand,
-                        "Get status and results for install, generation, or Mocap analysis requests. A completed generation includes post_analysis with the full animation.analysis result for the generated Timeline Clip; analysis failure is reported separately and does not invalidate generation. A completed Mocap analysis returns poses and SMPL-X coordinate metadata at the top level. include_request_json explicitly opts into the submitted generation payload.",
+                        "Get status and results for install, generation, or Mocap analysis requests. A completed generation includes post_analysis.analysis_path pointing to the full animation.analysis JSON for the generated Timeline Clip; analysis failure is reported separately and does not invalidate generation. A completed Mocap analysis returns poses and SMPL-X coordinate metadata at the top level. include_request_json explicitly opts into the submitted generation payload.",
                         Properties(
                             Required("request_id", "string", "Request id returned by server.install, animation.generate, pose.fromvideo, or pose.frompicture."),
                             Optional("include_request_json", "boolean", "Include the exact JSON payload sent to QuickServer; defaults to false."))),
@@ -256,8 +262,28 @@ namespace KimodoUnityBridge.Command
                 var result = new JObject(response);
                 result.Remove("status");
                 result["count"] = (result["configs"] as JArray)?.Count ?? 0;
+                if (arguments.Value<bool?>("compact") == true)
+                {
+                    result = CompactModelConfigurations(result);
+                }
                 return Ok(result);
 
+        }
+
+        private static JObject CompactModelConfigurations(JObject response)
+        {
+            JArray configurations = response["configs"] as JArray ?? new JArray();
+            return new JObject
+            {
+                ["default"] = response["default"]?.DeepClone(),
+                ["count"] = configurations.Count,
+                ["configs"] = new JArray(configurations.OfType<JObject>().Select(configuration => new JObject
+                {
+                    ["model"] = configuration["model"]?.DeepClone(),
+                    ["text_encoder_model"] = configuration["text_encoder_model"]?.DeepClone(),
+                    ["default"] = configuration["default"]?.DeepClone()
+                }))
+            };
         }
 
         public static string GetCommandHelp(string argumentsJson = "{}") => Execute(argumentsJson, GetCommandHelp);
@@ -280,7 +306,7 @@ namespace KimodoUnityBridge.Command
                 }
                 if (section == "models")
                 {
-                    return ListModels(new JObject());
+                    return ListModels(arguments);
                 }
                 if (section == "constraints")
                 {
@@ -665,6 +691,10 @@ namespace KimodoUnityBridge.Command
                 float headingDegrees = overrideHeading
                     ? ReadFiniteFloat(pathOptions["heading"], "path.heading")
                     : 0f;
+                bool useRelativeOffset = pathOptions?["relative_offset"] != null;
+                Vector3 relativeOffset = useRelativeOffset
+                    ? ReadVector3(pathOptions["relative_offset"] as JArray, "path.relative_offset")
+                    : Vector3.zero;
                 float duration = (float)(durationFrames / SessionFrameRate);
                 string analysisOptionsJson = ParseAnalysisOptionsJson(arguments);
                 int frameCount = Math.Max(1, KimodoFrameTimeUtility.SecondsToFrameCount(duration, frameRate));
@@ -710,7 +740,9 @@ namespace KimodoUnityBridge.Command
                 TimelineGenerationTrace trace = PrepareGenerationTrace(arguments, character, duration);
                 KimodoExternalConstraintRequest inOutConstraints = BuildCommandInOutConstraints(
                     arguments, trace, modelName, frameCount, frameRate, loopRequested, poseConstraints);
+                PrepareCommandOutsideEvidencePosition(trace);
                 KimodoPlayableClip playableClip = CreateGenerationPlayableClip(trace, requestedAnimationName, inOutConstraints != null);
+                CreateCommandOutsideEvidenceClips(trace);
                 if (inOutConstraints != null)
                 {
                     playableClip.postApplyInConstraint = inOutConstraints.DeferInConstraint;
@@ -737,6 +769,8 @@ namespace KimodoUnityBridge.Command
                 playableClip.pathDistance = pathDistance;
                 playableClip.overrideHeading = overrideHeading;
                 playableClip.headingDegrees = headingDegrees;
+                playableClip.useRelativeOffset = useRelativeOffset;
+                playableClip.relativeOffset = relativeOffset;
                 playableClip.loop = loopRequested
                     ? UnityEngine.Timeline.AnimationPlayableAsset.LoopMode.On
                     : UnityEngine.Timeline.AnimationPlayableAsset.LoopMode.Off;

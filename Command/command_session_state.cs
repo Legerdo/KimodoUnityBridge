@@ -62,6 +62,17 @@ namespace KimodoUnityBridge.Command
                 if (root != null) UnityEngine.Object.DestroyImmediate(root);
             }
 
+            // Clean up the legacy container created by the former timeline
+            // switching path. New switches use session.clear and never create it.
+            GameObject legacyArchive = scene.IsValid()
+                ? scene.GetRootGameObjects().FirstOrDefault(root => root != null && root.name == "KimodoSessionArchive")
+                : null;
+            if (legacyArchive != null)
+            {
+                removedCount += legacyArchive.transform.childCount;
+                UnityEngine.Object.DestroyImmediate(legacyArchive);
+            }
+
             return removedCount;
         }
 
@@ -580,7 +591,10 @@ namespace KimodoUnityBridge.Command
                 {
                 throw new InvalidOperationException("Scene context was closed before generation could be started.");
                 }
-                trace.Character.NextStartSeconds = trace.StartSeconds + trace.DurationSeconds + ClipSafeZoneSeconds;
+                double reservedEnd = trace.StartSeconds + trace.DurationSeconds;
+                foreach (CommandInOutEvidencePlan plan in trace.InOutEvidencePlans.Where(item => !item.IsIn))
+                    reservedEnd = Math.Max(reservedEnd, trace.StartSeconds + trace.DurationSeconds + plan.Window.SourceWindowDurationSeconds);
+                trace.Character.NextStartSeconds = reservedEnd + ClipSafeZoneSeconds;
             }
         }
 
@@ -2043,11 +2057,12 @@ namespace KimodoUnityBridge.Command
 
             public TimelineSessionRecord Session { get; }
             public TimelineCharacterRecord Character { get; }
-            public double StartSeconds { get; }
+            public double StartSeconds { get; set; }
             public double DurationSeconds { get; }
             public TimelineClip TimelineClip { get; set; }
             public KimodoPlayableClip PlayableClip { get; set; }
             public JObject InOutSampling { get; set; }
+            public List<CommandInOutEvidencePlan> InOutEvidencePlans { get; } = new List<CommandInOutEvidencePlan>();
             public TimelineAnimationRecord Animation { get; set; }
         }
 

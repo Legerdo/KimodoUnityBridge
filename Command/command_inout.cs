@@ -4,7 +4,9 @@ using System.Linq;
 using KimodoBridge;
 using KimodoBridge.Editor;
 using Newtonsoft.Json.Linq;
+using UnityEditor;
 using UnityEngine;
+using UnityEngine.Timeline;
 
 namespace KimodoUnityBridge.Command
 {
@@ -15,6 +17,15 @@ namespace KimodoUnityBridge.Command
             public int FrameCount;
             public double[] SourceTimes;
             public int[] OutputFrames;
+            public double SourceWindowStartSeconds;
+            public double SourceWindowDurationSeconds;
+        }
+
+        internal sealed class CommandInOutEvidencePlan
+        {
+            public bool IsIn;
+            public TimelineAnimationRecord Animation;
+            public CommandInOutWindow Window;
         }
 
         // Command frames use 60 FPS. The source is the played Clip range,
@@ -47,7 +58,9 @@ namespace KimodoUnityBridge.Command
             {
                 FrameCount = frames,
                 SourceTimes = indices.Select(i => Math.Max(0, first) + i / (double)fps).ToArray(),
-                OutputFrames = indices.Select(i => start + i).ToArray()
+                OutputFrames = indices.Select(i => start + i).ToArray(),
+                SourceWindowStartSeconds = first,
+                SourceWindowDurationSeconds = frames / (double)fps
             };
         }
 
@@ -177,6 +190,16 @@ namespace KimodoUnityBridge.Command
                 diagnostics[plan.IsIn ? "in" : "out"]["runtime_model_frames"] =
                     new JArray(plan.Window.OutputFrames.Select(f => f + request.ContextBeforeFrames));
             trace.InOutSampling = diagnostics;
+            trace.InOutEvidencePlans.Clear();
+            if (mode == "outside")
+            {
+                trace.InOutEvidencePlans.AddRange(plans.Select(plan => new CommandInOutEvidencePlan
+                {
+                    IsIn = plan.IsIn,
+                    Animation = plan.Animation,
+                    Window = plan.Window
+                }));
+            }
             return request;
         }
 
@@ -184,6 +207,74 @@ namespace KimodoUnityBridge.Command
         {
             string unknown = value.Properties().Select(p => p.Name).FirstOrDefault(n => !allowed.Contains(n));
             if (unknown != null) throw new InvalidOperationException($"Unknown inout parameter '{unknown}'.");
+        }
+
+        private static void PrepareCommandOutsideEvidencePosition(TimelineGenerationTrace trace)
+        {
+            if (trace?.Character == null || trace.InOutEvidencePlans.Count == 0) return;
+            CommandInOutEvidencePlan input = trace.InOutEvidencePlans.FirstOrDefault(plan => plan.IsIn);
+            if (input != null)
+                trace.StartSeconds = trace.Character.NextStartSeconds + input.Window.SourceWindowDurationSeconds;
+        }
+
+        private static void CreateCommandOutsideEvidenceClips(TimelineGenerationTrace trace)
+        {
+            if (trace?.TimelineClip == null || trace.Character?.Track == null || trace.InOutEvidencePlans.Count == 0) return;
+
+            var evidenceDescriptions = new JArray();
+            foreach (CommandInOutEvidencePlan plan in trace.InOutEvidencePlans)
+            {
+                double sourceWindowStart = plan.Animation.TimelineStartSeconds + plan.Window.SourceWindowStartSeconds;
+                double sourceWindowEnd = sourceWindowStart + plan.Window.SourceWindowDurationSeconds;
+                double evidenceStart = plan.IsIn
+                    ? trace.StartSeconds - plan.Window.SourceWindowDurationSeconds
+                    : trace.TimelineClip.end;
+                foreach (TimelineAnimationSegment segment in plan.Animation.TimelineSegments)
+                {
+                    TimelineClip source = segment?.TimelineClip;
+                    if (!(source?.asset is AnimationPlayableAsset sourceAsset) || sourceAsset.clip == null) continue;
+
+                    double clippedStart = Math.Max(sourceWindowStart, source.start);
+                    double clippedEnd = Math.Min(sourceWindowEnd, source.end);
+                    if (clippedEnd <= clippedStart) continue;
+
+                    TimelineClip evidence = trace.Character.Track.CreateClip<AnimationPlayableAsset>();
+                    AnimationPlayableAsset evidenceAsset = evidence.asset as AnimationPlayableAsset;
+                    if (evidenceAsset == null)
+                        throw new InvalidOperationException("Timeline could not create an In/Out evidence AnimationPlayableAsset.");
+
+                    evidenceAsset.clip = sourceAsset.clip;
+                    evidenceAsset.loop = sourceAsset.loop;
+                    evidenceAsset.position = sourceAsset.position;
+                    evidenceAsset.rotation = sourceAsset.rotation;
+                    evidenceAsset.removeStartOffset = sourceAsset.removeStartOffset;
+                    evidenceAsset.applyFootIK = sourceAsset.applyFootIK;
+                    evidenceAsset.useTrackMatchFields = sourceAsset.useTrackMatchFields;
+                    evidenceAsset.matchTargetFields = sourceAsset.matchTargetFields;
+                    evidence.start = evidenceStart + (clippedStart - sourceWindowStart);
+                    evidence.duration = clippedEnd - clippedStart;
+                    evidence.timeScale = source.timeScale;
+                    evidence.clipIn = source.ToLocalTime(clippedStart);
+                    evidence.displayName = $"InOut {(plan.IsIn ? "In" : "Out")} {source.displayName}";
+                    evidenceDescriptions.Add(new JObject
+                    {
+                        ["side"] = plan.IsIn ? "in" : "out",
+                        ["display_name"] = evidence.displayName,
+                        ["start_timeline_seconds"] = evidence.start,
+                        ["duration_seconds"] = evidence.duration,
+                        ["clip_in_seconds"] = evidence.clipIn,
+                        ["time_scale"] = evidence.timeScale,
+                        ["source_timeline_start_seconds"] = clippedStart,
+                        ["source_timeline_end_seconds"] = clippedEnd
+                    });
+                    EditorUtility.SetDirty(evidenceAsset);
+                }
+            }
+
+            if (trace.InOutSampling != null)
+                trace.InOutSampling["evidence_clips"] = evidenceDescriptions;
+            EditorUtility.SetDirty(trace.Character.Track);
+            EditorUtility.SetDirty(trace.Session.TimelineAsset);
         }
     }
 }

@@ -245,6 +245,8 @@ namespace KimodoBridge.Editor
                     clip.inOutConstraintMode == KimodoInOutConstraintMode.Inside &&
                     (clip.enableInConstraint || clip.enableOutConstraint) &&
                     !Mathf.Approximately((float)timelineClip.timeScale, 1f),
+                UseRelativeOffset = clip.useRelativeOffset,
+                RelativeOffset = clip.relativeOffset,
                 TimelineDirectorSnapshot = outputDirector,
                 TimelineContextSnapshot = timelineContextSnapshot,
                 InitialArdyHistorySource = initialHistorySource,
@@ -319,7 +321,7 @@ namespace KimodoBridge.Editor
                 EditorUtility.SetDirty(clip);
                 EditorUtility.SetDirty(result.GeneratedClip);
                 result.ConstraintsPath = request.Constraints.IsEmpty ? "(none)" : "(inline-json)";
-                HandleGeneratedClipWritebackCompleted(clip);
+                HandleGeneratedClipWritebackCompleted(clip, request);
 
                 if (!KimodoEditorClipWritebackService.TryMaterializeGeneratedClipCache(
                         result.GeneratedClip,
@@ -399,15 +401,151 @@ namespace KimodoBridge.Editor
             clip.fps = Mathf.RoundToInt(obj.Value<float?>("fps") ?? KimodoMotionModelProfiles.DefaultFrameRate);
         }
 
-        private static void HandleGeneratedClipWritebackCompleted(KimodoPlayableClip playableClip)
+        private static void HandleGeneratedClipWritebackCompleted(
+            KimodoPlayableClip playableClip,
+            KimodoEditorGenerateRequest request)
         {
             if (playableClip != null)
             {
-                playableClip.position = Vector3.zero;
+                if (playableClip.useRelativeOffset && playableClip.clip != null)
+                {
+                    playableClip.position = ResolveRelativeOffsetInTrackSpace(playableClip, request);
+                }
+                else
+                {
+                    playableClip.position = Vector3.zero;
+                }
                 playableClip.rotation = Quaternion.identity;
                 EditorUtility.SetDirty(playableClip);
             }
             KimodoTimelinePreviewRefreshUtility.RefreshIfPreviewing();
+        }
+
+        internal static Vector3 ResolveRelativeOffsetInTrackSpace(
+            KimodoPlayableClip playableClip,
+            KimodoEditorGenerateRequest request)
+        {
+            Vector3 worldOffset = playableClip != null ? playableClip.relativeOffset : Vector3.zero;
+            TimelineClip timelineClip = KimodoTimelineClipResolver.FindTimelineClipForAsset(playableClip);
+            if (!(timelineClip?.GetParentTrack() is AnimationTrack track)) return worldOffset;
+
+            Vector3 trackPosition;
+            Quaternion trackRotation;
+            KimodoTimelineInOutConstraintContext context = request?.TimelineContextSnapshot;
+            if (context != null && ReferenceEquals(context.Track, track) && context.HasTrackOffsetSnapshot)
+            {
+                trackPosition = context.TrackOffsetPosition;
+                trackRotation = context.TrackOffsetRotation;
+            }
+            else
+            {
+                if (!KimodoInOutConstraintAdapter.TryResolveTimelineContext(timelineClip, out context, out _) || context == null)
+                    return worldOffset;
+                KimodoTimelineTrackOffsetUtility.CaptureWorldOffset(
+                    context.Track,
+                    context.Animator,
+                    out trackPosition,
+                    out trackRotation,
+                    out _);
+            }
+
+            KimodoTimelineTrackOffsetUtility.WorldToTrackPose(
+                worldOffset,
+                Quaternion.identity,
+                trackPosition,
+                trackRotation,
+                out Vector3 trackLocalOffset,
+                out _);
+            return trackLocalOffset;
+        }
+
+        internal static void NormalizeRootTranslationToFrameZero(AnimationClip clip)
+        {
+            if (clip == null) return;
+            EditorCurveBinding[] bindings = AnimationUtility.GetCurveBindings(clip);
+            string transformRootPath = null;
+            AnimationCurve transformX = null;
+            AnimationCurve transformY = null;
+            AnimationCurve transformZ = null;
+            var transformCurves = new Dictionary<string, AnimationCurve[]>();
+            AnimationCurve animatorX = null;
+            AnimationCurve animatorY = null;
+            AnimationCurve animatorZ = null;
+            foreach (EditorCurveBinding binding in bindings)
+            {
+                AnimationCurve curve = AnimationUtility.GetEditorCurve(clip, binding);
+                if (binding.type == typeof(Transform) &&
+                    (binding.propertyName == "m_LocalPosition.x" ||
+                     binding.propertyName == "m_LocalPosition.y" ||
+                     binding.propertyName == "m_LocalPosition.z"))
+                {
+                    if (!transformCurves.TryGetValue(binding.path, out AnimationCurve[] curves))
+                    {
+                        curves = new AnimationCurve[3];
+                        transformCurves.Add(binding.path, curves);
+                    }
+                    if (binding.propertyName == "m_LocalPosition.x") curves[0] = curve;
+                    else if (binding.propertyName == "m_LocalPosition.y") curves[1] = curve;
+                    else curves[2] = curve;
+                }
+                else if (binding.type == typeof(Animator) && binding.path == string.Empty)
+                {
+                    if (binding.propertyName == "RootT.x") animatorX = curve;
+                    else if (binding.propertyName == "RootT.y") animatorY = curve;
+                    else if (binding.propertyName == "RootT.z") animatorZ = curve;
+                }
+            }
+
+            foreach (KeyValuePair<string, AnimationCurve[]> pair in transformCurves)
+            {
+                AnimationCurve[] curves = pair.Value;
+                if (curves[0] == null || curves[1] == null || curves[2] == null) continue;
+                if (transformRootPath == null || CountPathDepth(pair.Key) < CountPathDepth(transformRootPath))
+                {
+                    transformRootPath = pair.Key;
+                    transformX = curves[0];
+                    transformY = curves[1];
+                    transformZ = curves[2];
+                }
+            }
+
+            bool useTransformRoot = transformX != null && transformY != null && transformZ != null;
+            AnimationCurve x = useTransformRoot ? transformX : animatorX;
+            AnimationCurve y = useTransformRoot ? transformY : animatorY;
+            AnimationCurve z = useTransformRoot ? transformZ : animatorZ;
+            string path = useTransformRoot ? transformRootPath : string.Empty;
+            Type bindingType = useTransformRoot ? typeof(Transform) : typeof(Animator);
+            string xProperty = bindingType == typeof(Transform) ? "m_LocalPosition.x" : "RootT.x";
+            string yProperty = bindingType == typeof(Transform) ? "m_LocalPosition.y" : "RootT.y";
+            string zProperty = bindingType == typeof(Transform) ? "m_LocalPosition.z" : "RootT.z";
+            if (x == null || y == null || z == null || x.length == 0 || y.length == 0 || z.length == 0) return;
+            Vector3 origin = new Vector3(x.Evaluate(0f), y.Evaluate(0f), z.Evaluate(0f));
+            OffsetCurve(x, origin.x);
+            OffsetCurve(y, origin.y);
+            OffsetCurve(z, origin.z);
+            clip.SetCurve(path, bindingType, xProperty, x);
+            clip.SetCurve(path, bindingType, yProperty, y);
+            clip.SetCurve(path, bindingType, zProperty, z);
+            EditorUtility.SetDirty(clip);
+        }
+
+        private static int CountPathDepth(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return 0;
+            int depth = 1;
+            for (int i = 0; i < path.Length; i++)
+            {
+                if (path[i] == '/') depth++;
+            }
+            return depth;
+        }
+
+        private static void OffsetCurve(AnimationCurve curve, float offset)
+        {
+            if (curve == null || Mathf.Approximately(offset, 0f)) return;
+            Keyframe[] keys = curve.keys;
+            for (int i = 0; i < keys.Length; i++) keys[i].value -= offset;
+            curve.keys = keys;
         }
 
         private static int BeginReplaceTimelineAnimationUndo(

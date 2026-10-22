@@ -102,8 +102,8 @@ namespace KimodoUnityBridge.Command
                 SceneContextCommand => CommandDocumentation(
                     "Read the active Unity scene, its Kimodo Timeline, character handles, and current Session identity; optionally reload and open a Timeline asset.",
                     new[] { "Use returned scene object references for later commands instead of guessing from names or asset paths.", "Set include_history only when the Session-wide animation, generation, and analysis index is needed.", "Set timeline_path to reload and open a historical Timeline; root tracks are bound to same-name scene characters when available." },
-                    new[] { "Without timeline_path, returns the current live scene context; if it is missing, emits a warning and creates one in the active scene.", "With timeline_path, reloads the asset, opens it in the Timeline window, and returns opened_timeline details. Missing same-name characters produce warnings while the Timeline remains open.", "When requested, history includes compact animation, generation, and analysis records." },
-                    new[] { "The automatic context is scoped to the active scene. The timeline_path form creates only a transient editor context and does not modify the Timeline asset.", "History is read from the existing Session metadata and analysis index." },
+                    new[] { "Without timeline_path, returns the current live scene context; if it is missing, emits a warning and creates one in the active scene.", "With timeline_path, runs the session.clear lifecycle for the transient context, reloads the asset, opens it in the Timeline window, and returns opened_timeline details. Missing same-name characters produce warnings while the Timeline remains open.", "When requested, history includes compact animation, generation, and analysis records." },
+                    new[] { "The automatic context is scoped to the active scene. The timeline_path form clears transient context objects, creates a new transient editor context, and does not modify the Timeline asset.", "History is read from the existing Session metadata and analysis index." },
                     new[] { "Context reflects the active loaded scene and current Session; history is omitted by default.", "A Clip asset path is asset metadata and is not itself a scene Clip handle." },
                     GenerateAnimationCommand, AnimationAnalysisCommand, PoseGetCommand),
                 InstallServerCommand => CommandDocumentation(
@@ -125,7 +125,7 @@ namespace KimodoUnityBridge.Command
                     new[] { "Pass the same point constraints array that will be sent to animation.generate when previewing those constraints. Every entry is previewed in isolation by default; combine=true renders all opaque pose previews together.", "Use transforms when additional scene objects should be framed with each pose." },
                     new[] { "Returns one image per constraint by default, or one shared image with per-constraint measured joint positions when combine=true.", "Effector target distances use a 0.05 m default tolerance; the call is synchronous and returns no request_id.", "SceneView lighting, skybox, gizmos, and grid keep their current state unless explicitly set." },
                     new[] { "SceneView camera position, projection and settings remain available for inspection. Renderer visibility is restored after capture." },
-                    new[] { "Requires an active Scene View and a valid Humanoid character. This command previews point constraints; use animation.generate for inout and root_path constraints." },
+                    new[] { "Requires a valid Humanoid character. If no Scene View is active, the command opens one before capture. This command previews point constraints; use animation.generate for inout and root_path constraints." },
                     PoseGetCommand, AnimationAnalysisCommand, GenerateAnimationCommand),
                 RetargetAnimationCommand => CommandDocumentation(
                     "Retarget one loaded source Clip to another character in the current scene context.",
@@ -137,7 +137,7 @@ namespace KimodoUnityBridge.Command
                 GenerateAnimationCommand => CommandDocumentation(
                     "Submit one animation generation request for a character in the current scene context.",
                     new[] { "Describe one simple semantic action in prompt; aim for 25 words or fewer.", "Represent exact body pose, root position, effector targets, duration, path, loop, and Clip windows in their explicit fields when required.", "Point constraints without an explicit pose use the Avatar skeleton rest pose, as in pose.get mode=skeleton_rest_pose; they never implicitly sample the Timeline. Explicit Pose references and In/Out source Clip sampling are preserved.", "Save request_id and use generation.get to poll; do not resubmit a running request." },
-                    new[] { "The accepted response contains request_id, status, preflight check results, and warnings. Root speed above 7 m/s warns; above 10 m/s blocks generation. Root acceleration above 10 m/s² warns; above 15 m/s blocks generation. Use the returned preflight diagnostics to assess pose/effector constraints; use pose.analysis when measured sampled joint positions are needed.", "On completion, generation.get returns the generated Clip metadata, asset path, animation_id, generation diagnostics, and one full animation.analysis result under post_analysis. Analysis failure is reported separately and does not invalidate the generated Clip." },
+                    new[] { "The accepted response contains request_id, status, preflight check results, and warnings. Root speed above 7 m/s warns; above 10 m/s blocks generation. Root acceleration above 10 m/s² warns; above 15 m/s blocks generation. Use the returned preflight diagnostics to assess pose/effector constraints; use pose.analysis when measured sampled joint positions are needed.", "On completion, generation.get returns the generated Clip metadata, asset path, animation_id, generation diagnostics, and post_analysis.analysis_path for the full animation.analysis JSON. Analysis failure is reported separately and does not invalidate the generated Clip." },
                     new[] { "A completed result is appended as a Timeline Clip; existing completed Clips are retained.", "When no explicit first-frame or In/Out anchor takes precedence, AutoBegin adds a Root2D constraint at the character's original scene Hips position and heading." },
                     new[] { "Map explicit path and direction requirements to supported trajectory fields; use confirmed scene/analysis evidence to resolve details the prompt leaves unspecified. Leave other optional fields at their schema defaults.", "analysis_option is lightweight generation-time analysis; animation.analysis provides the full analysis pipeline.", "Command checks validate supported request boundaries. Evaluate semantic and artistic quality with the task's acceptance criteria and analysis evidence." },
                     SceneContextCommand, PoseGetCommand, GetGenerationCommand, CancelGenerationCommand, AnimationAnalysisCommand),
@@ -446,18 +446,10 @@ namespace KimodoUnityBridge.Command
                         ["properties"] = new JObject
                         {
                             ["status"] = new JObject { ["type"] = "string", ["enum"] = new JArray("pending", "completed", "failed", "skipped") },
-                            ["result"] = new JObject
+                            ["analysis_path"] = new JObject
                             {
-                                ["type"] = "object",
-                                ["properties"] = new JObject
-                                {
-                                    ["ok"] = new JObject { ["type"] = "boolean" },
-                                    ["analysis_schema_version"] = new JObject { ["type"] = "string" },
-                                    ["clip"] = BuildCommandOutputFieldSchema(AnimationAnalysisCommand, "clip"),
-                                    ["pictures"] = BuildCommandOutputFieldSchema(AnimationAnalysisCommand, "pictures")
-                                },
-                                ["required"] = new JArray("ok"),
-                                ["additionalProperties"] = true
+                                ["type"] = "string",
+                                ["description"] = "Project-relative JSON path containing the complete post-generation animation.analysis result."
                             },
                             ["error"] = new JObject
                             {
@@ -653,8 +645,14 @@ namespace KimodoUnityBridge.Command
                 ["start_angle"] = new JObject { ["type"] = "number" },
                 ["end_angle"] = new JObject { ["type"] = "number" },
                 ["distance"] = new JObject { ["type"] = "number", ["minimum"] = 0 },
-                ["heading"] = new JObject { ["type"] = "number" }
-            }, "Optional Root2D path override. Map explicit path and direction requirements to these fields; use confirmed scene or analysis evidence to resolve details the prompt leaves unspecified. Leave other optional fields at their schema defaults. Any angle enables path override; distance replaces the measured path length; heading is applied after path composition.");
+                ["heading"] = new JObject { ["type"] = "number" },
+                ["relative_offset"] = new JObject
+                {
+                    ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3,
+                    ["items"] = new JObject { ["type"] = "number" },
+                    ["description"] = "World-space target position for the generated Clip. Root translation is normalized to zero before Humanoid conversion, then this position is converted to track space and applied as the Timeline Clip offset."
+                }
+            }, "Optional Root2D path and output placement settings. Any angle enables path override; distance replaces the measured path length; heading is applied after path composition; relative_offset sets the generated Clip's World-space target position while keeping its generated root trajectory relative to frame zero.");
         }
 
         private static PropertyDefinition OptionalGeneration()
