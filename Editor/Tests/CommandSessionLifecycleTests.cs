@@ -17,6 +17,94 @@ namespace KimodoUnityBridge.Command.Tests
 {
     public sealed class CommandSessionLifecycleTests
     {
+        private const string HumanoidModelPath = "Packages/com.unity.kimodo_unity_motion_tools/Editor/Model/Armature.fbx";
+
+        [Test]
+        public void ResolveSessionCharacterByReference_AddsObjectReferenceAndRejectsAmbiguousOrInactiveSceneTargets()
+        {
+            SceneSetup[] previousSceneSetup = EditorSceneManager.GetSceneManagerSetup();
+            Scene activeScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            Scene inactiveScene = default;
+            TimelineAsset timeline = ScriptableObject.CreateInstance<TimelineAsset>();
+            string fixtureId = Guid.NewGuid().ToString("N");
+            string fixtureFolder = "Assets/Archive/KimodoCommandTests/Fixtures";
+            string activeScenePath = $"{fixtureFolder}/RoleResolution_Active_{fixtureId}.unity";
+            string inactiveScenePath = $"{fixtureFolder}/RoleResolution_Inactive_{fixtureId}.unity";
+            string activeCharacterName = "RoleResolution_" + fixtureId;
+            try
+            {
+                Directory.CreateDirectory(Path.Combine(Application.dataPath, "Archive", "KimodoCommandTests", "Fixtures"));
+                GameObject sceneAnchor = new GameObject("RoleResolutionSceneAnchor");
+                SceneManager.MoveGameObjectToScene(sceneAnchor, activeScene);
+                Avatar avatar = AssetDatabase.LoadAllAssetsAtPath(HumanoidModelPath).OfType<Avatar>()
+                    .FirstOrDefault(item => item.isValid && item.isHuman);
+                Assert.That(avatar, Is.Not.Null, "Missing Humanoid Armature fixture Avatar.");
+                GameObject character = CreateHumanoidCharacter(activeCharacterName, avatar);
+                GameObject ambiguousA = CreateHumanoidCharacter("RoleResolution_Ambiguous", avatar);
+                GameObject ambiguousB = CreateHumanoidCharacter("RoleResolution_Ambiguous", avatar);
+                Assert.That(EditorSceneManager.SaveScene(activeScene, activeScenePath), Is.True,
+                    "Could not save the active scene needed for stable GlobalObjectId resolution.");
+
+                Type context = typeof(command_context);
+                Type sessionType = context.GetNestedType("TimelineSessionRecord", BindingFlags.NonPublic);
+                object session = CreateSessionRecord(sessionType, timeline, null, null, null);
+                MethodInfo resolve = context.GetMethod("ResolveSessionCharacterByReference", BindingFlags.Static | BindingFlags.NonPublic);
+                string characterId = GlobalObjectId.GetGlobalObjectIdSlow(character).ToString();
+                object byId = resolve.Invoke(null, new object[] { session, characterId, true });
+                Assert.That(byId.GetType().GetProperty("Root").GetValue(byId), Is.SameAs(character));
+                object byName = resolve.Invoke(null, new object[] { session, activeCharacterName, true });
+                Assert.That(byName, Is.SameAs(byId), "Name and object_ref should reuse the same character record.");
+                Assert.That(((System.Collections.ICollection)sessionType.GetProperty("Characters").GetValue(session)).Count, Is.EqualTo(1));
+                Assert.That(timeline.GetRootTracks().Count(), Is.EqualTo(1));
+
+                TargetInvocationException ambiguous = Assert.Throws<TargetInvocationException>(() =>
+                    resolve.Invoke(null, new object[] { session, "RoleResolution_Ambiguous", true }));
+                Assert.That(ambiguous.InnerException, Is.TypeOf<InvalidOperationException>());
+                Assert.That(ambiguous.InnerException.Message, Does.Contain("ambiguous in the active scene"));
+                Assert.That(ambiguous.InnerException.Message, Does.Contain("object_ref"));
+                Assert.That(((System.Collections.ICollection)sessionType.GetProperty("Characters").GetValue(session)).Count, Is.EqualTo(1));
+                Assert.That(timeline.GetRootTracks().Count(), Is.EqualTo(1), "Ambiguous resolution must not add tracks.");
+
+                inactiveScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
+                GameObject inactiveCharacter = new GameObject("RoleResolution_InactiveCharacter_" + fixtureId);
+                inactiveCharacter.AddComponent<Animator>();
+                SceneManager.MoveGameObjectToScene(inactiveCharacter, inactiveScene);
+                Assert.That(EditorSceneManager.SaveScene(inactiveScene, inactiveScenePath), Is.True,
+                    "Could not save the additive scene needed for stable GlobalObjectId resolution.");
+                Assert.That(SceneManager.SetActiveScene(activeScene), Is.True);
+
+                MethodInfo find = context.GetMethod("ResolveRequestedSceneCharacters", BindingFlags.Static | BindingFlags.NonPublic);
+                Assert.That((GameObject[])find.Invoke(null, new object[] { inactiveCharacter.name }), Is.Empty,
+                    "Name lookup must stay within the active scene.");
+                string inactiveId = GlobalObjectId.GetGlobalObjectIdSlow(inactiveCharacter).ToString();
+                TargetInvocationException inactive = Assert.Throws<TargetInvocationException>(() =>
+                    resolve.Invoke(null, new object[] { session, inactiveId, true }));
+                Assert.That(inactive.InnerException.Message, Does.Contain("in the active scene"));
+                Assert.That(((System.Collections.ICollection)sessionType.GetProperty("Characters").GetValue(session)).Count, Is.EqualTo(1));
+                Assert.That(timeline.GetRootTracks().Count(), Is.EqualTo(1));
+            }
+            finally
+            {
+                if (inactiveScene.IsValid() && inactiveScene.isLoaded)
+                {
+                    if (activeScene.IsValid() && activeScene.isLoaded) SceneManager.SetActiveScene(activeScene);
+                    EditorSceneManager.CloseScene(inactiveScene, true);
+                }
+                if (previousSceneSetup.Any(setup => setup.isLoaded))
+                {
+                    EditorSceneManager.RestoreSceneManagerSetup(previousSceneSetup);
+                }
+                else
+                {
+                    EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                }
+                UnityEngine.Object.DestroyImmediate(timeline);
+                ArchiveFixtureScene(activeScenePath, fixtureId + "_active");
+                ArchiveFixtureScene(inactiveScenePath, fixtureId + "_inactive");
+                AssetDatabase.Refresh();
+            }
+        }
+
         [TestCase("mesh")]
         [TestCase("missing_avatar")]
         [TestCase("generic_avatar")]
@@ -128,7 +216,9 @@ namespace KimodoUnityBridge.Command.Tests
             string folder = "Assets/" + folderName;
             string modelPath = folder + "/Humanoid.fbx";
             GameObject root = null;
+            GameObject cacheKeyMarker = null;
             TimelineAsset timeline = null;
+            string avatarCachePath = null;
             UnityEngine.Object[] previousSelection = Selection.objects;
             try
             {
@@ -141,6 +231,10 @@ namespace KimodoUnityBridge.Command.Tests
                 root = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(modelPath));
                 root.name = folderName;
                 Animator animator = root.GetComponent<Animator>() ?? root.AddComponent<Animator>();
+                cacheKeyMarker = new GameObject("KimodoAvatarCacheKey_" + Guid.NewGuid().ToString("N"));
+                cacheKeyMarker.transform.SetParent(animator.transform.root, false);
+                avatarCachePath = GetGeneratedAvatarCachePath(animator.transform.root.gameObject);
+                ArchiveGeneratedAvatarCache(avatarCachePath);
                 animator.avatar = null;
                 Assert.That(AssetDatabase.LoadAllAssetsAtPath(modelPath).OfType<Avatar>()
                     .Any(avatar => avatar.isValid && avatar.isHuman), Is.False,
@@ -194,6 +288,7 @@ namespace KimodoUnityBridge.Command.Tests
             finally
             {
                 Selection.objects = previousSelection;
+                if (cacheKeyMarker != null) UnityEngine.Object.DestroyImmediate(cacheKeyMarker);
                 if (root != null) UnityEngine.Object.DestroyImmediate(root);
                 if (timeline != null) UnityEngine.Object.DestroyImmediate(timeline);
                 // Preserve generated fixture assets outside Assets so discovery cannot index them later.
@@ -206,6 +301,7 @@ namespace KimodoUnityBridge.Command.Tests
                 Directory.CreateDirectory(Path.GetDirectoryName(archive));
                 if (Directory.Exists(source)) Directory.Move(source, archive);
                 if (File.Exists(source + ".meta")) File.Move(source + ".meta", archive + ".meta");
+                ArchiveGeneratedAvatarCache(avatarCachePath);
                 AssetDatabase.Refresh();
             }
         }
@@ -317,6 +413,68 @@ namespace KimodoUnityBridge.Command.Tests
             }
         }
 
+        [Test]
+        public void SessionRuntimeGuard_RestoresTheOriginalActiveState()
+        {
+            GameObject root = new GameObject("KimodoSession_RuntimeGuardTest");
+            try
+            {
+                KimodoDisableOnRuntime guard = root.AddComponent<KimodoDisableOnRuntime>();
+
+                guard.DisableForPlay();
+                Assert.That(root.activeSelf, Is.False);
+
+                guard.RestoreAfterPlay();
+                Assert.That(root.activeSelf, Is.True);
+
+                root.SetActive(false);
+                guard.DisableForPlay();
+                guard.RestoreAfterPlay();
+                Assert.That(root.activeSelf, Is.False,
+                    "A context that was inactive before Play Mode must remain inactive in Edit Mode.");
+            }
+            finally
+            {
+                if (root != null) UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void SessionRuntimeGuard_PlayModeStateChangesDisableAndRestoreSessionRoots()
+        {
+            SceneSetup[] previousSceneSetup = EditorSceneManager.GetSceneManagerSetup();
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            GameObject root = new GameObject(KimodoRuntimeUtility.SessionRootPrefix + "RuntimeEventGuardTest");
+            try
+            {
+                Type guardType = typeof(command_context).Assembly.GetType(
+                    "KimodoUnityBridge.Command.KimodoSessionRuntimeGuard");
+                MethodInfo onPlayModeStateChanged = guardType?.GetMethod(
+                    "OnPlayModeStateChanged", BindingFlags.Static | BindingFlags.NonPublic);
+                Assert.That(onPlayModeStateChanged, Is.Not.Null);
+
+                onPlayModeStateChanged.Invoke(null, new object[] { PlayModeStateChange.ExitingEditMode });
+                Assert.That(root.activeSelf, Is.False,
+                    "The Session root must be disabled before Play Mode starts.");
+
+                onPlayModeStateChanged.Invoke(null, new object[] { PlayModeStateChange.EnteredPlayMode });
+                Assert.That(root.activeSelf, Is.False,
+                    "Entering Play Mode must keep the Session root disabled without replacing its captured state.");
+
+                onPlayModeStateChanged.Invoke(null, new object[] { PlayModeStateChange.EnteredEditMode });
+                Assert.That(root.activeSelf, Is.True,
+                    "The Session root must recover its Edit Mode state after Play Mode.");
+            }
+            finally
+            {
+                if (root != null) UnityEngine.Object.DestroyImmediate(root);
+                if (previousSceneSetup.Any(setup => setup.isLoaded))
+                    EditorSceneManager.RestoreSceneManagerSetup(previousSceneSetup);
+                else
+                    EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            }
+        }
+
         private static object CreateSessionRecord(
             Type sessionType,
             TimelineAsset timeline,
@@ -331,5 +489,72 @@ namespace KimodoUnityBridge.Command.Tests
                 Guid.NewGuid(), "Test", director, timeline, string.Empty, true, metadata, sessionRoot
             });
         }
+
+        private static GameObject CreateHumanoidCharacter(string name, Avatar avatar)
+        {
+            GameObject model = AssetDatabase.LoadAssetAtPath<GameObject>(HumanoidModelPath);
+            Assert.That(model, Is.Not.Null, "Missing Humanoid Armature fixture.");
+            GameObject character = UnityEngine.Object.Instantiate(model);
+            character.name = name;
+            Animator animator = character.GetComponentInChildren<Animator>(true);
+            Assert.That(animator, Is.Not.Null, "Humanoid Armature fixture has no Animator.");
+            animator.avatar = avatar;
+            animator.runtimeAnimatorController = null;
+            return character;
+        }
+
+        private static void ArchiveFixtureScene(string sourcePath, string suffix)
+        {
+            string project = Path.GetFullPath(Directory.GetCurrentDirectory()) + Path.DirectorySeparatorChar;
+            string source = Path.GetFullPath(sourcePath);
+            string archive = Path.GetFullPath(Path.Combine("archive", "kimodo-command-resolution-tests", Path.GetFileNameWithoutExtension(source) + "_" + suffix + ".unity"));
+            if (!source.StartsWith(project, StringComparison.OrdinalIgnoreCase) ||
+                !archive.StartsWith(project, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Fixture archive paths must remain inside the project.");
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(archive));
+            if (File.Exists(source)) File.Move(source, archive);
+            if (File.Exists(source + ".meta")) File.Move(source + ".meta", archive + ".meta");
+        }
+
+        private static string GetGeneratedAvatarCachePath(GameObject root)
+        {
+            Type cacheUtility = typeof(KimodoLocalAvatarUtility).Assembly.GetType(
+                "KimodoBridge.Editor.KimodoEditorAvatarCacheUtility");
+            MethodInfo buildPath = cacheUtility?.GetMethod(
+                "BuildAvatarCachePath", BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(buildPath, Is.Not.Null);
+            return (string)buildPath.Invoke(null, new object[] { root });
+        }
+
+        private static void ArchiveGeneratedAvatarCache(string assetPath)
+        {
+            if (string.IsNullOrWhiteSpace(assetPath)) return;
+            string project = Path.GetFullPath(Directory.GetCurrentDirectory()) + Path.DirectorySeparatorChar;
+            string source = Path.GetFullPath(assetPath);
+            string archive = Path.GetFullPath(Path.Combine(
+                "archive", "kimodo-avatar-cache-tests",
+                Path.GetFileNameWithoutExtension(source) + "_" + Guid.NewGuid().ToString("N") + Path.GetExtension(source)));
+            if (!source.StartsWith(Path.Combine(project, "Assets") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                !archive.StartsWith(project, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Avatar cache archive paths must remain inside the project.");
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(archive));
+            bool moved = false;
+            if (File.Exists(source))
+            {
+                File.Move(source, archive);
+                moved = true;
+            }
+            if (File.Exists(source + ".meta"))
+            {
+                File.Move(source + ".meta", archive + ".meta");
+                moved = true;
+            }
+            if (moved) AssetDatabase.Refresh();
+        }
+
     }
 }
