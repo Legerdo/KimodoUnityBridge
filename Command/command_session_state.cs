@@ -65,6 +65,11 @@ namespace KimodoUnityBridge.Command
 
         private static void ActivateTimelineSession(TimelineSessionRecord session)
         {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                KimodoDisableOnRuntime.Ensure(session?.SessionRoot)?.DisableForPlay();
+                return;
+            }
             if (session?.SessionRoot != null) session.SessionRoot.SetActive(true);
             if (session?.Director != null) session.Director.enabled = true;
         }
@@ -112,6 +117,7 @@ namespace KimodoUnityBridge.Command
                 GameObject sessionRoot = new GameObject($"KimodoSession_{safeName}");
                 sessionRoot.layer = SessionCaptureLayer;
                 sessionRoot.hideFlags = HideFlags.DontSaveInEditor;
+                KimodoDisableOnRuntime.Ensure(sessionRoot);
                 GameObject directorObject = new GameObject($"{KimodoRuntimeUtility.SessionDirectorPrefix}{safeName}");
                 directorObject.transform.SetParent(sessionRoot.transform, false);
                 directorObject.hideFlags = HideFlags.DontSaveInEditor;
@@ -705,6 +711,7 @@ namespace KimodoUnityBridge.Command
 
         private static TimelineSessionRecord RequireCurrentTimelineSession(bool recreating)
         {
+            EnsureEditorIsIdle("Kimodo scene Session commands");
             RefreshSceneContextBinding();
             EnsureTimelineSessionsRestored();
             if (currentTimelineSession == null)
@@ -793,6 +800,7 @@ namespace KimodoUnityBridge.Command
 
         private static string ClearSession(JObject arguments)
         {
+                EnsureEditorIsIdle("Kimodo Session clearing");
                 Scene scene = SceneManager.GetActiveScene();
                 EnsureTimelineSessionsRestored();
                 TimelineSessionRecord session = currentTimelineSession;
@@ -1596,6 +1604,7 @@ namespace KimodoUnityBridge.Command
 
         private static string SceneContextGet(JObject arguments)
         {
+            EnsureEditorIsIdle("scene.context");
             bool includeHistory = arguments.Value<bool?>("include_history") ?? false;
             RefreshSceneContextBinding();
             EnsureTimelineSessionsRestored();

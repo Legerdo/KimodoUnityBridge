@@ -789,7 +789,7 @@ namespace KimodoUnityBridge.Command
                 new PropertyDefinition("post_apply", new JObject { ["type"] = "boolean",
                     ["description"] = "Generate a trajectory first, align this boundary against it in SOMA Root2D space, then include the boundary in the final raw constraints." }, false));
             JObject inSide = (JObject)side.DeepClone();
-            inSide["properties"]["post_apply"]["default"] = false;
+            inSide["properties"]["post_apply"]["default"] = true;
             JObject outSide = (JObject)side.DeepClone();
             outSide["properties"]["post_apply"]["default"] = true;
             JObject config = Properties(

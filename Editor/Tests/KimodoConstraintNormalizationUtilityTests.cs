@@ -187,28 +187,33 @@ namespace KimodoBridge.Editor.Tests
         [Test]
         public void BoundaryConstraints_AreRejectedWhenTheyExceedAccelerationLimit()
         {
-            var samples = new List<KimodoMarkerSampleResult>
+            using (AutoBeginSceneFixture fixture = CreateAutoBeginSceneFixture())
             {
-                new KimodoMarkerSampleResult
+                var request = CreateAutoBeginRequest(fixture,
+                    CreateRoot2DSample(0.0, Vector3.zero),
+                    CreateRoot2DSample(0.5, Vector3.zero),
+                    CreateRoot2DSample(1.0, new Vector3(3.5f, 0f, 0f)));
+
+                Assert.That(KimodoInOutConstraintComposer.TryBuild(request,
+                    out _, out _, out string error), Is.False);
+                StringAssert.Contains("10.0 m/s²", error);
+            }
+        }
+
+        private static KimodoMarkerSampleResult CreateRoot2DSample(double time, Vector3 position)
+        {
+            return new KimodoMarkerSampleResult
+            {
+                sampleValid = true,
+                sampleTime = time,
+                constraintMode = "root2d",
+                enableMask = KimodoConstraintMask.ForType("root2d"),
+                rootOverride = new KimodoUnityBridge.KimodoRigidTransform
                 {
-                    sampleValid = true, sampleTime = 0.0,
-                    rootOverride = new KimodoUnityBridge.KimodoRigidTransform { t = Vector3.zero }
-                },
-                new KimodoMarkerSampleResult
-                {
-                    sampleValid = true, sampleTime = 0.5,
-                    rootOverride = new KimodoUnityBridge.KimodoRigidTransform { t = Vector3.zero }
-                },
-                new KimodoMarkerSampleResult
-                {
-                    sampleValid = true, sampleTime = 1.0,
-                    rootOverride = new KimodoUnityBridge.KimodoRigidTransform { t = new Vector3(3.5f, 0f, 0f) }
+                    t = position,
+                    q = Quaternion.identity
                 }
             };
-
-            Assert.That(KimodoGenerationWarningCheckService.TryValidateRootMotionConstraints(
-                samples, 60f, out string error), Is.False);
-            StringAssert.Contains("10.0 m/s²", error);
         }
 
         [TestCase(KimodoConstraintMode.FullBody)]

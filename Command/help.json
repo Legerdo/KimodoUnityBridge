@@ -2431,7 +2431,7 @@
                             },
                             "post_apply": {
                               "type": "boolean",
-                              "default": false,
+                              "default": true,
                               "description": "Generate a trajectory first, align this boundary against it in SOMA Root2D space, then include the boundary in the final raw constraints."
                             }
                           },
