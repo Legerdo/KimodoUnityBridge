@@ -4042,7 +4042,7 @@
             "type": "integer"
           },
           "recreated_on_next_command": {
-            "type": "object"
+            "type": "boolean"
           }
         },
         "required": [

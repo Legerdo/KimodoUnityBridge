@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using KimodoUnityBridge;
@@ -469,7 +470,16 @@ namespace KimodoUnityBridge.Command
         {
             if (ex is GenerationRangeLockedException locked) return Error(locked);
             if (ex is CommandException command) return Error(command.Code, command.Message);
-            return Error("invalid_argument", ex.Message);
+            if (ex is OperationCanceledException) return Error("canceled", ex.Message);
+            if (ex is TimeoutException) return Error("timeout", ex.Message);
+            if (ex is SocketException || ex is IOException &&
+                !(ex is FileNotFoundException || ex is DirectoryNotFoundException ||
+                  ex is DriveNotFoundException || ex is PathTooLongException))
+                return Error("bridge_unavailable", ex.Message);
+            if (ex is ArgumentException || ex is FormatException || ex is JsonException)
+                return Error("invalid_argument", ex.Message);
+            if (ex is InvalidOperationException) return Error("invalid_operation", ex.Message);
+            return Error("internal_error", ex.Message);
         }
 
         private static JObject ParseCommandArguments(string argumentsJson)

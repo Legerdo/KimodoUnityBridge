@@ -885,6 +885,23 @@ namespace KimodoUnityBridge.Command
             JObject arguments,
             bool allowActiveGenerationRange)
         {
+            try
+            {
+                return AnimationAnalysisCoreInternal(arguments, allowActiveGenerationRange);
+            }
+            finally
+            {
+                // Samples are request-local evaluation data. Persisting them in
+                // a static dictionary made every analysis consume more memory,
+                // while a later request can deterministically recapture them.
+                AnalysisPoseSamples.Clear();
+            }
+        }
+
+        private static JObject AnimationAnalysisCoreInternal(
+            JObject arguments,
+            bool allowActiveGenerationRange)
+        {
             TimelineSessionRecord session = RequireTimelineSession(arguments);
             JArray clips = arguments["clips"] as JArray;
             if (clips == null || clips.Count != 1 || clips[0] is not JObject clipReference)

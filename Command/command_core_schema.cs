@@ -294,7 +294,7 @@ namespace KimodoUnityBridge.Command
                 case "eta_seconds": case "progress_rate":
                     return NullableSchema(new JObject { ["type"] = "number" });
                 case "ok": case "retargeted": case "cleared": case "server_connected": case "canceled": case "target_alive":
-                case "scene_lighting": case "show_skybox": case "show_gizmos":
+                case "recreated_on_next_command": case "scene_lighting": case "show_skybox": case "show_gizmos":
                     return new JObject { ["type"] = "boolean" };
                 case "manual":
                     return new JObject { ["oneOf"] = new JArray(new JObject { ["type"] = "string" }, new JObject { ["type"] = "object" }) };
