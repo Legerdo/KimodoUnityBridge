@@ -316,25 +316,21 @@ namespace KimodoBridge.Editor
             }
 
             float t = (frame - from.Frame) / (float)(to.Frame - from.Frame);
-            Vector2 fromHeading = from.Heading.sqrMagnitude > 1e-8f ? from.Heading.normalized : Vector2.up;
-            Vector2 toHeading = to.Heading.sqrMagnitude > 1e-8f ? to.Heading.normalized : Vector2.up;
-            float fromAngle = Mathf.Atan2(fromHeading.x, fromHeading.y) * Mathf.Rad2Deg;
-            float toAngle = Mathf.Atan2(toHeading.x, toHeading.y) * Mathf.Rad2Deg;
-            float angle = Mathf.LerpAngle(fromAngle, toAngle, t) * Mathf.Deg2Rad;
             Vector2 position = Vector2.Lerp(from.RootPosition, to.RootPosition, t);
+            Vector2 heading = KimodoMotionMath.InterpolatePlanarHeading(from.Heading, to.Heading, t);
 
             return new KimodoGlobalRawConstraint
             {
                 Frame = frame,
                 Kind = KimodoRawConstraintKind.Root2D,
                 RootPosition = position,
-                Heading = new Vector2(Mathf.Sin(angle), Mathf.Cos(angle)),
+                Heading = heading,
                 Payload = new JObject
                 {
                     ["root2d"] = new JObject
                     {
                         ["position"] = new JArray(position.x, position.y),
-                        ["heading"] = new JArray(Mathf.Sin(angle), Mathf.Cos(angle))
+                        ["heading"] = new JArray(heading.x, heading.y)
                     }
                 }
             };

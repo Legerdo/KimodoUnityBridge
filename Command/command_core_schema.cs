@@ -650,9 +650,9 @@ namespace KimodoUnityBridge.Command
                 {
                     ["type"] = "array", ["minItems"] = 3, ["maxItems"] = 3,
                     ["items"] = new JObject { ["type"] = "number" },
-                    ["description"] = "World-space target position for the generated Clip. Root translation is normalized to zero before Humanoid conversion, then this position is converted to track space and applied as the Timeline Clip offset."
+                    ["description"] = "World-space target position for the generated Clip. Root X/Z are normalized into the initial facing frame before Humanoid conversion; the initial yaw is transferred to the Timeline Clip rotation, and the generated root Y curve is preserved with its final frame-zero value accounted for in the Clip offset."
                 }
-            }, "Optional Root2D path and output placement settings. Any angle enables path override; distance replaces the measured path length; heading is applied after path composition; relative_offset sets the generated Clip's World-space target position while keeping its generated root trajectory relative to frame zero.");
+            }, "Optional Root2D path and output placement settings. Any angle enables path override; distance replaces the measured path length; heading is applied after path composition; relative_offset places the Clip in World space while preserving generated vertical root motion for Humanoid conversion and transferring initial yaw to the Clip rotation.");
         }
 
         private static PropertyDefinition OptionalGeneration()

@@ -788,6 +788,21 @@ namespace KimodoBridge.Editor
                     (stage, message) => progress?.Invoke(stage, $"{prefix}: {message}"),
                     token,
                     timelineClipOverride: timelineClips != null && i < timelineClips.Count ? timelineClips[i] : null);
+                token.ThrowIfCancellationRequested();
+                progress?.Invoke(KimodoBridgeCommandStage.Finalize, $"{prefix}: running full animation analysis...");
+                if (KimodoEditorFullAnalysisBridge.TryAnalyze(
+                        selectedClip,
+                        out string analysisJson,
+                        out string analysisError))
+                {
+                    result.PostAnalysisJson = analysisJson;
+                    result.PostAnalysisError = string.Empty;
+                }
+                else
+                {
+                    result.PostAnalysisError = analysisError;
+                    Debug.LogWarning($"[Kimodo][PostGenerationAnalysis] {analysisError}");
+                }
             }
 
             return result ?? throw new InvalidOperationException("No Timeline clips were selected for generation.");

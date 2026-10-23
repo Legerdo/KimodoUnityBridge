@@ -117,6 +117,14 @@ namespace KimodoUnityBridge.Command.Tests
                     character.Animations.Add(new command_context.TimelineAnimationRecord(Guid.NewGuid(), name, "added",
                         sourceClip, source, null, null, 0, 120));
                 }
+                // This clip is intentionally absent from character.Animations to
+                // reproduce a user-moved or manually-created Timeline clip that
+                // the cached command cursor does not know about.
+                var unindexedOccupant = track.CreateClip<AnimationPlayableAsset>();
+                ((AnimationPlayableAsset)unindexedOccupant.asset).clip = sourceClip;
+                unindexedOccupant.start = 8.2;
+                unindexedOccupant.duration = 0.8;
+                unindexedOccupant.displayName = "UnindexedOccupant";
                 var sessionType = typeof(command_context).GetNestedType("TimelineSessionRecord", BindingFlags.NonPublic);
                 var session = Activator.CreateInstance(sessionType, new object[] { Guid.NewGuid(), "InOutTest", director, timeline, "", false, null, directorObject });
                 ((List<command_context.TimelineCharacterRecord>)sessionType.GetProperty("Characters").GetValue(session)).Add(character);
@@ -191,6 +199,8 @@ namespace KimodoUnityBridge.Command.Tests
 
                 typeof(command_context).GetMethod("PrepareCommandOutsideEvidencePosition", PrivateStatic)
                     .Invoke(null, new object[] { trace });
+                typeof(command_context).GetMethod("ValidateCommandTimelineRange", PrivateStatic)
+                    .Invoke(null, new object[] { trace });
                 var playable = (KimodoPlayableClip)typeof(command_context).GetMethod("CreateGenerationPlayableClip", PrivateStatic)
                     .Invoke(null, new object[] { trace, "CommandOutput", true });
                 var output = (TimelineClip)traceType.GetProperty("TimelineClip").GetValue(trace);
@@ -204,8 +214,8 @@ namespace KimodoUnityBridge.Command.Tests
                 Assert.That(evidenceClips, Has.Length.EqualTo(inside ? 0 : 2));
                 if (!inside)
                 {
-                    Assert.That(output.start, Is.EqualTo(8.5).Within(1e-8),
-                        "The evidence In clip gets a non-overlapping Timeline window before generation.");
+                    Assert.That(output.start, Is.EqualTo(9.0 + command_context.ClipSafeZoneSeconds + 0.5).Within(1e-8),
+                        "The evidence In clip gets a non-overlapping Timeline window after an unindexed clip.");
                     Assert.That(evidenceClips[0].end, Is.EqualTo(output.start).Within(1e-8));
                     Assert.That(evidenceClips[1].start, Is.EqualTo(output.end).Within(1e-8));
                     Assert.That(((AnimationPlayableAsset)evidenceClips[0].asset).clip, Is.SameAs(sourceClip));
@@ -221,6 +231,9 @@ namespace KimodoUnityBridge.Command.Tests
                     Assert.That(character.Animations[1].TimelineClip.start, Is.EqualTo(4));
                     Assert.That(character.Animations[1].TimelineClip.duration, Is.EqualTo(2));
                 }
+                Assert.That(output.start, Is.GreaterThanOrEqualTo(
+                    unindexedOccupant.end + command_context.ClipSafeZoneSeconds - 1e-8),
+                    "The generated block must start after every actual Timeline clip.");
                 playable.bridgeModelName = model;
                 Assert.That(playable.enableInConstraint || playable.enableOutConstraint, Is.False,
                     "Explicit sources must not mix with automatically inferred Session boundaries.");

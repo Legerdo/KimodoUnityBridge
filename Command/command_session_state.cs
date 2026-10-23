@@ -448,6 +448,31 @@ namespace KimodoUnityBridge.Command
             return new TimelineGenerationTrace(session, character, character.NextStartSeconds, duration);
         }
 
+        // The cached cursor is only a fast path. Timeline clips can be moved or
+        // added outside the command metadata, so reconcile it with the actual
+        // track before placing a new generation block.
+        private static void RefreshCharacterTimelineAppendPosition(TimelineCharacterRecord character)
+        {
+            if (character?.Track == null)
+            {
+                return;
+            }
+
+            double occupiedEnd = character.Track.GetClips()
+                .Where(clip => clip != null && !double.IsNaN(clip.end) && !double.IsInfinity(clip.end))
+                .Select(clip => clip.end)
+                .DefaultIfEmpty(double.NegativeInfinity)
+                .Max();
+            if (double.IsNegativeInfinity(occupiedEnd))
+            {
+                return;
+            }
+
+            character.NextStartSeconds = Math.Max(
+                character.NextStartSeconds,
+                occupiedEnd + ClipSafeZoneSeconds);
+        }
+
         private static KimodoPlayableClip CreateGenerationPlayableClip(
             TimelineGenerationTrace trace,
             string prompt,
@@ -1070,7 +1095,6 @@ namespace KimodoUnityBridge.Command
             }
 
             Quaternion startHeading = KimodoMotionMath.ResolvePlanarHeading(startRotation);
-            Quaternion toStartLocal = Quaternion.Inverse(startHeading);
             var knots = new List<KimodoRootPathKnot>(samples.Length);
             var jsonSamples = new JArray();
             float pathLength = 0f;
@@ -1090,11 +1114,15 @@ namespace KimodoUnityBridge.Command
                         $"Character '{character.Name}' root trajectory could not sample complete root motion at frame {frame}.");
                 }
 
-                Vector3 localDelta = toStartLocal * (worldPosition - startPosition);
-                Vector3 localForward = toStartLocal *
-                    (KimodoMotionMath.ResolvePlanarHeading(worldRotation) * Vector3.forward);
-                var position = new Vector2(localDelta.x, localDelta.z);
-                var heading = new Vector2(localForward.x, localForward.z);
+                Vector3 normalizedPosition = KimodoMotionMath.NormalizePlanarPosition(
+                    worldPosition,
+                    startPosition,
+                    startHeading);
+                Quaternion normalizedHeading = KimodoMotionMath.NormalizePlanarHeading(
+                    worldRotation,
+                    startHeading);
+                var position = KimodoMotionMath.ToPlanar(normalizedPosition);
+                var heading = KimodoMotionMath.ToPlanarHeadingVector(normalizedHeading);
                 heading = heading.sqrMagnitude > 1e-8f ? heading.normalized : finalHeading;
                 Vector3 rootRotationDelta = KimodoMotionMath.RelativeEulerDegrees(startRotation, worldRotation);
                 if (frame > 0) pathLength += Vector2.Distance(previousPosition, position);
@@ -1139,8 +1167,8 @@ namespace KimodoUnityBridge.Command
             float sampleSpanSeconds = samples.Length > 1
                 ? (samples.Length - 1) / (float)SessionFrameRate
                 : 0f;
-            float firstYaw = Mathf.Atan2(firstHeading.x, firstHeading.y) * Mathf.Rad2Deg;
-            float finalYaw = Mathf.Atan2(finalHeading.x, finalHeading.y) * Mathf.Rad2Deg;
+            float firstYaw = KimodoMotionMath.ResolvePlanarYawDegrees(firstHeading);
+            float finalYaw = KimodoMotionMath.ResolvePlanarYawDegrees(finalHeading);
             float signedHeadingChange = Mathf.DeltaAngle(firstYaw, finalYaw);
             record.RootTrajectory = new JObject
             {
@@ -1403,7 +1431,12 @@ namespace KimodoUnityBridge.Command
             int frameCount = animation.EndFrameExclusive > animation.StartFrame
                 ? animation.EndFrameExclusive - animation.StartFrame
                 : Math.Max(1, Mathf.CeilToInt((float)(animation.TimelineDurationSeconds * frameRate)));
-            bool requiresFootContactEncoding = motionBytes == null || motionBytes.Length == 0;
+            // A generated Clip may have an authored four-channel contact track
+            // that was edited after its KMB cache was written. Treat that track
+            // as the source of truth for full analysis instead of allowing the
+            // stale KMB contact payload to mask it.
+            bool hasAuthoredFootContactTrack = KimodoTimelineFootContactSampler.HasAuthoredTrack(animation?.Clip);
+            bool requiresFootContactEncoding = hasAuthoredFootContactTrack || motionBytes == null || motionBytes.Length == 0;
             if (!requiresFootContactEncoding &&
                 KimodoRawMotionUtility.TryParseFlatBuffer(motionBytes, out KimodoRawMotionData existingMotion, out _) &&
                 !existingMotion.HasFootContacts)

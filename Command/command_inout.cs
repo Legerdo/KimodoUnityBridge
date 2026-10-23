@@ -211,7 +211,15 @@ namespace KimodoUnityBridge.Command
 
         private static void PrepareCommandOutsideEvidencePosition(TimelineGenerationTrace trace)
         {
-            if (trace?.Character == null || trace.InOutEvidencePlans.Count == 0) return;
+            if (trace?.Character == null) return;
+
+            RefreshCharacterTimelineAppendPosition(trace.Character);
+            if (trace.InOutEvidencePlans.Count == 0)
+            {
+                trace.StartSeconds = trace.Character.NextStartSeconds;
+                return;
+            }
+
             CommandInOutEvidencePlan input = trace.InOutEvidencePlans.FirstOrDefault(plan => plan.IsIn);
             if (input != null)
                 trace.StartSeconds = trace.Character.NextStartSeconds + input.Window.SourceWindowDurationSeconds;
@@ -275,6 +283,33 @@ namespace KimodoUnityBridge.Command
                 trace.InOutSampling["evidence_clips"] = evidenceDescriptions;
             EditorUtility.SetDirty(trace.Character.Track);
             EditorUtility.SetDirty(trace.Session.TimelineAsset);
+        }
+
+        private static void ValidateCommandTimelineRange(TimelineGenerationTrace trace)
+        {
+            if (trace?.Character?.Track == null)
+                throw new InvalidOperationException("Timeline generation target has no AnimationTrack.");
+
+            double reservedStart = trace.StartSeconds;
+            CommandInOutEvidencePlan input = trace.InOutEvidencePlans.FirstOrDefault(plan => plan.IsIn);
+            if (input != null)
+                reservedStart -= input.Window.SourceWindowDurationSeconds;
+
+            double reservedEnd = trace.StartSeconds + trace.DurationSeconds;
+            foreach (CommandInOutEvidencePlan output in trace.InOutEvidencePlans.Where(plan => !plan.IsIn))
+                reservedEnd = Math.Max(reservedEnd, trace.StartSeconds + trace.DurationSeconds + output.Window.SourceWindowDurationSeconds);
+
+            if (double.IsNaN(reservedStart) || double.IsInfinity(reservedStart) ||
+                double.IsNaN(reservedEnd) || double.IsInfinity(reservedEnd) || reservedEnd <= reservedStart)
+                throw new InvalidOperationException("Timeline generation interval is invalid.");
+
+            TimelineClip conflict = trace.Character.Track.GetClips().FirstOrDefault(clip =>
+                clip != null && clip.end > reservedStart && clip.start < reservedEnd);
+            if (conflict != null)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot place the In/Out generation block [{reservedStart:F3}, {reservedEnd:F3}) because it overlaps Timeline clip '{conflict.displayName}' [{conflict.start:F3}, {conflict.end:F3}).");
+            }
         }
     }
 }

@@ -75,12 +75,15 @@ namespace KimodoBridge.Editor
                 throw new InvalidOperationException(string.IsNullOrWhiteSpace(bakeError) ? "Bake failed." : bakeError);
             }
 
-            // Normalize the baked root Transform before conversion to Humanoid
-            // muscle curves. The Timeline Clip offset carries the requested
-            // World-space placement afterwards.
+            // Normalize only the horizontal root path before Humanoid conversion.
+            // Keep generated root height in the muscle curves and compensate for
+            // its first-frame value in the Timeline Clip offset.
             if (request.UseRelativeOffset)
             {
-                KimodoPlayableClipGenerationHostService.NormalizeRootTranslationToFrameZero(request.TargetClip);
+                KimodoPlayableClipGenerationHostService.NormalizeRootPathToFrameZero(
+                    request.TargetClip,
+                    out request.RelativeRootOriginY,
+                    out request.RelativeRootOriginRotation);
             }
 
             ThrowIfCanceled(request);
@@ -304,6 +307,15 @@ namespace KimodoBridge.Editor
                 runtimeResult,
                 outputPlan,
                 rawBoneClip);
+            if (request.UseRelativeOffset &&
+                KimodoPlayableClipGenerationHostService.TryReadRootOriginY(
+                    request.TargetClip,
+                    out float finalRootOriginY))
+            {
+                // Humanoid conversion can express root height in avatar space;
+                // use the final output curve when compensating the Timeline offset.
+                request.RelativeRootOriginY = finalRootOriginY;
+            }
             KimodoEditorClipWritebackService.FlushWritebackAssets();
             if (rawBoneClip != null && string.IsNullOrWhiteSpace(AssetDatabase.GetAssetPath(rawBoneClip)))
             {

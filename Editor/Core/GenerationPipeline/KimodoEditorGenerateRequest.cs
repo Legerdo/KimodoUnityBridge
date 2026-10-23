@@ -53,6 +53,8 @@ namespace KimodoBridge.Editor
         public bool ResetTimelineTimeScaleAfterGeneration;
         public bool UseRelativeOffset;
         public Vector3 RelativeOffset;
+        public float RelativeRootOriginY;
+        public Quaternion RelativeRootOriginRotation = Quaternion.identity;
         public PlayableDirector TimelineDirectorSnapshot;
         internal KimodoTimelineInOutConstraintContext TimelineContextSnapshot;
         public ArdyEditorHistorySource InitialArdyHistorySource;

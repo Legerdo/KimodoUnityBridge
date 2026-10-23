@@ -577,8 +577,10 @@ namespace KimodoBridge.Editor
             {
                 Quaternion yaw = Quaternion.Inverse(KimodoMotionMath.ResolvePlanarHeading(sourceHeading));
                 yaw = KimodoMotionMath.ResolvePlanarHeading(targetHeading) * yaw;
-                Vector3 sourcePlanar = new Vector3(source.x, 0f, source.z);
-                Vector3 targetPlanar = new Vector3(target.x, 0f, target.z);
+                Vector3 sourcePlanar = KimodoMotionMath.FromPlanar(
+                    KimodoMotionMath.ToPlanar(source), 0f);
+                Vector3 targetPlanar = KimodoMotionMath.FromPlanar(
+                    KimodoMotionMath.ToPlanar(target), 0f);
                 Vector3 translation = targetPlanar - yaw * sourcePlanar;
                 return new PlanarTransform(yaw, translation);
             }

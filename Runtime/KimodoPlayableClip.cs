@@ -93,9 +93,9 @@ namespace KimodoBridge
         public bool overrideHeading;
         [Tooltip("Absolute Unity yaw in degrees. Positive turns right; negative turns left; zero faces Unity forward.")]
         public float headingDegrees;
-        [Tooltip("Normalize the generated root translation to frame zero before Humanoid conversion, then apply the requested World-space target position as the Timeline Clip offset.")]
+        [Tooltip("Normalize root X/Z into the initial facing frame before Humanoid conversion, transfer initial yaw to the Timeline Clip rotation, preserve generated root height in the muscle curves, and apply the requested World-space target position as the Timeline Clip offset.")]
         public bool useRelativeOffset;
-        [Tooltip("World-space target position for the generated Clip's first root pose.")]
+        [Tooltip("World-space target position for the generated Clip's first root pose. The final output root Y curve is preserved and used for height compensation.")]
         public Vector3 relativeOffset;
         [Tooltip("Backend analysis options serialized as JSON and applied to this generation clip.")]
         public string analysisOptionsJson = string.Empty;

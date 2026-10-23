@@ -305,7 +305,7 @@ namespace KimodoBridge
                 return;
             }
 
-            float distance = Vector2.Distance(new Vector2(current.x, current.z), targetPosition);
+            float distance = (KimodoMotionMath.ToPlanar(current) - targetPosition).magnitude;
             float duration = KimodoRoot2DPlanner.EstimateDuration(
                 distance,
                 maxSpeed,

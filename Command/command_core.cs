@@ -741,6 +741,7 @@ namespace KimodoUnityBridge.Command
                 KimodoExternalConstraintRequest inOutConstraints = BuildCommandInOutConstraints(
                     arguments, trace, modelName, frameCount, frameRate, loopRequested, poseConstraints);
                 PrepareCommandOutsideEvidencePosition(trace);
+                ValidateCommandTimelineRange(trace);
                 KimodoPlayableClip playableClip = CreateGenerationPlayableClip(trace, requestedAnimationName, inOutConstraints != null);
                 CreateCommandOutsideEvidenceClips(trace);
                 if (inOutConstraints != null)

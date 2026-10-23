@@ -76,6 +76,9 @@ namespace KimodoBridge.Editor
         private bool showTrajectoryContinuityFoldout;
         private bool showAdvancedFoldout = true;
         private GUIStyle trajectoryContinuityFoldoutStyle;
+        private string lastFullAnalysisJson = string.Empty;
+        private string lastFullAnalysisError = string.Empty;
+        private Vector2 fullAnalysisScroll;
 
         private void OnEnable()
         {
@@ -536,12 +539,12 @@ namespace KimodoBridge.Editor
             {
                 EditorGUILayout.PropertyField(
                     useRelativeOffsetProp,
-                    new GUIContent("Relative Offset", "Normalize the generated root Transform to frame zero before Humanoid conversion, then apply the World-space target position as the Timeline Clip offset."));
+                    new GUIContent("Relative Offset", "Normalize root X/Z into the initial facing frame before Humanoid conversion, transfer initial yaw to the Timeline Clip rotation, preserve root height in the muscle curves, and apply the World-space target position as the Clip offset."));
                 if (useRelativeOffsetProp.boolValue && relativeOffsetProp != null)
                 {
                     EditorGUILayout.PropertyField(
                         relativeOffsetProp,
-                        new GUIContent("World Position", "World-space target position for the generated Clip's first root pose."));
+                        new GUIContent("World Position", "World-space target position for the generated Clip's first root pose. The final output root Y curve is preserved and used for height compensation."));
                 }
             }
             if (overrideHeadingProp != null)
@@ -873,6 +876,18 @@ namespace KimodoBridge.Editor
             }
 
             EditorGUILayout.Space(4f);
+            EditorGUILayout.LabelField("Analysis", EditorStyles.boldLabel);
+            using (new EditorGUI.DisabledScope(!clip.isGenerated || clip.clip == null))
+            {
+                if (GUILayout.Button(new GUIContent(
+                        "Run Full Animation Analysis",
+                        "Analyze the baked Timeline Clip and show phases, contacts, root trajectory, endpoint comparison, motion profile, and SceneView evidence.")))
+                {
+                    RunFullAnimationAnalysis();
+                }
+            }
+
+            EditorGUILayout.Space(4f);
             EditorGUILayout.LabelField("Curve Filter Options", EditorStyles.boldLabel);
 
             SerializedProperty enabledProp = curveFilterOptionsProp.FindPropertyRelative("enabled");
@@ -956,6 +971,41 @@ namespace KimodoBridge.Editor
                 EditorGUILayout.LabelField($"Constraints: {lastConstraintsPath}", EditorStyles.miniLabel);
             }
 
+            if (KimodoEditorGenerationJobService.TryGet(
+                    clip,
+                    out KimodoEditorGenerationJobSession generationSession) &&
+                generationSession?.Payload is KimodoEditorGenerationResult generationResult)
+            {
+                if (!string.IsNullOrWhiteSpace(generationResult.PostAnalysisJson))
+                {
+                    lastFullAnalysisJson = generationResult.PostAnalysisJson;
+                    lastFullAnalysisError = string.Empty;
+                }
+                else if (!string.IsNullOrWhiteSpace(generationResult.PostAnalysisError))
+                {
+                    lastFullAnalysisError = generationResult.PostAnalysisError;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(lastFullAnalysisError))
+            {
+                EditorGUILayout.HelpBox($"Full animation analysis failed: {lastFullAnalysisError}", MessageType.Warning);
+            }
+            if (!string.IsNullOrWhiteSpace(lastFullAnalysisJson))
+            {
+                EditorGUILayout.LabelField("Full Animation Analysis", EditorStyles.boldLabel);
+                if (GUILayout.Button("Copy Full Analysis JSON", GUILayout.Width(180f)))
+                {
+                    EditorGUIUtility.systemCopyBuffer = lastFullAnalysisJson;
+                }
+                fullAnalysisScroll = EditorGUILayout.BeginScrollView(fullAnalysisScroll, GUILayout.MaxHeight(240f));
+                using (new EditorGUI.DisabledScope(true))
+                {
+                    EditorGUILayout.TextArea(lastFullAnalysisJson, GUILayout.MinHeight(140f));
+                }
+                EditorGUILayout.EndScrollView();
+            }
+
             if (GUILayout.Button(new GUIContent("Reset", "Clear generated metadata/state on this clip. Does not delete external assets."), GUILayout.Width(100)))
             {
                 Undo.RecordObject(clip, "Reset Kimodo Clip");
@@ -967,6 +1017,18 @@ namespace KimodoBridge.Editor
             }
 
             EditorGUILayout.EndVertical();
+        }
+
+        private void RunFullAnimationAnalysis()
+        {
+            lastFullAnalysisError = string.Empty;
+            if (KimodoEditorFullAnalysisBridge.TryAnalyze(clip, out string analysisJson, out string error))
+            {
+                lastFullAnalysisJson = analysisJson;
+                return;
+            }
+
+            lastFullAnalysisError = error;
         }
 
     }
