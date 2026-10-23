@@ -31,6 +31,12 @@ namespace KimodoBridge.Editor
         public bool DeferBeginConstraint;
         public bool DeferEndConstraint;
         public KimodoTimelineInOutConstraintContext TimelineContext;
+        public KimodoTimelineInOutConstraintContext BeginTimelineContext;
+        public KimodoTimelineInOutConstraintContext EndTimelineContext;
+        public bool HasExplicitBeginSource;
+        public bool HasExplicitEndSource;
+        public int BeginSourceFrame = -1;
+        public int EndSourceFrame = -1;
         public List<KimodoMarkerSampleResult> ManualSamples = new List<KimodoMarkerSampleResult>();
     }
 

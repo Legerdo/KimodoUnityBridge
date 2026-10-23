@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Playables;
 using UnityEngine.Timeline;
 using TimelineInject;
 
@@ -124,6 +125,22 @@ namespace KimodoBridge
         public int outConstraintWindowFrames = 1;
         [Min(1), Tooltip("Number of evenly spaced FullBody samples in the Out window, including its endpoints.")]
         public int outConstraintSampleCount = 1;
+        [SerializeField, HideInInspector]
+        public TrackAsset inConstraintSourceTrack;
+        [SerializeField, HideInInspector]
+        public PlayableAsset inConstraintSourceAsset;
+        [SerializeField, HideInInspector]
+        public double inConstraintSourceClipStart = -1.0;
+        [SerializeField, HideInInspector]
+        public int inConstraintSourceFrame = -1;
+        [SerializeField, HideInInspector]
+        public TrackAsset outConstraintSourceTrack;
+        [SerializeField, HideInInspector]
+        public PlayableAsset outConstraintSourceAsset;
+        [SerializeField, HideInInspector]
+        public double outConstraintSourceClipStart = -1.0;
+        [SerializeField, HideInInspector]
+        public int outConstraintSourceFrame = -1;
         [Tooltip("Adapt ARDY history from previous root speed: 0-1 m/s = 0.225; 1-10 m/s grows exponentially to 1; above 10 m/s = 1.")]
         public bool ardyAutoHistory = true;
         [Range(0f, 1f)]

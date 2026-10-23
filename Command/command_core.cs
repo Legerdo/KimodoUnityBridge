@@ -738,16 +738,38 @@ namespace KimodoUnityBridge.Command
                         : blockingMessage);
                 }
                 TimelineGenerationTrace trace = PrepareGenerationTrace(arguments, character, duration);
-                KimodoExternalConstraintRequest inOutConstraints = BuildCommandInOutConstraints(
-                    arguments, trace, modelName, frameCount, frameRate, loopRequested, poseConstraints);
-                PrepareCommandOutsideEvidencePosition(trace);
-                ValidateCommandTimelineRange(trace);
-                KimodoPlayableClip playableClip = CreateGenerationPlayableClip(trace, requestedAnimationName, inOutConstraints != null);
-                CreateCommandOutsideEvidenceClips(trace);
-                if (inOutConstraints != null)
+                bool hasInOut = (arguments["constraints"] as JArray)?.OfType<JObject>()
+                    .Any(item => item.Property("inout") != null) == true;
+                if (hasInOut)
                 {
-                    playableClip.postApplyInConstraint = inOutConstraints.DeferInConstraint;
-                    playableClip.postApplyOutConstraint = inOutConstraints.DeferOutConstraint;
+                    // Resolve the same source windows used to place the temporary
+                    // neighboring clips before reserving the output range.  The
+                    // actual constraint samples are built later by BuildRequest.
+                    ConfigureCommandInOutClip(
+                        arguments,
+                        trace,
+                        null,
+                        modelName,
+                        frameCount,
+                        frameRate,
+                        loopRequested,
+                        poseConstraints);
+                    PrepareCommandOutsideEvidencePosition(trace);
+                    ValidateCommandTimelineRange(trace);
+                }
+                KimodoPlayableClip playableClip = CreateGenerationPlayableClip(trace, requestedAnimationName, false);
+                if (hasInOut)
+                {
+                    ConfigureCommandInOutClip(
+                        arguments,
+                        trace,
+                        playableClip,
+                        modelName,
+                        frameCount,
+                        frameRate,
+                        loopRequested,
+                        poseConstraints);
+                    CreateCommandOutsideEvidenceClips(trace);
                 }
                 playableClip.bridgeModelName = modelName;
                 playableClip.textEncoderMode = textEncoderMode;
@@ -783,31 +805,51 @@ namespace KimodoUnityBridge.Command
                 ReserveGenerationTimelineRange(trace);
                 SaveTimelineSession(session);
 
-                bool started = KimodoEditorGenerationJobService.Start(
+                string previousTaskId = null;
+                Action<string> previousRequestPayload = null;
+                bool started = KimodoPlayableClipGenerationExecutionService.TryStartConfiguredGenerate(
+                    playableClip,
                     character.Root,
-                    async (generationSession, token) =>
+                    trace.TimelineClip,
+                    generationSession =>
                     {
-                        string previousTaskId = KimodoBridgeService.GenerationTaskIdContext.Value;
-                        Action<string> previousRequestPayload = KimodoBridgeService.GenerationRequestPayloadContext.Value;
+                        previousTaskId = KimodoBridgeService.GenerationTaskIdContext.Value;
+                        previousRequestPayload = KimodoBridgeService.GenerationRequestPayloadContext.Value;
                         KimodoBridgeService.GenerationTaskIdContext.Value = generationSession.RequestId.ToString("N");
                         KimodoBridgeService.GenerationRequestPayloadContext.Value = payload =>
                             generationSession.BackendRequestJson = payload;
+                    },
+                    (generationSession, result, token) =>
+                    {
+                        FinalizePlayableClipTrace(trace, result);
+                        KimodoEditorGenerationJobService.UpdateProgress(
+                            character.Root,
+                            generationSession.RequestId,
+                            KimodoBridgeCommandStage.Finalize,
+                            "Running post-generation animation analysis.");
                         try
                         {
-                            return await ExecutePlayableClipGenerationAsync(
-                                playableClip,
-                                trace,
-                                inOutConstraints,
-                                character.Root,
-                                generationSession,
-                                token);
+                            JObject analysisResponse = AnimationAnalysisCore(new JObject
+                            {
+                                ["clips"] = new JArray(new JObject
+                                {
+                                    ["character"] = trace.Character.Name,
+                                    ["clip"] = trace.Animation.Name
+                                })
+                            }, allowActiveGenerationRange: true);
+                            result.PostAnalysisJson = analysisResponse.ToString(Formatting.None);
                         }
-                        finally
+                        catch (Exception ex)
                         {
-                            KimodoBridgeService.GenerationTaskIdContext.Value = previousTaskId;
-                            KimodoBridgeService.GenerationRequestPayloadContext.Value = previousRequestPayload;
-                            // Temporary sampling context is owned by the command runtime.
+                            result.PostAnalysisError = ex.Message;
+                            Debug.LogWarning($"[Kimodo][PostGenerationAnalysis] {ex}");
                         }
+                        return Task.FromResult(result);
+                    },
+                    generationSession =>
+                    {
+                        KimodoBridgeService.GenerationTaskIdContext.Value = previousTaskId;
+                        KimodoBridgeService.GenerationRequestPayloadContext.Value = previousRequestPayload;
                     },
                     PersistGenerationJobStatus,
                     out KimodoEditorGenerationJobSession generation,

@@ -262,6 +262,24 @@ namespace KimodoUnityBridge.Command.Tests
                 Assert.That(output.duration, Is.EqualTo(2));
                 var before = external.ConstraintSamples[0].sampleTime;
                 Assert.That(before, Is.EqualTo(inside ? 0 : -0.5).Within(1e-8), "Provider must not mutate source snapshots.");
+
+                var configure = typeof(command_context).GetMethod("ConfigureCommandInOutClip", PrivateStatic);
+                Assert.That(configure, Is.Not.Null);
+                configure.Invoke(null,
+                    new object[] { arguments, trace, playable, model, 60, 30f, false, new List<KimodoMarkerSampleResult>() });
+                Assert.That(playable.inOutConstraintMode, Is.EqualTo(inside
+                    ? KimodoInOutConstraintMode.Inside
+                    : KimodoInOutConstraintMode.Outside));
+                Assert.That(playable.inConstraintSourceAsset, Is.SameAs(character.Animations[0].TimelineClip.asset));
+                Assert.That(playable.outConstraintSourceAsset, Is.SameAs(character.Animations[1].TimelineClip.asset));
+                var sharedRequest = KimodoPlayableClipGenerationHostService.BuildRequest(
+                    playable, "stand", externalConstraint: null, token: CancellationToken.None,
+                    timelineClipOverride: output,
+                    deferInConstraint: playable.postApplyInConstraint,
+                    deferOutConstraint: playable.postApplyOutConstraint);
+                Assert.That(sharedRequest.RuntimeFrameCount, Is.EqualTo(inside ? 60 : 81));
+                Assert.That(sharedRequest.DeferredInConstraintJson, Is.Not.Empty);
+                Assert.That(sharedRequest.DeferredOutConstraintJson, Is.Not.Empty);
             }
             finally
             {

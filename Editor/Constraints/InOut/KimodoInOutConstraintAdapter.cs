@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using TimelineInject;
 using UnityEditor;
 using UnityEditor.Timeline;
@@ -15,6 +16,7 @@ namespace KimodoBridge.Editor
         public TrackAsset Track;
         public PlayableDirector Director;
         public Animator Animator;
+        public Avatar TargetAvatar;
         public string ModelName = KimodoMotionModelProfiles.DefaultModelName;
         public TimelineClip PreviousTimelineClip;
         public TimelineClip NextTimelineClip;
@@ -167,6 +169,60 @@ namespace KimodoBridge.Editor
             return previousClip != null;
         }
 
+        internal static bool TryResolveSourceClip(
+            TimelineClip targetClip,
+            TrackAsset sourceTrack,
+            PlayableAsset sourceAsset,
+            double sourceClipStart,
+            out TimelineClip resolvedClip,
+            out string error)
+        {
+            resolvedClip = null;
+            error = string.Empty;
+            if (sourceTrack == null && sourceAsset == null)
+            {
+                return true;
+            }
+            if (sourceTrack == null || sourceAsset == null)
+            {
+                error = "In/Out source Clip reference is incomplete.";
+                return false;
+            }
+            if (targetClip?.GetParentTrack()?.timelineAsset != sourceTrack.timelineAsset)
+            {
+                error = "In/Out source Clip must belong to the generation Timeline.";
+                return false;
+            }
+
+            TimelineClip[] matches = sourceTrack.GetClips()
+                .Where(item => item != null && ReferenceEquals(item.asset, sourceAsset) &&
+                    (sourceClipStart < 0.0 || Math.Abs(item.start - sourceClipStart) <= 1e-6))
+                .ToArray();
+            if (matches.Length != 1)
+            {
+                error = matches.Length == 0
+                    ? "The selected In/Out source Clip is no longer present on its Timeline track. Select it again."
+                    : "The selected In/Out PlayableAsset appears more than once on its track and cannot be resolved uniquely.";
+                return false;
+            }
+            if (!IsUsableSourceClip(matches[0]))
+            {
+                error = "The selected In/Out source Clip does not contain a usable animation.";
+                return false;
+            }
+            resolvedClip = matches[0];
+            return true;
+        }
+
+        internal static bool IsUsableSourceClip(TimelineClip timelineClip)
+        {
+            if (timelineClip?.asset is KimodoPlayableClip playable)
+            {
+                return playable.clip != null;
+            }
+            return TryResolveAnimationClip(timelineClip, out _, out _);
+        }
+
         internal static bool TryResolveTimelineContext(
             TimelineClip sourceClip,
             out KimodoTimelineInOutConstraintContext context,
@@ -193,10 +249,12 @@ namespace KimodoBridge.Editor
                 return false;
             }
 
-            Animator animator = director.GetGenericBinding(track) as Animator;
-            if (animator == null)
+            if (!KimodoConstraintMarkerEditorUtility.TryGetTrackAnimatorBinding(
+                    director,
+                    track,
+                    out Animator animator))
             {
-                error = "Animation track has no Animator binding.";
+                error = "Animation track and its parent tracks have no Animator binding.";
                 return false;
             }
 
@@ -338,29 +396,68 @@ namespace KimodoBridge.Editor
             }
 
             bool hasManualSamples = manualSamples != null && manualSamples.Count > 0;
-            bool enableBegin = false;
-            bool enableEnd = false;
-
-            switch (mode)
+            var playable = context.SourceClip?.asset as KimodoPlayableClip;
+            bool isArdy = KimodoMotionModelProfiles.TryGetArdy(context.ModelName, out _);
+            if (isArdy && (playable?.inConstraintSourceAsset != null || playable?.outConstraintSourceAsset != null))
             {
-                case KimodoInOutConstraintMode.Inside:
-                    enableBegin = enableIn && context.SourceClip != null;
-                    enableEnd = enableOut && context.SourceClip != null;
-                    break;
-
-                case KimodoInOutConstraintMode.Outside:
-                    enableBegin = enableIn && context.PreviousTimelineClip != null;
-                    enableEnd = enableOut && context.NextTimelineClip != null;
-                    break;
+                throw new InvalidOperationException("Explicit In/Out source Clips currently require a standard motion model; ARDY uses Timeline history constraints.");
             }
 
+            KimodoLocalAvatarUtility.AvatarResolveResult targetAvatarResult = context.Track != null && context.Animator != null
+                ? KimodoLocalAvatarUtility.ResolveTimelineSourceAvatar(context.Track, context.Animator)
+                : default;
+            Avatar targetAvatar = targetAvatarResult.IsHumanoid ? targetAvatarResult.Avatar : context.TargetAvatar;
+            KimodoTimelineInOutConstraintContext ResolveSource(
+                bool isBegin,
+                TrackAsset selectedTrack,
+                PlayableAsset selectedAsset,
+                double selectedClipStart)
+            {
+                TimelineClip source = null;
+                if (selectedTrack != null || selectedAsset != null)
+                {
+                    if (!TryResolveSourceClip(context.SourceClip, selectedTrack, selectedAsset, selectedClipStart, out source, out string sourceError))
+                    {
+                        throw new InvalidOperationException(sourceError);
+                    }
+                }
+                else if (mode == KimodoInOutConstraintMode.Inside)
+                {
+                    source = context.SourceClip;
+                }
+                else if (mode == KimodoInOutConstraintMode.Outside)
+                {
+                    source = isBegin ? context.PreviousTimelineClip : context.NextTimelineClip;
+                }
+
+                if (source == null)
+                {
+                    return null;
+                }
+                if (!TryResolveTimelineContext(source, out KimodoTimelineInOutConstraintContext sourceContext, out string sourceContextError))
+                {
+                    throw new InvalidOperationException(sourceContextError);
+                }
+                sourceContext.TargetAvatar = targetAvatar;
+                return sourceContext;
+            }
+
+            KimodoTimelineInOutConstraintContext beginSource = ResolveSource(
+                true,
+                playable?.inConstraintSourceTrack,
+                playable?.inConstraintSourceAsset,
+                playable?.inConstraintSourceClipStart ?? -1.0);
+            KimodoTimelineInOutConstraintContext endSource = ResolveSource(
+                false,
+                playable?.outConstraintSourceTrack,
+                playable?.outConstraintSourceAsset,
+                playable?.outConstraintSourceClipStart ?? -1.0);
+            bool enableBegin = enableIn && beginSource != null;
+            bool enableEnd = enableOut && endSource != null;
             if (!enableBegin && !enableEnd && !hasManualSamples && !autoBeginAnchor)
             {
                 return null;
             }
-
-            var playable = context.SourceClip?.asset as KimodoPlayableClip;
-            bool isArdy = KimodoMotionModelProfiles.TryGetArdy(context.ModelName, out _);
             return new KimodoInOutConstraintRequest
             {
                 Mode = mode,
@@ -377,6 +474,12 @@ namespace KimodoBridge.Editor
                 DeferBeginConstraint = deferBeginConstraint,
                 DeferEndConstraint = deferEndConstraint,
                 TimelineContext = context,
+                BeginTimelineContext = beginSource,
+                EndTimelineContext = endSource,
+                HasExplicitBeginSource = playable?.inConstraintSourceAsset != null,
+                HasExplicitEndSource = playable?.outConstraintSourceAsset != null,
+                BeginSourceFrame = playable?.inConstraintSourceFrame ?? -1,
+                EndSourceFrame = playable?.outConstraintSourceFrame ?? -1,
                 ManualSamples = KimodoInOutConstraintTools.BuildLocalManualSamples(
                     manualSamples,
                     context.SourceClip != null ? context.SourceClip.start : 0.0,

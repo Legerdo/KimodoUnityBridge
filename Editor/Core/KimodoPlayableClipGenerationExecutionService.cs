@@ -228,14 +228,70 @@ namespace KimodoBridge.Editor
             out KimodoEditorGenerationJobSession session,
             out string error)
         {
-            return KimodoEditorGenerationJobService.Start(
+            return TryStartConfiguredGenerate(
                 clip,
-                async (handle, token) => await GenerateAndFinalizeAsync(
-                    clip,
-                    externalConstraint: null,
-                    (stage, message) => KimodoEditorGenerationJobService.UpdateProgress(clip, handle.RequestId, stage, message),
-                    token),
+                clip,
                 null,
+                null,
+                null,
+                null,
+                null,
+                out session,
+                out error);
+        }
+
+        // Shared entry for Inspector and command generation.  Callers configure
+        // the KimodoPlayableClip first; this method deliberately supplies no
+        // external constraint payload so BuildRequest reads the same serialized
+        // UI fields and resolves Timeline neighbors through the common path.
+        internal static bool TryStartConfiguredGenerate(
+            KimodoPlayableClip clip,
+            UnityEngine.Object jobTarget,
+            TimelineClip timelineClipOverride,
+            Action<KimodoEditorGenerationJobSession> beforeGenerate,
+            Func<KimodoEditorGenerationJobSession, KimodoEditorGenerationResult, CancellationToken,
+                Task<KimodoEditorGenerationResult>> afterGenerate,
+            Action<KimodoEditorGenerationJobSession> finallyGenerate,
+            Action<KimodoEditorGenerationJobSession> statusChanged,
+            out KimodoEditorGenerationJobSession session,
+            out string error)
+        {
+            session = null;
+            error = string.Empty;
+            if (clip == null)
+            {
+                error = "KimodoPlayableClip is null.";
+                return false;
+            }
+
+            UnityEngine.Object resolvedTarget = jobTarget != null ? jobTarget : clip;
+            return KimodoEditorGenerationJobService.Start(
+                resolvedTarget,
+                async (handle, token) =>
+                {
+                    try
+                    {
+                        beforeGenerate?.Invoke(handle);
+                        KimodoEditorGenerationResult result = await GenerateAndFinalizeAsync(
+                            clip,
+                            externalConstraint: null,
+                            (stage, message) => KimodoEditorGenerationJobService.UpdateProgress(
+                                resolvedTarget,
+                                handle.RequestId,
+                                stage,
+                                message),
+                            token,
+                            timelineClipOverride);
+                        return afterGenerate != null
+                            ? await afterGenerate(handle, result, token)
+                            : result;
+                    }
+                    finally
+                    {
+                        finallyGenerate?.Invoke(handle);
+                    }
+                },
+                statusChanged,
                 out session,
                 out error);
         }
