@@ -1183,6 +1183,25 @@ namespace KimodoBridge.Editor
                 }
                 token.ThrowIfCancellationRequested();
 
+                if (KimodoPlayableClipGenerationSettings.instance.WriteFirstTrajectoryPassCacheClip)
+                {
+                    string trajectorySourceName = string.IsNullOrWhiteSpace(clip.generatedAssetName)
+                        ? clip.name
+                        : clip.generatedAssetName;
+                    if (!KimodoEditorClipWritebackService.TryWriteTrajectoryPassCacheClip(
+                            trajectorySourceName,
+                            firstResult.MotionJsonCompact,
+                            modelName,
+                            firstResult.MotionData != null
+                                ? firstResult.MotionData.FrameRate
+                                : firstRequest.TargetFrameRate,
+                            out _,
+                            out string trajectoryCacheError))
+                    {
+                        Debug.LogWarning($"[Kimodo][Generate] Could not persist first trajectory pass: {trajectoryCacheError}");
+                    }
+                }
+
                 int effectiveSeed = firstRequest.EffectiveSeed;
                 finalRequest = KimodoPlayableClipGenerationHostService.BuildRequest(
                     clip,

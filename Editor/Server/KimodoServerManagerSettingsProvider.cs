@@ -52,7 +52,7 @@ namespace KimodoBridge.Editor
         {
             return new KimodoServerManagerSettingsProvider("Project/Kimodo Server Manager", SettingsScope.Project)
             {
-                keywords = new HashSet<string>(new[] { "Kimodo", "Server", "Model", "Prompt", "Bridge", "VRAM", "Cache", "Runtime", "Debug", "Resample", "Writeback" })
+                keywords = new HashSet<string>(new[] { "Kimodo", "Server", "Model", "Prompt", "Bridge", "VRAM", "Cache", "Runtime", "Debug", "Resample", "Trajectory", "First Pass", "Writeback" })
             };
         }
 
@@ -355,6 +355,18 @@ namespace KimodoBridge.Editor
                 if (EditorGUI.EndChangeCheck())
                 {
                     settings.WriteResampledTimelineCacheClips = writeResampledTimelineCacheClips;
+                    settings.SaveSettings();
+                }
+
+                EditorGUI.BeginChangeCheck();
+                bool writeFirstTrajectoryPassCacheClip = EditorGUILayout.Toggle(
+                    new GUIContent(
+                        "Write First Trajectory Pass Clip",
+                        "Persist the first trajectory pass as a model-bone AnimationClip under Assets/KimodoGeneratedClips/Cache. It does not replace the generated Timeline Clip."),
+                    settings.WriteFirstTrajectoryPassCacheClip);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    settings.WriteFirstTrajectoryPassCacheClip = writeFirstTrajectoryPassCacheClip;
                     settings.SaveSettings();
                 }
 
