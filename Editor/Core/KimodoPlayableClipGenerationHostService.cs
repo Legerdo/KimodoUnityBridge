@@ -306,7 +306,8 @@ namespace KimodoBridge.Editor
         public static void FinalizeGeneration(
             KimodoPlayableClip clip,
             KimodoEditorGenerateRequest request,
-            KimodoEditorGenerationResult result)
+            KimodoEditorGenerationResult result,
+            bool writeDebugTimeline = true)
         {
             if (clip == null || request == null || result == null || result.GeneratedClip == null)
             {
@@ -357,6 +358,10 @@ namespace KimodoBridge.Editor
             finally
             {
                 Undo.CollapseUndoOperations(undoGroup);
+            }
+            if (writeDebugTimeline)
+            {
+                KimodoDebugTimelineWriter.TryWrite(clip, request, result);
             }
         }
 

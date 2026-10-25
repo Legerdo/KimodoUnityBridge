@@ -23,7 +23,6 @@ namespace KimodoBridge.Editor
         [SerializeField] private KimodoTextEncoderMode defaultTextEncoderMode = KimodoTextEncoderMode.HighPerformance;
         [SerializeField] private bool keepCpuForceExperimental;
         [SerializeField] private bool writeResampledTimelineCacheClips;
-        [SerializeField] private bool writeTrajectoryPassCacheClip;
         [SerializeField] private bool enableDebugLog;
         [SerializeField] private bool enableKimodoStaticGraph;
         [SerializeField] private bool enableSplineExperimental;
@@ -104,12 +103,6 @@ namespace KimodoBridge.Editor
         {
             get => writeResampledTimelineCacheClips;
             set => writeResampledTimelineCacheClips = value;
-        }
-
-        internal bool WriteFirstTrajectoryPassCacheClip
-        {
-            get => writeTrajectoryPassCacheClip;
-            set => writeTrajectoryPassCacheClip = value;
         }
 
         internal bool EnableDebugLog

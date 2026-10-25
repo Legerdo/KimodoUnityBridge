@@ -571,13 +571,22 @@ namespace KimodoBridge.Editor
                 for (int i = 0; i < entries.Count; i++)
                 {
                     token.ThrowIfCancellationRequested();
-                    KimodoPlayableClipGenerationHostService.FinalizeGeneration(entries[i].Clip, entries[i].Request, baked[i]);
+                    KimodoPlayableClipGenerationHostService.FinalizeGeneration(
+                        entries[i].Clip, entries[i].Request, baked[i], writeDebugTimeline: false);
                     baked[i] = await RunPostGenerationAnalysisAsync(
                         entries[i].Clip,
                         baked[i],
                         (stage, message) => progress?.Invoke(stage, $"[{i + 1}/{entries.Count}] {entries[i].Clip.name}: {message}"));
                     finalized++;
                 }
+
+                KimodoDebugTimelineWriter.TryWriteGroup(
+                    entries.Select((entry, index) => new KimodoDebugTimelineWriter.RawClipInput
+                    {
+                        SourceClip = entry.Clip,
+                        Request = entry.Request,
+                        Result = baked[index]
+                    }).ToList());
             }
             catch
             {
@@ -1212,25 +1221,6 @@ namespace KimodoBridge.Editor
                         modelName);
                 }
                 token.ThrowIfCancellationRequested();
-
-                if (KimodoPlayableClipGenerationSettings.instance.WriteFirstTrajectoryPassCacheClip)
-                {
-                    string trajectorySourceName = string.IsNullOrWhiteSpace(clip.generatedAssetName)
-                        ? clip.name
-                        : clip.generatedAssetName;
-                    if (!KimodoEditorClipWritebackService.TryWriteTrajectoryPassCacheClip(
-                            trajectorySourceName,
-                            firstResult.MotionJsonCompact,
-                            modelName,
-                            firstResult.MotionData != null
-                                ? firstResult.MotionData.FrameRate
-                                : firstRequest.TargetFrameRate,
-                            out _,
-                            out string trajectoryCacheError))
-                    {
-                        Debug.LogWarning($"[Kimodo][Generate] Could not persist first trajectory pass: {trajectoryCacheError}");
-                    }
-                }
 
                 int effectiveSeed = firstRequest.EffectiveSeed;
                 finalRequest = KimodoPlayableClipGenerationHostService.BuildRequest(

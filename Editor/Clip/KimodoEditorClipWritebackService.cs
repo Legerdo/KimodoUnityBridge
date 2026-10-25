@@ -18,7 +18,6 @@ namespace KimodoBridge.Editor
         internal const string GeneratedArdyClipNamePrefix = "ARDY_";
         internal const string InvalidCachePrefix = "invalid_";
         private const string MuscleCacheNameSuffix = "-muscle-cache";
-        private const string TrajectoryPassCacheNameSuffix = "-trajectory-cache";
         private const string BoneCacheNameMarker = "-bone-";
         private const string CacheNameSuffix = "-cache";
 
@@ -324,84 +323,6 @@ namespace KimodoBridge.Editor
                     $"[Kimodo][Generate] Wrote raw Kimodo bone clip: '{AssetDatabase.GetAssetPath(rawBoneClip)}'.");
             }
             return rawBoneClip;
-        }
-
-        internal static bool TryWriteTrajectoryPassCacheClip(
-            string sourceName,
-            string motionJson,
-            string modelName,
-            float frameRate,
-            out AnimationClip savedClip,
-            out string error)
-        {
-            savedClip = null;
-            error = string.Empty;
-            string cacheName = string.Empty;
-            try
-            {
-                if (string.IsNullOrWhiteSpace(motionJson))
-                {
-                    error = "Trajectory pass motion json is empty.";
-                    return false;
-                }
-
-                string safeSourceName = KimodoRuntimeUtility.SanitizeName(sourceName, "KimodoTrajectory");
-                if (!safeSourceName.StartsWith(GeneratedClipNamePrefix, StringComparison.OrdinalIgnoreCase) &&
-                    !safeSourceName.StartsWith(GeneratedArdyClipNamePrefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    safeSourceName = $"{GeneratedClipNamePrefix}{safeSourceName}";
-                }
-                string cacheNamePrefix = $"{safeSourceName}_{DateTime.Now:yyyyMMdd_HHmmss_fff}";
-                cacheName = $"{cacheNamePrefix}{TrajectoryPassCacheNameSuffix}";
-                for (int suffix = 2;
-                     AssetDatabase.LoadAssetAtPath<AnimationClip>($"{CacheClipFolder}/{cacheName}.anim") != null;
-                     suffix++)
-                {
-                    cacheName = $"{cacheNamePrefix}_{suffix}{TrajectoryPassCacheNameSuffix}";
-                }
-                if (!TryGetOrCreateNamedClipCache(cacheName, frameRate, out savedClip, out error))
-                {
-                    return false;
-                }
-
-                if (!KimodoRetargetToolsEditor.BakeIntoClip(
-                        savedClip,
-                        motionJson,
-                        KimodoMotionModelProfiles.ResolveBakeSkeletonType(modelName),
-                        modelName,
-                        null,
-                        out error))
-                {
-                    TryInvalidateNamedClipCache(cacheName, out _);
-                    savedClip = null;
-                    return false;
-                }
-
-                savedClip.frameRate = frameRate > 0f
-                    ? frameRate
-                    : KimodoMotionModelProfiles.DefaultFrameRate;
-                savedClip.legacy = false;
-                EditorUtility.SetDirty(savedClip);
-                FlushWritebackAssets();
-                string assetPath = AssetDatabase.GetAssetPath(savedClip);
-                Debug.Log($"[Kimodo][Generate] Wrote first trajectory pass clip: '{assetPath}'.");
-                if (!Application.isBatchMode)
-                {
-                    Selection.activeObject = savedClip;
-                    EditorGUIUtility.PingObject(savedClip);
-                }
-                return true;
-            }
-            catch (Exception exception)
-            {
-                if (!string.IsNullOrWhiteSpace(cacheName))
-                {
-                    TryInvalidateNamedClipCache(cacheName, out _);
-                }
-                savedClip = null;
-                error = $"{exception.GetType().Name}: {exception.Message}";
-                return false;
-            }
         }
 
         internal static bool TryDeleteUnreferencedNamedClipCaches(out NamedClipCacheCleanupSummary summary, out string error)
@@ -801,11 +722,6 @@ namespace KimodoBridge.Editor
             if (clipName.EndsWith(MuscleCacheNameSuffix, StringComparison.OrdinalIgnoreCase))
             {
                 return clipName.Length > MuscleCacheNameSuffix.Length;
-            }
-
-            if (clipName.EndsWith(TrajectoryPassCacheNameSuffix, StringComparison.OrdinalIgnoreCase))
-            {
-                return clipName.Length > TrajectoryPassCacheNameSuffix.Length;
             }
 
             return clipName.EndsWith(CacheNameSuffix, StringComparison.OrdinalIgnoreCase) &&
