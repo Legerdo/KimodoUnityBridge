@@ -191,7 +191,7 @@ namespace KimodoUnityBridge.Command
                             Required("target_character", "string", "Target scene character name or object_ref. Session preview objects are rejected."),
                             OptionalOutput())),
                     CommandDefinition(GenerateAnimationCommand,
-                        "Start asynchronous generation for a character in the current scene context. Root speed above 7 m/s produces a warning; above 10 m/s blocks generation. Root acceleration above 10 m/s² produces a warning; above 15 m/s² blocks generation. After generation, the same Timeline Clip is analyzed once with the full animation.analysis pipeline and returned under post_analysis; analysis failure does not invalidate the generated Clip. Command-created Timeline Clips enable AutoBegin anchoring automatically; explicit first-frame or In/Out samples take precedence. The accepted response contains request_id, status, and request/constraint diagnostics. Pose/effector safety preflight runs for point constraints containing both pose and effector; use pose.analysis to capture sampled poses and measure joint positions. Map explicit path requirements to supported trajectory fields, use confirmed scene or analysis evidence to fill unspecified details, and leave other optional fields at their schema defaults.",
+                        "Start asynchronous generation for a character in the current scene context. Root speed above 7 m/s produces a warning; above 10 m/s blocks generation. Root acceleration above 10 m/s² produces a warning; above 15 m/s² blocks generation. Full animation.analysis runs after generation by default; set analyze=false to skip it. Analysis failure does not invalidate the generated Clip. Command-created Timeline Clips enable AutoBegin anchoring automatically; explicit first-frame or In/Out samples take precedence. The accepted response contains request_id, status, and request/constraint diagnostics. Pose/effector safety preflight runs for point constraints containing both pose and effector; use pose.analysis to capture sampled poses and measure joint positions. Map explicit path requirements to supported trajectory fields, use confirmed scene or analysis evidence to fill unspecified details, and leave other optional fields at their schema defaults.",
                         Properties(
                             Required("character", "string", "Scene character name or object_ref. Session preview objects are rejected; use the source scene character."),
                             Required("prompt", "string", "Short semantic description of the current Clip's action; aim for 25 words or fewer. Express exact FullBody, position, and effector anchors through structured constraints."),
@@ -206,6 +206,12 @@ namespace KimodoUnityBridge.Command
                             OptionalPath(),
                             OptionalGeneration(),
                             OptionalOutput(),
+                            new PropertyDefinition("analyze", new JObject
+                            {
+                                ["type"] = "boolean",
+                                ["default"] = true,
+                                ["description"] = "Run the full animation.analysis command after generation; defaults to true."
+                            }, false),
                             Optional("analysis_option", "object", "Optional generation-time lightweight analysis. When enabled, generation returns sparse salient keyframe markers and foot-contact changes; it does not run the full animation.analysis command."),
                             OptionalConstraints("constraints", "Point constraints resolve to Root2D (root alone), FullBody (pose, optionally root/effector, after IK), or Effector (root + effector without pose). effector alone is invalid. Transforms accept World position and/or Euler rotation in degrees; omitted channels retain sampled values. Pose/effector safety preflight runs when the point explicitly contains both pose and effector. root_path and inout remain separate constraint forms; duplicate frames are rejected; command frames use 60 FPS."))),
                     CommandDefinition(PoseGetCommand,
@@ -697,6 +703,7 @@ namespace KimodoUnityBridge.Command
                     : Vector3.zero;
                 float duration = (float)(durationFrames / SessionFrameRate);
                 string analysisOptionsJson = ParseAnalysisOptionsJson(arguments);
+                bool analyzeAfterGeneration = arguments.Value<bool?>("analyze") ?? true;
                 int frameCount = Math.Max(1, KimodoFrameTimeUtility.SecondsToFrameCount(duration, frameRate));
                 int seed = generationOptions?.Value<int?>("seed") ?? (Guid.NewGuid().GetHashCode() & int.MaxValue);
                 int steps = generationOptions?.Value<int?>("diffusion_steps") ?? ResolveDiffusionSteps(arguments, modelName, modelConfiguration);
@@ -798,6 +805,7 @@ namespace KimodoUnityBridge.Command
                     ? UnityEngine.Timeline.AnimationPlayableAsset.LoopMode.On
                     : UnityEngine.Timeline.AnimationPlayableAsset.LoopMode.Off;
                 playableClip.analysisOptionsJson = analysisOptionsJson;
+                playableClip.analyzeAfterGeneration = analyzeAfterGeneration;
                 playableClip.generatedAssetName = trace.Animation.Name;
                 playableClip.generatedOutputFolder = outputFolder;
                 playableClip.generationOutputMode = ParseGenerationOutputMode(outputMode);
@@ -817,11 +825,19 @@ namespace KimodoUnityBridge.Command
                         previousRequestPayload = KimodoBridgeService.GenerationRequestPayloadContext.Value;
                         KimodoBridgeService.GenerationTaskIdContext.Value = generationSession.RequestId.ToString("N");
                         KimodoBridgeService.GenerationRequestPayloadContext.Value = payload =>
-                            generationSession.BackendRequestJson = payload;
+                        {
+                            if (string.IsNullOrWhiteSpace(generationSession.BackendRequestJson))
+                                generationSession.BackendRequestJson = payload;
+                        };
                     },
                     (generationSession, result, token) =>
                     {
                         FinalizePlayableClipTrace(trace, result);
+                        if (!playableClip.analyzeAfterGeneration)
+                        {
+                            result.PostAnalysisSkipped = true;
+                            return Task.FromResult(result);
+                        }
                         KimodoEditorGenerationJobService.UpdateProgress(
                             character.Root,
                             generationSession.RequestId,
@@ -892,6 +908,11 @@ namespace KimodoUnityBridge.Command
                 token,
                 trace.TimelineClip);
             FinalizePlayableClipTrace(trace, result);
+            if (!playableClip.analyzeAfterGeneration)
+            {
+                result.PostAnalysisSkipped = true;
+                return result;
+            }
             KimodoEditorGenerationJobService.UpdateProgress(
                 target,
                 session.RequestId,

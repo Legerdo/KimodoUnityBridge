@@ -49,6 +49,7 @@ namespace KimodoBridge.Editor
         private SerializedProperty ardyAutoHistory;
         private SerializedProperty ardyHistoryWeight;
         private SerializedProperty showConstraint;
+        private SerializedProperty analyzeAfterGeneration;
         private SerializedProperty splinePathEnabled;
         private SerializedProperty splineWaypointCount;
         private SerializedProperty splineDensePath;
@@ -161,6 +162,7 @@ namespace KimodoBridge.Editor
             ardyAutoHistory = serializedObject.FindProperty("ardyAutoHistory");
             ardyHistoryWeight = serializedObject.FindProperty("ardyHistoryWeight");
             showConstraint = serializedObject.FindProperty("showConstraint");
+            analyzeAfterGeneration = serializedObject.FindProperty("analyzeAfterGeneration");
             splinePathEnabled = serializedObject.FindProperty("splinePathEnabled");
             splineWaypointCount = serializedObject.FindProperty("splineWaypointCount");
             splineDensePath = serializedObject.FindProperty("splineDensePath");
@@ -877,6 +879,12 @@ namespace KimodoBridge.Editor
 
             EditorGUILayout.Space(4f);
             EditorGUILayout.LabelField("Analysis", EditorStyles.boldLabel);
+            if (analyzeAfterGeneration != null)
+            {
+                EditorGUILayout.PropertyField(
+                    analyzeAfterGeneration,
+                    new GUIContent("Analyze After Generation", "Run the full animation analysis after generation; enabled by default."));
+            }
             using (new EditorGUI.DisabledScope(!clip.isGenerated || clip.clip == null))
             {
                 if (GUILayout.Button(new GUIContent(
@@ -984,6 +992,10 @@ namespace KimodoBridge.Editor
                 else if (!string.IsNullOrWhiteSpace(generationResult.PostAnalysisError))
                 {
                     lastFullAnalysisError = generationResult.PostAnalysisError;
+                }
+                else if (generationResult.PostAnalysisSkipped)
+                {
+                    EditorGUILayout.HelpBox("Full animation analysis was skipped for this generation.", MessageType.Info);
                 }
             }
 

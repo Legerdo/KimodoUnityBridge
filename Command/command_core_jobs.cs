@@ -310,6 +310,10 @@ namespace KimodoUnityBridge.Command
             TimelineSessionRecord session = null,
             Guid requestId = default)
         {
+            if (generated?.PostAnalysisSkipped == true)
+            {
+                return new JObject { ["status"] = "skipped" };
+            }
             if (!string.IsNullOrWhiteSpace(generated?.PostAnalysisJson))
             {
                 JObject parsed;

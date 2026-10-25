@@ -12,6 +12,7 @@ namespace KimodoBridge.Editor
         public string AnalysisJson;
         public string PostAnalysisJson;
         public string PostAnalysisError;
+        public bool PostAnalysisSkipped;
         public JObject ConstraintLoss;
         public byte[] MotionBytes;
         public int StartFrame;

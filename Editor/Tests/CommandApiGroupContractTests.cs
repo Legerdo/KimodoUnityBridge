@@ -183,6 +183,8 @@ namespace KimodoUnityBridge.Command.Tests
             JObject duration = (JObject)generate["inputSchema"]?["properties"]?["duration_frames"];
             Assert.That(duration?.Value<int>("minimum"), Is.EqualTo(1));
             Assert.That(duration?.Value<int>("default"), Is.EqualTo(300));
+            Assert.That(generate["inputSchema"]?["properties"]?["analyze"]?.Value<string>("type"), Is.EqualTo("boolean"));
+            Assert.That(generate["inputSchema"]?["properties"]?["analyze"]?.Value<bool>("default"), Is.True);
             Assert.That(generate["inputSchema"]?["properties"]?["analysis_option"]?.Value<string>("type"), Is.EqualTo("object"));
             Assert.That(retarget["inputSchema"]?["properties"]?["source_character"], Is.Not.Null);
             Assert.That(retarget["inputSchema"]?["properties"]?["animation"], Is.Not.Null);
@@ -199,6 +201,24 @@ namespace KimodoUnityBridge.Command.Tests
                 .First(item => item["root"] != null && item["effector"] != null);
             Assert.That(pointExample["type"], Is.Null);
             Assert.That(pointExample["pose"], Is.Not.Null);
+        }
+
+        [Test]
+        [Category("Generation")]
+        public void PlayableClip_ExposesFullAnalysisToggleEnabledByDefault()
+        {
+            KimodoBridge.KimodoPlayableClip clip = ScriptableObject.CreateInstance<KimodoBridge.KimodoPlayableClip>();
+            try
+            {
+                Assert.That(clip.analyzeAfterGeneration, Is.True);
+                var serialized = new SerializedObject(clip);
+                Assert.That(serialized.FindProperty("analyzeAfterGeneration"), Is.Not.Null,
+                    "The Inspector needs a serialized setting so command and UI generation can share the same choice.");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(clip);
+            }
         }
 
         [Test]
@@ -382,6 +402,10 @@ namespace KimodoUnityBridge.Command.Tests
             JObject liveGeneration = Tool(live, "animation.generate");
             JObject packagedGeneration = Tool(packaged, "animation.generate");
             Assert.That(JToken.DeepEquals(
+                liveGeneration["inputSchema"]?["properties"]?["analyze"],
+                packagedGeneration["inputSchema"]?["properties"]?["analyze"]), Is.True,
+                "The packaged help must expose the same analyze switch and default as the live schema.");
+            Assert.That(JToken.DeepEquals(
                 liveGeneration["inputSchema"]?["properties"]?["path"]?["properties"]?["relative_offset"],
                 packagedGeneration["inputSchema"]?["properties"]?["path"]?["properties"]?["relative_offset"]), Is.True);
             JObject postAnalysis = (JObject)Tool(live, "generation.get")["outputSchema"]?["properties"]?["post_analysis"]?["properties"];
@@ -557,6 +581,15 @@ namespace KimodoUnityBridge.Command.Tests
                 new KimodoEditorGenerationResult(), KimodoEditorGenerationJobStatus.Canceled, null, Guid.Empty
             });
             Assert.That(skipped.Value<string>("status"), Is.EqualTo("skipped"));
+
+            JObject explicitlySkipped = (JObject)builder.Invoke(null, new object[]
+            {
+                new KimodoEditorGenerationResult { PostAnalysisSkipped = true },
+                KimodoEditorGenerationJobStatus.Completed,
+                null,
+                Guid.Empty
+            });
+            Assert.That(explicitlySkipped.Value<string>("status"), Is.EqualTo("skipped"));
         }
 
         private static JObject Definitions()

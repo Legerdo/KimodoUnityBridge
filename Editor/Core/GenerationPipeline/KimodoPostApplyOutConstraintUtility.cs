@@ -113,9 +113,14 @@ namespace KimodoBridge.Editor
         {
             error = string.Empty;
             RootRow previous = null;
-            Vector3 previousVelocity = Vector3.zero;
-            bool hasVelocity = false;
-            foreach (RootRow current in rows.OrderBy(row => row.Frame).ThenBy(row => row.RecordIndex).ThenBy(row => row.RowIndex))
+            RootRow beforePrevious = null;
+            IEnumerable<RootRow> orderedRows = rows
+                .OrderBy(row => row.Frame)
+                .ThenBy(row => row.RecordIndex)
+                .ThenBy(row => row.RowIndex)
+                .GroupBy(row => row.Frame)
+                .Select(group => group.Last());
+            foreach (RootRow current in orderedRows)
             {
                 if (previous == null)
                 {
@@ -123,27 +128,33 @@ namespace KimodoBridge.Editor
                     continue;
                 }
                 int frameDelta = current.Frame - previous.Frame;
-                if (frameDelta <= 0)
-                {
-                    previous = current;
-                    continue;
-                }
                 float dt = frameDelta / Mathf.Max(1f, frameRate);
                 Vector3 velocity = (current.Position - previous.Position) / dt;
                 float speed = velocity.magnitude;
-                float acceleration = (velocity - (hasVelocity ? previousVelocity : Vector3.zero)).magnitude / dt;
                 if (speed > KimodoGenerationWarningCheckService.MaxSpeedMetersPerSecond)
                 {
                     error = $"Raw constraint root speed {speed:F3} m/s exceeds {KimodoGenerationWarningCheckService.MaxSpeedMetersPerSecond:F1} m/s.";
                     return false;
                 }
-                if (acceleration > KimodoGenerationWarningCheckService.MaxAccelerationMetersPerSecondSquared)
+                if (beforePrevious != null)
                 {
-                    error = $"Raw constraint root acceleration {acceleration:F3} m/s² exceeds {KimodoGenerationWarningCheckService.MaxAccelerationMetersPerSecondSquared:F1} m/s².";
-                    return false;
+                    float previousDt = (previous.Frame - beforePrevious.Frame) / Mathf.Max(1f, frameRate);
+                    if (previousDt > 0f)
+                    {
+                        Vector3 previousVelocity = (previous.Position - beforePrevious.Position) / previousDt;
+                        // The two velocities are centered at different times. Use the
+                        // non-uniform three-point Lagrange second derivative instead of
+                        // dividing their difference by only the latest interval.
+                        float centerDistance = 0.5f * (previousDt + dt);
+                        float acceleration = (velocity - previousVelocity).magnitude / centerDistance;
+                        if (acceleration > KimodoGenerationWarningCheckService.MaxAccelerationMetersPerSecondSquared)
+                        {
+                            error = $"Raw constraint root acceleration {acceleration:F3} m/s² exceeds {KimodoGenerationWarningCheckService.MaxAccelerationMetersPerSecondSquared:F1} m/s².";
+                            return false;
+                        }
+                    }
                 }
-                previousVelocity = velocity;
-                hasVelocity = true;
+                beforePrevious = previous;
                 previous = current;
             }
             return true;

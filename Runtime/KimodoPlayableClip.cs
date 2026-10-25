@@ -100,6 +100,8 @@ namespace KimodoBridge
         public Vector3 relativeOffset;
         [Tooltip("Backend analysis options serialized as JSON and applied to this generation clip.")]
         public string analysisOptionsJson = string.Empty;
+        [Tooltip("Run the full animation analysis automatically after generation.")]
+        public bool analyzeAfterGeneration = true;
         [Tooltip("Optional generated AnimationClip asset name without extension.")]
         public string generatedAssetName = string.Empty;
         [Tooltip("Optional generated AnimationClip folder under Assets.")]

@@ -1999,7 +1999,7 @@
     },
     {
       "name": "animation.generate",
-      "description": "Start asynchronous generation for a character in the current scene context. Root speed above 7 m/s produces a warning; above 10 m/s blocks generation. Root acceleration above 10 m/s² produces a warning; above 15 m/s² blocks generation. After generation, the same Timeline Clip is analyzed once with the full animation.analysis pipeline and written to a project-relative JSON file and exposed as post_analysis.analysis_path; analysis failure does not invalidate the generated Clip. Command-created Timeline Clips enable AutoBegin anchoring automatically; explicit first-frame or In/Out samples take precedence. The accepted response contains request_id, status, and request/constraint diagnostics. Pose/effector safety preflight runs for point constraints containing both pose and effector; use pose.analysis to capture sampled poses and measure joint positions. Map explicit path requirements to supported trajectory fields, use confirmed scene or analysis evidence to fill unspecified details, and leave other optional fields at their schema defaults.",
+      "description": "Start asynchronous generation for a character in the current scene context. Root speed above 7 m/s produces a warning; above 10 m/s blocks generation. Root acceleration above 10 m/s² produces a warning; above 15 m/s² blocks generation. Full animation.analysis runs after generation by default; set analyze=false to skip it. When enabled, the result is written to a project-relative JSON file and exposed as post_analysis.analysis_path; analysis failure does not invalidate the generated Clip. Command-created Timeline Clips enable AutoBegin anchoring automatically; explicit first-frame or In/Out samples take precedence. The accepted response contains request_id, status, and request/constraint diagnostics. Pose/effector safety preflight runs for point constraints containing both pose and effector; use pose.analysis to capture sampled poses and measure joint positions. Map explicit path requirements to supported trajectory fields, use confirmed scene or analysis evidence to fill unspecified details, and leave other optional fields at their schema defaults.",
       "documentation": {
         "when_to_use": "Submit one animation generation request for a character in the current scene context.",
         "behavior": [
@@ -2010,7 +2010,7 @@
         ],
         "result_notes": [
           "The accepted response contains request_id, status, preflight check results, and warnings. Root speed above 7 m/s warns; above 10 m/s blocks generation. Root acceleration above 10 m/s² warns; above 15 m/s² blocks generation. Use the returned preflight diagnostics to assess pose/effector constraints; use pose.analysis when measured sampled joint positions are needed.",
-          "On completion, generation.get returns the generated Clip metadata, asset path, animation_id, generation diagnostics, and the path to the full animation.analysis JSON under post_analysis.analysis_path. Analysis failure is reported separately and does not invalidate the generated Clip."
+          "On completion, generation.get returns the generated Clip metadata, asset path, animation_id, and generation diagnostics. When analyze=true, post_analysis.analysis_path points to the full animation.analysis JSON; with analyze=false, post_analysis.status is skipped. Analysis failure is reported separately and does not invalidate generation."
         ],
         "scene_effects": [
           "A completed result is appended as a Timeline Clip; existing completed Clips are retained.",
@@ -2018,7 +2018,7 @@
         ],
         "limits": [
           "Map explicit path and direction requirements to supported trajectory fields; use confirmed scene/analysis evidence to resolve details the prompt leaves unspecified. Leave other optional fields at their schema defaults.",
-          "analysis_option is lightweight generation-time analysis; animation.analysis provides the full analysis pipeline.",
+          "analyze controls the full post-generation animation.analysis pass and defaults to true; analysis_option is lightweight generation-time analysis and remains independent.",
           "Command checks validate supported request boundaries. Evaluate semantic and artistic quality with the task's acceptance criteria and analysis evidence."
         ],
         "related_commands": [
@@ -2166,6 +2166,11 @@
               }
             },
             "description": "Optional animation output settings."
+          },
+          "analyze": {
+            "type": "boolean",
+            "default": true,
+            "description": "Run the full animation.analysis command after generation; defaults to true."
           },
           "analysis_option": {
             "type": "object",

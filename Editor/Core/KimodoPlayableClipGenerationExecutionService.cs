@@ -233,11 +233,47 @@ namespace KimodoBridge.Editor
                 clip,
                 null,
                 null,
-                null,
+                (handle, result, token) => RunPostGenerationAnalysisAsync(
+                    clip,
+                    result,
+                    (stage, message) => KimodoEditorGenerationJobService.UpdateProgress(
+                        clip,
+                        handle.RequestId,
+                        stage,
+                        message)),
                 null,
                 null,
                 out session,
                 out error);
+        }
+
+        private static Task<KimodoEditorGenerationResult> RunPostGenerationAnalysisAsync(
+            KimodoPlayableClip clip,
+            KimodoEditorGenerationResult result,
+            Action<KimodoBridgeCommandStage, string> progress)
+        {
+            if (clip == null || !clip.analyzeAfterGeneration)
+            {
+                if (result != null)
+                    result.PostAnalysisSkipped = true;
+                return Task.FromResult(result);
+            }
+
+            progress?.Invoke(KimodoBridgeCommandStage.Finalize, "Running post-generation animation analysis.");
+            if (KimodoEditorFullAnalysisBridge.TryAnalyze(
+                    clip,
+                    out string analysisJson,
+                    out string analysisError))
+            {
+                result.PostAnalysisJson = analysisJson;
+                result.PostAnalysisError = string.Empty;
+            }
+            else
+            {
+                result.PostAnalysisError = analysisError;
+                Debug.LogWarning($"[Kimodo][PostGenerationAnalysis] {analysisError}");
+            }
+            return Task.FromResult(result);
         }
 
         // Shared entry for Inspector and command generation.  Callers configure
@@ -536,6 +572,10 @@ namespace KimodoBridge.Editor
                 {
                     token.ThrowIfCancellationRequested();
                     KimodoPlayableClipGenerationHostService.FinalizeGeneration(entries[i].Clip, entries[i].Request, baked[i]);
+                    baked[i] = await RunPostGenerationAnalysisAsync(
+                        entries[i].Clip,
+                        baked[i],
+                        (stage, message) => progress?.Invoke(stage, $"[{i + 1}/{entries.Count}] {entries[i].Clip.name}: {message}"));
                     finalized++;
                 }
             }
@@ -845,20 +885,10 @@ namespace KimodoBridge.Editor
                     token,
                     timelineClipOverride: timelineClips != null && i < timelineClips.Count ? timelineClips[i] : null);
                 token.ThrowIfCancellationRequested();
-                progress?.Invoke(KimodoBridgeCommandStage.Finalize, $"{prefix}: running full animation analysis...");
-                if (KimodoEditorFullAnalysisBridge.TryAnalyze(
-                        selectedClip,
-                        out string analysisJson,
-                        out string analysisError))
-                {
-                    result.PostAnalysisJson = analysisJson;
-                    result.PostAnalysisError = string.Empty;
-                }
-                else
-                {
-                    result.PostAnalysisError = analysisError;
-                    Debug.LogWarning($"[Kimodo][PostGenerationAnalysis] {analysisError}");
-                }
+                result = await RunPostGenerationAnalysisAsync(
+                    selectedClip,
+                    result,
+                    (stage, message) => progress?.Invoke(stage, $"{prefix}: {message}"));
             }
 
             return result ?? throw new InvalidOperationException("No Timeline clips were selected for generation.");
