@@ -1,8 +1,20 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Newtonsoft.Json.Linq;
 
 namespace KimodoBridge.Editor
 {
+    internal sealed class KimodoDebugConstraintPass
+    {
+        public string Name;
+        public string AddedConstraintsJson;
+        public string CombinedConstraintsJson;
+        public string ModelName;
+        public int FrameRate;
+        public int FrameCount;
+        internal double DebugTimelineStart = -1.0;
+    }
+
     internal sealed class KimodoEditorGenerationResult
     {
         public string ConstraintsPath;
@@ -19,5 +31,6 @@ namespace KimodoBridge.Editor
         public int EndFrameExclusive;
         public AnimationClip GeneratedClip;
         public AnimationClip RawBoneClip;
+        public List<KimodoDebugConstraintPass> DebugConstraintPasses = new List<KimodoDebugConstraintPass>();
     }
 }

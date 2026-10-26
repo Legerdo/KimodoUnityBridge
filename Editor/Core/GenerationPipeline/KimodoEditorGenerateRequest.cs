@@ -47,6 +47,10 @@ namespace KimodoBridge.Editor
         public CancellationToken Token;
         public bool HasSyntheticAutoBeginConstraint;
         public List<KimodoMarkerSampleResult> ConstraintSamples = new List<KimodoMarkerSampleResult>();
+        internal List<KimodoDebugConstraintPass> DebugConstraintPasses = new List<KimodoDebugConstraintPass>();
+        internal KimodoDebugTimelineGroup DebugTimelineGroup;
+        internal KimodoDebugTimelineReservation DebugTimelineReservation;
+        internal bool DebugTimelineOutputCompleted;
         public string DeferredInConstraintJson = string.Empty;
         public string DeferredOutConstraintJson = string.Empty;
         public TimelineClip TimelineClipSnapshot;

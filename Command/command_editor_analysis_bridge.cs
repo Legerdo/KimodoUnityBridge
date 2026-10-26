@@ -69,7 +69,13 @@ namespace KimodoUnityBridge.Command
                     throw new InvalidOperationException("The selected Timeline must be bound to a character in the active scene.");
                 }
 
-                TimelineSessionRecord session = RequireCurrentTimelineSession();
+                if (!TryGetExistingEditorAnalysisSession(
+                        sourceTimeline,
+                        out TimelineSessionRecord session,
+                        out string sessionError))
+                {
+                    throw new InvalidOperationException(sessionError);
+                }
                 TimelineCharacterRecord character = ResolveSessionCharacter(session, characterRoot, characterRoot.name);
                 if (character == null)
                 {
@@ -150,6 +156,30 @@ namespace KimodoUnityBridge.Command
             }
 
             return null;
+        }
+
+        private static bool TryGetExistingEditorAnalysisSession(
+            TimelineAsset sourceTimeline,
+            out TimelineSessionRecord session,
+            out string error)
+        {
+            session = null;
+            error = string.Empty;
+            RefreshSceneContextBinding();
+            EnsureTimelineSessionsRestored();
+            session = currentTimelineSession ?? firstTimelineSession;
+            if (!IsTimelineSessionValid(session))
+            {
+                error = "Post-generation analysis skipped because no existing scene Timeline Session is available; an automatic context was not created.";
+                return false;
+            }
+            if (sourceTimeline == null || session.TimelineAsset != sourceTimeline)
+            {
+                error = "Post-generation analysis skipped because the existing scene Session does not own the source Timeline.";
+                return false;
+            }
+            currentTimelineSession = session;
+            return true;
         }
     }
 

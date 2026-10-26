@@ -232,7 +232,7 @@ namespace KimodoBridge.Editor
             double fps = KimodoMotionModelProfiles.ResolveGenerationFrameRate(request.ModelName);
             bool forward = (request.Mode == KimodoInOutConstraintMode.Inside) == isBegin;
             double first = ResolveWindowBoundaryTime(request, isBegin) - (forward ? 0 : (frames - 1) / fps);
-            int exportStart = isBegin ? 0 : Math.Max(0, request.GenerationFrames - frames);
+            int exportStart = ResolveWindowExportStart(request, isBegin, frames);
             int[] sampleFrames = BuildWindowSampleFrames(frames, count, forward);
             for (int i = 0; i < count; i++)
             {
@@ -251,6 +251,21 @@ namespace KimodoBridge.Editor
                 result[i] = count == 1 ? (forward ? 0 : frames - 1)
                     : (int)Math.Round(i * (frames - 1.0) / (count - 1), MidpointRounding.AwayFromZero);
             return result;
+        }
+
+        private static int ResolveWindowExportStart(
+            KimodoInOutConstraintRequest request,
+            bool isBegin,
+            int windowFrames)
+        {
+            if (request.Mode != KimodoInOutConstraintMode.Outside)
+                return isBegin ? 0 : Math.Max(0, request.GenerationFrames - windowFrames);
+            if (isBegin)
+                return Math.Max(0, request.OutputStartFrame - windowFrames);
+            if (request.OutputFrameCount > 0)
+                return Math.Min(request.GenerationFrames,
+                    request.OutputStartFrame + request.OutputFrameCount);
+            return Math.Max(0, request.GenerationFrames - windowFrames);
         }
 
         internal static bool TrySampleBoundaries(KimodoInOutConstraintRequest request,
@@ -277,13 +292,14 @@ namespace KimodoBridge.Editor
             float frameRate = KimodoMotionModelProfiles.ResolveGenerationFrameRate(request.ModelName);
             if (request.HasExplicitBeginSource || request.HasExplicitEndSource)
             {
-                return TrySampleExplicitSourceBoundaries(
+                bool sampled = TrySampleExplicitSourceBoundaries(
                     request,
                     frameRate,
                     out beginSamples,
                     out endSamples,
                     out warning,
                     out error);
+                return sampled;
             }
 
             BuildBoundarySampleTimes(request, true, out var inTimes, out var inExports);
@@ -426,7 +442,7 @@ namespace KimodoBridge.Editor
                 sourceContext.SourceClip,
                 frameRate);
             double first = boundary - (forward ? 0.0 : (frames - 1) / (double)frameRate);
-            int exportStart = isBegin ? 0 : Math.Max(0, request.GenerationFrames - frames);
+            int exportStart = ResolveWindowExportStart(request, isBegin, frames);
             int[] sampleFrames = BuildWindowSampleFrames(frames, count, forward);
             if (!KimodoTimelineSamplingSession.TryCreate(
                     sourceContext,

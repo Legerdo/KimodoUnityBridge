@@ -22,6 +22,8 @@ namespace KimodoBridge.Editor
         public Avatar SourceAvatar;
         public string ModelName = KimodoMotionModelProfiles.DefaultModelName;
         public int GenerationFrames = 1;
+        public int OutputStartFrame;
+        public int OutputFrameCount;
         public int BeginWindowFrames = 1;
         public int BeginSampleCount = 1;
         public int EndWindowFrames = 1;

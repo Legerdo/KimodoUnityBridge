@@ -153,6 +153,10 @@ namespace KimodoBridge
         [Tooltip("When the first second has no effective constraint anchor, use the character's original scene Hips position and heading as a Root2D frame-0 anchor.")]
         public bool autoBeginAnchor = true;
         public bool isGenerated;
+        [HideInInspector]
+        public bool isDebugRawClip;
+        [HideInInspector]
+        public string debugPassName = string.Empty;
         public string lastGeneratedPrompt;
         [SerializeField, HideInInspector]
         internal string commandGenerationStatus = string.Empty;

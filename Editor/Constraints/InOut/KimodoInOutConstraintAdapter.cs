@@ -47,7 +47,9 @@ namespace KimodoBridge.Editor
             out string error,
             IReadOnlyList<KimodoMarkerSampleResult> additionalManualSamples = null,
             bool deferEndConstraint = false,
-            bool deferBeginConstraint = false)
+            bool deferBeginConstraint = false,
+            int outputStartFrame = 0,
+            int outputFrameCount = 0)
         {
             result = null;
             error = string.Empty;
@@ -84,7 +86,9 @@ namespace KimodoBridge.Editor
                 manualSamples,
                 sampleTimeOffsetSeconds,
                 deferEndConstraint,
-                deferBeginConstraint);
+                deferBeginConstraint,
+                outputStartFrame,
+                outputFrameCount);
             if (request == null)
             {
                 result = new KimodoInOutConstraintResult();
@@ -141,6 +145,8 @@ namespace KimodoBridge.Editor
             if (request != null && mode == KimodoInOutConstraintMode.Outside)
             {
                 KimodoInOutConstraintTools.ResolveOutsideContextFrames(sourceClip, out int before, out int after);
+                request.OutputStartFrame = before;
+                request.OutputFrameCount = KimodoInOutConstraintTools.ClampFrameCount(generationFrames);
                 request.GenerationFrames += before + after;
             }
             if (request == null)
@@ -388,7 +394,9 @@ namespace KimodoBridge.Editor
             List<KimodoMarkerSampleResult> manualSamples,
             double sampleTimeOffsetSeconds = 0.0,
             bool deferEndConstraint = false,
-            bool deferBeginConstraint = false)
+            bool deferBeginConstraint = false,
+            int outputStartFrame = 0,
+            int outputFrameCount = 0)
         {
             if (context == null)
             {
@@ -465,6 +473,8 @@ namespace KimodoBridge.Editor
                 EnableEnd = enableEnd,
                 ModelName = context.ModelName,
                 GenerationFrames = KimodoInOutConstraintTools.ClampFrameCount(generationFrames),
+                OutputStartFrame = Mathf.Max(0, outputStartFrame),
+                OutputFrameCount = Mathf.Max(0, outputFrameCount),
                 BeginWindowFrames = isArdy ? 1 : playable?.inConstraintWindowFrames ?? 1,
                 BeginSampleCount = isArdy ? 1 : playable?.inConstraintSampleCount ?? 1,
                 EndWindowFrames = isArdy ? 1 : playable?.outConstraintWindowFrames ?? 1,

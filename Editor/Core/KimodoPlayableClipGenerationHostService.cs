@@ -108,7 +108,9 @@ namespace KimodoBridge.Editor
                     runtimeSampleOffsetSeconds,
                     timelineClip,
                     deferOutConstraint,
-                    deferInConstraint);
+                    deferInConstraint,
+                    runtimeTrimStartFrame,
+                    targetFrameCount);
             string constraintsJson = constraintResult.ConstraintsJson;
             string deferredInConstraintJson = constraintResult.DeferredInConstraintJson;
             string deferredOutConstraintJson = constraintResult.DeferredOutConstraintJson;
@@ -120,7 +122,9 @@ namespace KimodoBridge.Editor
                         runtimeFrameCount,
                         disableTimelineInOut,
                         runtimeSampleOffsetSeconds,
-                        timelineClip);
+                        timelineClip,
+                        runtimeTrimStartFrame,
+                        targetFrameCount);
                 if (!string.IsNullOrWhiteSpace(deferredIn.ConstraintsJson))
                 {
                     deferredInConstraintJson = CombineConstraintJson(
@@ -136,7 +140,9 @@ namespace KimodoBridge.Editor
                         runtimeFrameCount,
                         disableTimelineInOut,
                         runtimeSampleOffsetSeconds,
-                        timelineClip);
+                        timelineClip,
+                        runtimeTrimStartFrame,
+                        targetFrameCount);
                 if (!string.IsNullOrWhiteSpace(deferredOut.ConstraintsJson))
                 {
                     deferredOutConstraintJson = CombineConstraintJson(
@@ -354,6 +360,22 @@ namespace KimodoBridge.Editor
                     request.RuntimeTrimStartFrame,
                     request.TargetFrameRate,
                     request.TimelineContextSnapshot);
+                if (KimodoPlayableClipGenerationSettings.instance.WriteResampledTimelineCacheClips &&
+                    result.DebugConstraintPasses.Count == 0 &&
+                    request.Constraints != null &&
+                    !request.Constraints.IsEmpty)
+                {
+                    result.DebugConstraintPasses.Add(new KimodoDebugConstraintPass
+                    {
+                        Name = "Final Constraints",
+                        AddedConstraintsJson = request.Constraints.json ?? string.Empty,
+                        CombinedConstraintsJson = request.Constraints.json ?? string.Empty,
+                        ModelName = request.ModelName,
+                        FrameRate = Mathf.RoundToInt(request.TargetFrameRate),
+                        FrameCount = request.EffectiveRuntimeFrameCount,
+                        DebugTimelineStart = request.DebugTimelineReservation?.TimelineClip?.start ?? -1.0
+                    });
+                }
             }
             finally
             {

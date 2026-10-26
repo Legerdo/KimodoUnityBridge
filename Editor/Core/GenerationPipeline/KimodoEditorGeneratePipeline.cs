@@ -728,7 +728,7 @@ namespace KimodoBridge.Editor
             request.Progress?.Invoke(KimodoBridgeCommandStage.Finalize, "Finalizing generated assets...");
             request.Progress?.Invoke(KimodoBridgeCommandStage.Completed, "Generation complete.");
 
-            return new KimodoEditorGenerationResult
+            var result = new KimodoEditorGenerationResult
             {
                 ConstraintsPath = string.Empty,
                 Prompt = prompt,
@@ -741,6 +741,9 @@ namespace KimodoBridge.Editor
                 GeneratedClip = generatedClip,
                 RawBoneClip = rawBoneClip,
             };
+            if (request.DebugConstraintPasses != null)
+                result.DebugConstraintPasses.AddRange(request.DebugConstraintPasses);
+            return result;
         }
 
         private static void ThrowIfCanceled(KimodoEditorGenerateRequest request)
