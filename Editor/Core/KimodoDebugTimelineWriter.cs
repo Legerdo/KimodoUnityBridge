@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json.Linq;
+using TimelineInject;
 using UnityEditor;
 using UnityEditor.SceneManagement;
+using UnityEditor.Timeline;
 using UnityEngine;
 using UnityEngine.Playables;
 using UnityEngine.Timeline;
@@ -24,7 +27,6 @@ namespace KimodoBridge.Editor
         internal GameObject ProfileInstance;
         internal Animator Animator;
         internal AnimationTrack Track;
-        internal KimodoDebugRollTrack RollTrack;
         internal string ModelName;
         internal double NextStart;
         internal List<KimodoDebugTimelineReservation> OverviewReservations =
@@ -227,7 +229,7 @@ namespace KimodoBridge.Editor
                         timeScale = 1.0;
                     double duration = input.HasTimelineTimingOverride
                         ? input.TimelineDuration
-                        : inputSourceClip.duration;
+                        : input.Request.EffectiveRuntimeDurationSeconds / timeScale;
                     if (duration <= 0.0 || double.IsNaN(duration) || double.IsInfinity(duration))
                         duration = input.Request.EffectiveRuntimeDurationSeconds / timeScale;
                     duration = Math.Max(1.0 / frameRate, duration);
@@ -257,9 +259,11 @@ namespace KimodoBridge.Editor
                         SourceTimelineClip = inputSourceClip,
                         Group = group
                     };
+                    input.Request.DebugCaptureUntrimmedMotion = true;
+                    KimodoPlayableClip passClip = placeholder.asset as KimodoPlayableClip;
+                    AttachPassTargets(input.Request.DebugConstraintPasses, passClip);
                     group.NextStart = placeholder.end + gap;
                     input.Request.DebugTimelineGroup = group;
-                    input.Request.DebugTimelineOutputCompleted = false;
                 }
 
                 EditorUtility.SetDirty(group.Track);
@@ -268,6 +272,7 @@ namespace KimodoBridge.Editor
                 EditorUtility.SetDirty(group.ProfileInstance);
                 EditorUtility.SetDirty(group.Animator);
                 EditorSceneManager.MarkSceneDirty(director.gameObject.scene);
+                RefreshTimeline();
             }
             catch (Exception ex)
             {
@@ -286,7 +291,8 @@ namespace KimodoBridge.Editor
                 return;
             TryFillReservedClip(sourceClip, request, result);
             TryFillOverviewClip(sourceClip, request, result);
-            TryWriteConstraintPasses(request, result?.DebugConstraintPasses);
+            TryAttachConstraintMarkers(request, result?.DebugConstraintPasses);
+            RefreshTimeline();
         }
 
         internal static void TryWriteGroup(IList<RawClipInput> inputs)
@@ -299,13 +305,12 @@ namespace KimodoBridge.Editor
                 TryFillReservedClip(input.SourceClip, input.Request, input.Result);
                 TryFillOverviewClip(input.SourceClip, input.Request, input.Result);
             }
-            RawClipInput first = inputs?.FirstOrDefault(input => input?.Request != null);
-            List<KimodoDebugConstraintPass> passes = (inputs ?? Array.Empty<RawClipInput>())
-                .Where(input => input?.Result?.DebugConstraintPasses != null)
-                .SelectMany(input => input.Result.DebugConstraintPasses)
-                .Where(pass => pass != null)
-                .ToList();
-            TryWriteConstraintPasses(first?.Request, passes);
+            foreach (RawClipInput input in inputs ?? Array.Empty<RawClipInput>())
+            {
+                if (input?.Request != null)
+                    TryAttachConstraintMarkers(input.Request, input.Result?.DebugConstraintPasses);
+            }
+            RefreshTimeline();
         }
 
         internal static void TryWriteRawMotion(
@@ -340,7 +345,7 @@ namespace KimodoBridge.Editor
                         string.IsNullOrWhiteSpace(bakeError) ? "Raw motion bake failed." : bakeError);
                 }
 
-                TryFillReservedClip(sourceClip, request, reservation, rawClip);
+                TryFillReservedClip(sourceClip, request, reservation, rawClip, motion.FrameCount);
             }
             catch (Exception ex)
             {
@@ -350,8 +355,6 @@ namespace KimodoBridge.Editor
             }
             finally
             {
-                if (request != null)
-                    request.DebugTimelineOutputCompleted = true;
                 if (rawClip != null && string.IsNullOrWhiteSpace(AssetDatabase.GetAssetPath(rawClip)))
                     UnityEngine.Object.DestroyImmediate(rawClip);
             }
@@ -362,14 +365,12 @@ namespace KimodoBridge.Editor
             KimodoEditorGenerateRequest request,
             KimodoEditorGenerationResult result)
         {
-            if (request?.DebugTimelineOutputCompleted == true)
-                return;
             KimodoDebugTimelineReservation reservation = request?.DebugTimelineReservation;
             if (reservation == null || reservation.TimelineClip == null)
+                return;
+            if (request.DebugRuntimeMotion != null)
             {
-                Debug.LogWarning(
-                    $"[Kimodo][DebugTimeline] Raw output was not reserved before generation for " +
-                    $"'{sourceClip?.name ?? "unknown"}'.");
+                TryWriteRawMotion(sourceClip, request, reservation, request.DebugRuntimeMotion);
                 return;
             }
             TryFillReservedClip(sourceClip, request, reservation, result?.RawBoneClip);
@@ -393,7 +394,8 @@ namespace KimodoBridge.Editor
             KimodoPlayableClip sourceClip,
             KimodoEditorGenerateRequest request,
             KimodoDebugTimelineReservation reservation,
-            AnimationClip sourceRawClip)
+            AnimationClip sourceRawClip,
+            int sourceFrameCount = 0)
         {
             if (reservation == null || reservation.TimelineClip == null)
                 return;
@@ -429,7 +431,10 @@ namespace KimodoBridge.Editor
                 placeholder.removeStartOffset = false;
                 placeholder.isGenerated = true;
                 placeholder.isDebugRawClip = true;
-                placeholder.frameCount = Mathf.RoundToInt(debugClip.length * debugClip.frameRate);
+                int frameCount = sourceFrameCount > 0
+                    ? sourceFrameCount
+                    : Mathf.RoundToInt(debugClip.length * debugClip.frameRate);
+                placeholder.frameCount = frameCount;
                 placeholder.fps = Mathf.RoundToInt(debugClip.frameRate);
                 placeholder.generatedAssetName = assetName;
                 TimelineAsset timeline = reservation.Group?.Timeline;
@@ -440,7 +445,7 @@ namespace KimodoBridge.Editor
                     playbackScale = 1.0;
                 reservation.TimelineClip.duration = Math.Max(
                     1.0 / ResolveTimelineFrameRate(timeline),
-                    debugClip.length / playbackScale);
+                    frameCount / (double)debugClip.frameRate / playbackScale);
                 if (reservation.IsOverview && reservation.SourceTimelineClip != null)
                 {
                     reservation.TimelineClip.start = reservation.SourceTimelineClip.start;
@@ -467,11 +472,6 @@ namespace KimodoBridge.Editor
                 Debug.LogWarning(
                     $"[Kimodo][DebugTimeline] Could not fill raw clip for '{sourceClip?.name ?? "unknown"}': " +
                     $"{ex.GetType().Name}: {ex.Message}");
-            }
-            finally
-            {
-                if (request != null)
-                    request.DebugTimelineOutputCompleted = true;
             }
         }
 
@@ -528,7 +528,7 @@ namespace KimodoBridge.Editor
             return placeholder;
         }
 
-        internal static void TryWriteConstraintPasses(
+        internal static void TryAttachConstraintMarkers(
             KimodoEditorGenerateRequest request,
             IList<KimodoDebugConstraintPass> passes)
         {
@@ -537,70 +537,185 @@ namespace KimodoBridge.Editor
 
             try
             {
-                TimelineClip sourceClip = request.TimelineClipSnapshot;
-                TimelineAsset timeline = sourceClip?.GetParentTrack()?.timelineAsset;
-                string error = string.Empty;
-                PlayableDirector director;
-                if (timeline == null ||
-                    !KimodoDirectorResolver.TryResolve(timeline, out director, out error))
+                KimodoPlayableClip fallbackTarget =
+                    request.DebugTimelineReservation?.TimelineClip?.asset as KimodoPlayableClip;
+                foreach (KimodoDebugConstraintPass pass in passes)
                 {
-                    throw new InvalidOperationException(string.IsNullOrWhiteSpace(error)
-                        ? "The source Timeline director is unavailable for constraint pass output."
-                        : error);
-                }
+                    if (pass == null)
+                        continue;
+                    KimodoPlayableClip target = pass.DebugClipTarget != null
+                        ? pass.DebugClipTarget
+                        : fallbackTarget;
+                    if (target == null || !target.isDebugRawClip)
+                    {
+                        Debug.LogWarning(
+                            $"[Kimodo][DebugTimeline] Could not attach constraint pass '{pass.Name}' to a raw clip.");
+                        continue;
+                    }
 
-                KimodoDebugRollTrack track = request.DebugTimelineGroup?.RollTrack;
-                if (track == null)
-                {
-                    Debug.LogWarning("[Kimodo][DebugTimeline] Skipped constraint passes because the Debug Roll track was not created.");
-                    return;
-                }
-                double frameRate = ResolveTimelineFrameRate(timeline);
-                double cursor = -1.0;
-                double gap = 5.0 / frameRate;
-                for (int i = 0; i < passes.Count; i++)
-                {
-                    KimodoDebugConstraintPass pass = passes[i];
-                    if (pass == null) continue;
-                    double passStart = pass.DebugTimelineStart >= 0.0
-                        ? pass.DebugTimelineStart
-                        : request.DebugTimelineReservation?.TimelineClip?.start ??
-                            ResolveAvailableDebugStart(request.DebugTimelineGroup.Track, sourceClip, 1.0 / frameRate, frameRate);
-                    if (cursor >= 0.0)
-                        passStart = Math.Max(passStart, cursor);
-                    string passName = string.IsNullOrWhiteSpace(pass.Name)
-                        ? $"Constraint Pass {i + 1}"
-                        : pass.Name;
-                    double modelFrameRate = pass.FrameRate > 0
-                        ? pass.FrameRate
-                        : KimodoMotionModelProfiles.ResolveGenerationFrameRate(pass.ModelName);
-                    double timeScale = sourceClip.timeScale;
-                    if (timeScale <= 1e-8 || double.IsNaN(timeScale) || double.IsInfinity(timeScale))
-                        timeScale = 1.0;
-                    double duration = Math.Max(
-                        1.0 / frameRate,
-                        Math.Max(1, pass.FrameCount) / modelFrameRate / timeScale);
-                    TimelineClip rollClip = track.CreateClip<KimodoDebugRollClip>();
-                    rollClip.start = passStart;
-                    rollClip.duration = duration;
-                    rollClip.displayName = passName;
-                    KimodoDebugRollTrackUtility.ConfigureClip(
-                        rollClip.asset as KimodoDebugRollClip,
-                        pass);
-                    EditorUtility.SetDirty(rollClip.asset);
-                    cursor = rollClip.end + gap;
-                }
+                    TimelineClip targetTimelineClip = FindDebugTimelineClip(request, target);
+                    AnimationTrack targetTrack = request.DebugTimelineGroup?.Track;
+                    if (targetTimelineClip == null || targetTrack == null)
+                    {
+                        Debug.LogWarning(
+                            $"[Kimodo][DebugTimeline] Could not locate the raw Timeline clip for constraint pass '{pass.Name}'.");
+                        continue;
+                    }
 
-                EditorUtility.SetDirty(track);
-                EditorUtility.SetDirty(timeline);
-                EditorUtility.SetDirty(director);
-                EditorSceneManager.MarkSceneDirty(director.gameObject.scene);
+                    int constraintOrdinal = 0;
+                    foreach (JObject rawConstraint in SplitConstraintRecords(pass.AddedConstraintsJson))
+                    {
+                        if (!TryReadFirstFrame(rawConstraint, out int frameIndex))
+                        {
+                            Debug.LogWarning(
+                                $"[Kimodo][DebugTimeline] Skipped constraint marker for pass '{pass.Name}' because no frame_indices value was found.");
+                            continue;
+                        }
+
+                        double markerTime = ResolveDebugConstraintMarkerTime(
+                            targetTimelineClip,
+                            frameIndex,
+                            pass.FrameRate,
+                            pass.FrameCount);
+                        KimodoDebugConstraintJsonMarker marker =
+                            targetTrack.CreateMarker<KimodoDebugConstraintJsonMarker>(markerTime);
+                        marker.name = BuildDebugConstraintMarkerName(
+                            pass.Name,
+                            rawConstraint,
+                            frameIndex,
+                            ++constraintOrdinal);
+                        marker.SetData(
+                            pass.Name,
+                            new JArray(rawConstraint).ToString(Newtonsoft.Json.Formatting.None),
+                            // A debug marker represents exactly one raw
+                            // constraint at one model frame. Keep the marker
+                            // payload atomic even when the generation pass
+                            // carried a merged constraint array.
+                            new JArray(rawConstraint).ToString(Newtonsoft.Json.Formatting.None),
+                            pass.ModelName,
+                            pass.FrameRate,
+                            pass.FrameCount);
+                    }
+                }
+                TimelineAsset timeline = request.DebugTimelineGroup?.Timeline;
+                PlayableDirector director = request.DebugTimelineGroup?.Director;
+                if (timeline != null) EditorUtility.SetDirty(timeline);
+                if (director != null)
+                {
+                    EditorUtility.SetDirty(director);
+                    if (director.gameObject.scene.IsValid())
+                        EditorSceneManager.MarkSceneDirty(director.gameObject.scene);
+                }
             }
             catch (Exception ex)
             {
                 Debug.LogWarning(
-                    $"[Kimodo][DebugTimeline] Skipped constraint pass output: " +
+                    $"[Kimodo][DebugTimeline] Could not attach constraint pass data: " +
                     $"{ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        private static TimelineClip FindDebugTimelineClip(
+            KimodoEditorGenerateRequest request,
+            KimodoPlayableClip target)
+        {
+            AnimationTrack track = request?.DebugTimelineGroup?.Track;
+            if (track == null || target == null)
+                return null;
+            return track.GetClips().FirstOrDefault(clip => clip.asset == target);
+        }
+
+        private static IEnumerable<JObject> SplitConstraintRecords(string constraintsJson)
+        {
+            if (string.IsNullOrWhiteSpace(constraintsJson))
+                yield break;
+
+            JArray constraints;
+            try
+            {
+                constraints = JArray.Parse(constraintsJson);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(
+                    $"[Kimodo][DebugTimeline] Could not parse debug constraint JSON: " +
+                    $"{ex.GetType().Name}: {ex.Message}");
+                yield break;
+            }
+
+            foreach (JToken token in constraints)
+            {
+                if (token is not JObject source)
+                    continue;
+                if (source["frame_indices"] is not JArray frames || frames.Count == 0)
+                {
+                    yield return (JObject)source.DeepClone();
+                    continue;
+                }
+
+                for (int frameIndex = 0; frameIndex < frames.Count; frameIndex++)
+                {
+                    JObject single = (JObject)source.DeepClone();
+                    single["frame_indices"] = new JArray(frames[frameIndex].DeepClone());
+                    foreach (JProperty property in single.Properties().ToList())
+                    {
+                        if (property.Name == "frame_indices" || property.Value is not JArray values ||
+                            values.Count != frames.Count)
+                            continue;
+                        property.Value = new JArray(values[frameIndex].DeepClone());
+                    }
+                    yield return single;
+                }
+            }
+        }
+
+        private static bool TryReadFirstFrame(JObject constraint, out int frameIndex)
+        {
+            frameIndex = 0;
+            if (constraint?["frame_indices"] is not JArray frames || frames.Count == 0)
+                return false;
+            return int.TryParse(frames[0]?.ToString(), out frameIndex);
+        }
+
+        private static double ResolveDebugConstraintMarkerTime(
+            TimelineClip targetTimelineClip,
+            int frameIndex,
+            int passFrameRate,
+            int passFrameCount)
+        {
+            double frameRate = passFrameRate > 0
+                ? passFrameRate
+                : (targetTimelineClip.asset as KimodoPlayableClip)?.fps ?? 30;
+            double timeScale = targetTimelineClip.timeScale;
+            if (timeScale <= 1e-8 || double.IsNaN(timeScale) || double.IsInfinity(timeScale))
+                timeScale = 1.0;
+            if (passFrameCount > 0)
+                frameIndex = Math.Max(0, Math.Min(frameIndex, passFrameCount - 1));
+            return targetTimelineClip.start + frameIndex / frameRate / timeScale;
+        }
+
+        private static string BuildDebugConstraintMarkerName(
+            string passName,
+            JObject constraint,
+            int frameIndex,
+            int ordinal)
+        {
+            string type = constraint?["type"]?.ToString();
+            if (string.IsNullOrWhiteSpace(type))
+                type = "Constraint";
+            return $"{passName ?? "Debug"} {type} frame {frameIndex} #{ordinal}";
+        }
+
+        private static void AttachPassTargets(
+            IList<KimodoDebugConstraintPass> passes,
+            KimodoPlayableClip target)
+        {
+            if (passes == null || target == null)
+                return;
+            foreach (KimodoDebugConstraintPass pass in passes)
+            {
+                if (pass != null && pass.DebugClipTarget == null)
+                    pass.DebugClipTarget = target;
             }
         }
 
@@ -633,18 +748,25 @@ namespace KimodoBridge.Editor
                 return false;
             }
 
-            GameObject profileInstance = UnityEngine.Object.Instantiate(model);
-            profileInstance.name = KimodoRuntimeUtility.SanitizeName(
-                $"KimodoDebugProfile_{modelName}_{DateTime.Now:yyyyMMdd_HHmmss_fff}",
-                "KimodoDebugProfile");
-            profileInstance.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
-            if (director.gameObject.scene.IsValid() &&
-                profileInstance.scene != director.gameObject.scene)
+            GameObject profileInstance = FindReusableDebugProfileInstance(
+                director.gameObject.scene,
+                modelName);
+            if (profileInstance == null)
             {
-                UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(
-                    profileInstance,
-                    director.gameObject.scene);
+                profileInstance = UnityEngine.Object.Instantiate(model);
+                profileInstance.name = KimodoRuntimeUtility.SanitizeName(
+                    BuildDebugProfileName(modelName),
+                    "KimodoDebugProfile");
+                if (director.gameObject.scene.IsValid() &&
+                    profileInstance.scene != director.gameObject.scene)
+                {
+                    UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(
+                        profileInstance,
+                        director.gameObject.scene);
+                }
             }
+            profileInstance.SetActive(true);
+            profileInstance.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
 
             Animator animator = profileInstance.GetComponentInChildren<Animator>(true);
             if (animator == null)
@@ -673,9 +795,6 @@ namespace KimodoBridge.Editor
                 null,
                 BuildDebugTrackName());
             debugTrack.trackOffset = TrackOffset.ApplyTransformOffsets;
-            KimodoDebugRollTrack rollTrack = timeline.CreateTrack<KimodoDebugRollTrack>(
-                null,
-                $"DebugRoll_{modelName}_{DateTime.Now:HHmmss_fff}");
             director.SetGenericBinding(debugTrack, animator);
             group = new KimodoDebugTimelineGroup
             {
@@ -684,7 +803,6 @@ namespace KimodoBridge.Editor
                 ProfileInstance = profileInstance,
                 Animator = animator,
                 Track = debugTrack,
-                RollTrack = rollTrack,
                 ModelName = modelName,
                 OverviewReservations = new List<KimodoDebugTimelineReservation>()
             };
@@ -700,7 +818,7 @@ namespace KimodoBridge.Editor
         {
             error = string.Empty;
             if (group == null || group.Timeline != timeline || group.Director != director ||
-                group.Track == null || group.RollTrack == null ||
+                group.Track == null ||
                 group.ProfileInstance == null || group.Animator == null)
             {
                 error = "The existing Debug Timeline group is incomplete or belongs to another Timeline.";
@@ -731,6 +849,42 @@ namespace KimodoBridge.Editor
         private static string BuildDebugTrackName()
         {
             return "debug track";
+        }
+
+        private static string BuildDebugProfileName(string modelName)
+        {
+            return $"KimodoDebugProfile_{modelName}";
+        }
+
+        private static GameObject FindReusableDebugProfileInstance(
+            UnityEngine.SceneManagement.Scene scene,
+            string modelName)
+        {
+            if (!scene.IsValid() || !scene.isLoaded)
+                return null;
+
+            string exactName = BuildDebugProfileName(modelName);
+            string legacyPrefix = exactName + "_";
+            GameObject[] candidates = scene.GetRootGameObjects()
+                .Where(root => root != null &&
+                    (string.Equals(root.name, exactName, StringComparison.OrdinalIgnoreCase) ||
+                     root.name.StartsWith(legacyPrefix, StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(root => string.Equals(
+                    root.name, exactName, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (candidates.Length == 0)
+                return null;
+
+            GameObject selected = candidates[0];
+            for (int i = 1; i < candidates.Length; i++)
+                candidates[i].SetActive(false);
+            return selected;
+        }
+
+        private static void RefreshTimeline()
+        {
+            KimodoTimelinePreviewRefreshUtility.RefreshEditorWorkflow(
+                RefreshReason.ContentsAddedOrRemoved);
         }
 
         private static double ResolveAvailableDebugStart(

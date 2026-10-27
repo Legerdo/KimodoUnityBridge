@@ -210,6 +210,9 @@ namespace KimodoBridge.Editor
                 throw new InvalidOperationException(
                     $"Kimodo returned {result?.MotionData?.FrameCount ?? 0} frames; expected {request.EffectiveRuntimeFrameCount}.");
             }
+            request.DebugRuntimeMotion = request.DebugCaptureUntrimmedMotion
+                ? result.MotionData
+                : null;
             return TrimRuntimeResultForOutput(request, result, modelName);
         }
 
@@ -237,6 +240,9 @@ namespace KimodoBridge.Editor
                 request.Token);
             ValidateArdyResult(directResult, profile, request.EffectiveSeed);
             KimodoRawMotionData sourceMotion = directResult.MotionData;
+            request.DebugRuntimeMotion = request.DebugCaptureUntrimmedMotion
+                ? sourceMotion
+                : null;
             byte[] sourcePayload = KimodoRawMotionUtility.ToFlatBuffer(sourceMotion, profile.ModelName);
             return new KimodoBridgeCommandResult
             {

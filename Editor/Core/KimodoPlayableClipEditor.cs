@@ -456,23 +456,29 @@ namespace KimodoBridge.Editor
                         float previousLabelWidth = EditorGUIUtility.labelWidth;
                         EditorGUIUtility.labelWidth = 28f;
                         EditorGUILayout.PropertyField(enableInConstraint, new GUIContent("In"), GUILayout.Width(60f));
-                        if (enableInConstraint.boolValue && postApplyInConstraint != null)
-                        {
-                            EditorGUILayout.PropertyField(
-                                postApplyInConstraint,
-                                new GUIContent("Post In", "Defer In until after the first trajectory pass, align it in SOMA Root2D space, then apply it in the second pass."),
-                                GUILayout.Width(82f));
-                        }
                         EditorGUIUtility.labelWidth = 36f;
                         EditorGUILayout.PropertyField(enableOutConstraint, new GUIContent("Out"), GUILayout.Width(60f));
                         EditorGUIUtility.labelWidth = previousLabelWidth;
-                        if (enableOutConstraint.boolValue)
-                        {
-                            EditorGUILayout.PropertyField(
-                                postApplyOutConstraint,
-                                new GUIContent("Post", "Defer Out until after the first trajectory pass, align it in SOMA Root2D space, then apply it in the second pass."),
-                                GUILayout.Width(70f));
-                        }
+                    }
+                }
+
+                if ((KimodoInOutConstraintMode)inOutConstraintModeProp.enumValueIndex != KimodoInOutConstraintMode.None)
+                {
+                    if (enableInConstraint.boolValue && postApplyInConstraint != null)
+                    {
+                        EditorGUILayout.PropertyField(
+                            postApplyInConstraint,
+                            new GUIContent(
+                                "Post-Apply In",
+                                "Defer In until after the first trajectory pass, align it in SOMA Root2D space, then apply it in the second pass."));
+                    }
+                    if (enableOutConstraint.boolValue && postApplyOutConstraint != null)
+                    {
+                        EditorGUILayout.PropertyField(
+                            postApplyOutConstraint,
+                            new GUIContent(
+                                "Post-Apply Out",
+                                "Defer Out until after the first trajectory pass, align it in SOMA Root2D space, then apply it in the second pass."));
                     }
                 }
             }

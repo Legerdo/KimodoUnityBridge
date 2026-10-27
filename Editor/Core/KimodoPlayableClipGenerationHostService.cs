@@ -373,7 +373,7 @@ namespace KimodoBridge.Editor
                         ModelName = request.ModelName,
                         FrameRate = Mathf.RoundToInt(request.TargetFrameRate),
                         FrameCount = request.EffectiveRuntimeFrameCount,
-                        DebugTimelineStart = request.DebugTimelineReservation?.TimelineClip?.start ?? -1.0
+                        DebugClipTarget = request.DebugTimelineReservation?.TimelineClip?.asset as KimodoPlayableClip
                     });
                 }
             }

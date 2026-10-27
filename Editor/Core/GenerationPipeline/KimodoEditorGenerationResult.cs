@@ -12,7 +12,7 @@ namespace KimodoBridge.Editor
         public string ModelName;
         public int FrameRate;
         public int FrameCount;
-        internal double DebugTimelineStart = -1.0;
+        internal KimodoPlayableClip DebugClipTarget;
     }
 
     internal sealed class KimodoEditorGenerationResult

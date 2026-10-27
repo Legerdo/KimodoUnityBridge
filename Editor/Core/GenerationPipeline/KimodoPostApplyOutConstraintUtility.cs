@@ -175,7 +175,19 @@ namespace KimodoBridge.Editor
             if (deferredRows == null || deferredRows.Count == 0) return PlanarTransform.Identity;
             int firstFrame = deferredRows.Min(row => row.Frame);
             int lastFrame = deferredRows.Max(row => row.Frame);
-            RootRow anchor = SelectAnchor(existingRows, firstFrame, lastFrame, syntheticAutoBeginFrame, preferStart);
+            // An Outside Out window lives after the generated output range. Its
+            // seam is therefore the last sample of the pass-1 raw motion, not
+            // an arbitrary earlier constraint from existingJson (for example a
+            // synthetic AutoBegin or a path anchor). Prefer that seam whenever
+            // the deferred rows are on the output's far side and raw motion is
+            // available. Otherwise retain the existing anchor behavior used by
+            // inside windows and In boundaries.
+            bool deferredOutAfterOutput = !isIn && targetFrameCount > 0 &&
+                firstFrame >= Mathf.Max(0, runtimeTrimStartFrame) + targetFrameCount;
+            bool useFirstPassOutSeam = deferredOutAfterOutput && firstPassMotion != null;
+            RootRow anchor = useFirstPassOutSeam
+                ? null
+                : SelectAnchor(existingRows, firstFrame, lastFrame, syntheticAutoBeginFrame, preferStart);
             if (anchor != null)
             {
                 if (TryReadOriginalTimelineRoot(timelineContext, anchor.Frame, frameRate,

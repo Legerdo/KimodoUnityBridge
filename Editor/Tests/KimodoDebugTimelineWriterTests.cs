@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using Newtonsoft.Json.Linq;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -63,7 +64,7 @@ namespace KimodoBridge.Editor.Tests
 
                 AnimationTrack oldDebugTrack = timeline.CreateTrack<AnimationTrack>(null, "debug track");
                 oldDebugTrack.muted = false;
-                KimodoDebugRollTrack oldRollTrack = timeline.CreateTrack<KimodoDebugRollTrack>(null, "DebugRoll_legacy");
+                AnimationTrack oldRollTrack = timeline.CreateTrack<AnimationTrack>(null, "DebugRoll_legacy");
                 oldRollTrack.muted = false;
                 AnimationTrack sourceTrack = timeline.CreateTrack<AnimationTrack>(null, "Source");
                 sourceBinding = new GameObject("Formal Source Character");
@@ -84,6 +85,7 @@ namespace KimodoBridge.Editor.Tests
                 {
                     ModelName = KimodoMotionModelProfiles.DefaultModelName,
                     TargetFrameCount = 60,
+                    RuntimeFrameCount = 90,
                     TargetFrameRate = 30f,
                     TimelineClipSnapshot = sourceClip
                 };
@@ -119,7 +121,10 @@ namespace KimodoBridge.Editor.Tests
                 Assert.That(request.DebugTimelineGroup.Timeline, Is.SameAs(timeline));
                 Assert.That(request.DebugTimelineGroup.Track, Is.Not.SameAs(sourceTrack));
                 Assert.That(request.DebugTimelineGroup.Track.name, Does.StartWith("debug track"));
-                Assert.That(timeline.GetOutputTracks().Count(), Is.EqualTo(5));
+                Assert.That(timeline.GetOutputTracks().Count(), Is.EqualTo(4));
+                Assert.That(timeline.GetOutputTracks().Count(item =>
+                    item.name.StartsWith("DebugRoll_", System.StringComparison.OrdinalIgnoreCase)), Is.EqualTo(1),
+                    "The legacy DebugRoll track may be muted, but generation must not create another one.");
                 Assert.That(director.GetGenericBinding(request.DebugTimelineGroup.Track), Is.SameAs(request.DebugTimelineGroup.Animator));
                 Assert.That(director.GetGenericBinding(sourceTrack), Is.SameAs(sourceAnimator),
                     "The formal animation track binding must remain unchanged.");
@@ -138,7 +143,8 @@ namespace KimodoBridge.Editor.Tests
                     Is.EqualTo("Raw Overview"));
                 Assert.That(reservation.TimelineClip.start,
                     Is.EqualTo(overview.TimelineClip.end + 5.0 / timeline.editorSettings.frameRate));
-                Assert.That(reservation.TimelineClip.duration, Is.GreaterThan(0.0));
+                Assert.That(reservation.TimelineClip.duration, Is.EqualTo(2.4).Within(1e-6),
+                    "The raw placeholder duration must include all 90 backend frames at the source playback speed.");
                 Assert.That(reservation.TimelineClip.clipIn, Is.EqualTo(0.0));
                 Assert.That(reservation.TimelineClip.timeScale, Is.EqualTo(sourceClip.timeScale));
                 Assert.That(((KimodoPlayableClip)reservation.TimelineClip.asset).isDebugRawClip, Is.True);
@@ -164,7 +170,7 @@ namespace KimodoBridge.Editor.Tests
                     Is.SameAs(overview.TimelineClip));
                 Assert.That(request.DebugTimelineGroup.Track.GetClips().Count(), Is.EqualTo(3),
                     "The shared Debug track should contain one overview and one placeholder per pass.");
-                Assert.That(timeline.GetOutputTracks().Count(), Is.EqualTo(5));
+                Assert.That(timeline.GetOutputTracks().Count(), Is.EqualTo(4));
 
                 independentRequest = new KimodoEditorGenerateRequest
                 {
@@ -178,8 +184,10 @@ namespace KimodoBridge.Editor.Tests
                 Assert.That(independentRequest.DebugTimelineGroup.Track,
                     Is.Not.SameAs(request.DebugTimelineGroup.Track));
                 Assert.That(independentRequest.DebugTimelineGroup.ProfileInstance,
-                    Is.Not.SameAs(request.DebugTimelineGroup.ProfileInstance));
-                Assert.That(timeline.GetOutputTracks().Count(), Is.EqualTo(7));
+                    Is.SameAs(request.DebugTimelineGroup.ProfileInstance));
+                Assert.That(independentRequest.DebugTimelineGroup.Animator,
+                    Is.SameAs(request.DebugTimelineGroup.Animator));
+                Assert.That(timeline.GetOutputTracks().Count(), Is.EqualTo(5));
             }
             finally
             {
@@ -304,14 +312,14 @@ namespace KimodoBridge.Editor.Tests
         }
 
         [Test]
-        public void TryWriteConstraintPasses_CreatesOneRollClipPerPass()
+        public void TryAttachConstraintMarkers_CreatesOneMarkerPerRawConstraint()
         {
             KimodoPlayableClipGenerationSettings settings = KimodoPlayableClipGenerationSettings.instance;
             bool previousSetting = settings.WriteResampledTimelineCacheClips;
             TimelineAsset timeline = ScriptableObject.CreateInstance<TimelineAsset>();
             AnimationTrack track = timeline.CreateTrack<AnimationTrack>(null, "Source");
             TimelineClip sourceClip = track.CreateClip<KimodoPlayableClip>();
-            GameObject directorObject = new GameObject("Debug Roll Test Director");
+            GameObject directorObject = new GameObject("Debug Constraint Test Director");
             KimodoEditorGenerateRequest request = null;
             Scene testScene = SceneManager.GetActiveScene();
             SceneManager.MoveGameObjectToScene(directorObject, testScene);
@@ -339,22 +347,70 @@ namespace KimodoBridge.Editor.Tests
                     ModelName = "SOMA30",
                     FrameRate = 30,
                     FrameCount = 60,
-                    DebugTimelineStart = request.DebugTimelineReservation.TimelineClip.start
                 };
+                KimodoEditorGenerateRequest secondRequest = new KimodoEditorGenerateRequest
+                {
+                    ModelName = "SOMA30",
+                    TargetFrameCount = 60,
+                    TargetFrameRate = 30f,
+                    TimelineClipSnapshot = sourceClip,
+                    DebugTimelineGroup = request.DebugTimelineGroup
+                };
+                KimodoDebugTimelineWriter.TryPrepare(
+                    sourceClip.asset as KimodoPlayableClip,
+                    secondRequest,
+                    "Trajectory Pass 2");
+                var secondPass = new KimodoDebugConstraintPass
+                {
+                    Name = "Trajectory Final Constraints",
+                    AddedConstraintsJson = "[{\"type\":\"Effector\",\"frame_indices\":[3]}]",
+                    CombinedConstraintsJson = "[{\"type\":\"Root2D\"},{\"type\":\"Effector\"}]",
+                    ModelName = "SOMA30",
+                    FrameRate = 30,
+                    FrameCount = 60,
+                    DebugClipTarget = secondRequest.DebugTimelineReservation.TimelineClip.asset as KimodoPlayableClip
+                };
+                pass.DebugClipTarget = request.DebugTimelineReservation.TimelineClip.asset as KimodoPlayableClip;
 
-                KimodoDebugTimelineWriter.TryWriteConstraintPasses(request, new[] { pass });
+                int trackCountBeforeAttach = timeline.GetOutputTracks().Count();
+                KimodoDebugTimelineWriter.TryAttachConstraintMarkers(secondRequest, new[] { pass, secondPass });
 
-                KimodoDebugRollClip[] rollClips = request.DebugTimelineGroup.RollTrack.GetClips()
-                    .Select(clip => clip.asset)
-                    .OfType<KimodoDebugRollClip>()
+                KimodoDebugTimelineGroup group = request.DebugTimelineGroup;
+                KimodoPlayableClip rawClip = request.DebugTimelineReservation.TimelineClip.asset as KimodoPlayableClip;
+                KimodoPlayableClip secondRawClip = secondRequest.DebugTimelineReservation.TimelineClip.asset as KimodoPlayableClip;
+                var markers = group.Track.GetMarkers()
+                    .OfType<KimodoDebugConstraintJsonMarker>()
+                    .OrderBy(marker => marker.time)
                     .ToArray();
-                Assert.That(rollClips, Has.Length.EqualTo(1));
-                Assert.That(rollClips[0].PassName, Is.EqualTo(pass.Name));
-                Assert.That(rollClips[0].AddedConstraintsJson, Does.Contain("Root2D"));
-                Assert.That(rollClips[0].CombinedConstraintsJson, Does.Contain("Effector"));
-                Assert.That(request.DebugTimelineGroup.RollTrack.GetClips().Single().start,
-                    Is.EqualTo(pass.DebugTimelineStart).Within(1e-6));
-                Assert.That(timeline.GetOutputTracks().Count(), Is.EqualTo(3));
+                Assert.That(markers, Has.Length.EqualTo(6));
+                Assert.That(markers.Count(marker => marker.PassName == pass.Name), Is.EqualTo(5));
+                Assert.That(markers.Count(marker => marker.PassName == secondPass.Name), Is.EqualTo(1));
+                Assert.That(markers.Take(5).All(marker => marker.AddedConstraintsJson.Contains("Root2D")), Is.True);
+                Assert.That(markers.Last().AddedConstraintsJson, Does.Contain("Effector"));
+                Assert.That(markers.All(marker => marker.CombinedConstraintsJson == marker.AddedConstraintsJson), Is.True,
+                    "Each debug marker must retain one atomic raw constraint rather than the pass-level merged payload.");
+                Assert.That(markers.Take(5).All(marker =>
+                {
+                    JArray json = JArray.Parse(marker.AddedConstraintsJson);
+                    return json.Count == 1 &&
+                           json[0]["frame_indices"] is JArray frames && frames.Count == 1;
+                }), Is.True);
+                Assert.That(markers.Take(5).Select(marker => marker.time).ToArray(),
+                    Is.EqualTo(new[]
+                    {
+                        request.DebugTimelineReservation.TimelineClip.start + 0.0,
+                        request.DebugTimelineReservation.TimelineClip.start + 7.0 / 30.0,
+                        request.DebugTimelineReservation.TimelineClip.start + 15.0 / 30.0,
+                        request.DebugTimelineReservation.TimelineClip.start + 22.0 / 30.0,
+                        request.DebugTimelineReservation.TimelineClip.start + 29.0 / 30.0
+                    }));
+                Assert.That(markers.Last().time, Is.EqualTo(
+                    secondRequest.DebugTimelineReservation.TimelineClip.start + 3.0 / 30.0).Within(1e-6));
+                Assert.That(rawClip, Is.Not.Null);
+                Assert.That(secondRawClip, Is.Not.Null);
+                Assert.That(timeline.GetOutputTracks().Count(), Is.EqualTo(trackCountBeforeAttach));
+                Assert.That(timeline.GetOutputTracks().Any(item =>
+                    item.name.StartsWith("DebugRoll_", System.StringComparison.OrdinalIgnoreCase)), Is.False);
             }
             finally
             {

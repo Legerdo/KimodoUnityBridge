@@ -1161,7 +1161,8 @@ namespace KimodoBridge.Editor
                         $"Generating window {index + 1}/{windows.Count} ({window.RequestFrameCount} frames)...");
                     string windowPassName = $"Long Clip Window {index + 1}/{windows.Count}";
                     KimodoDebugTimelineReservation windowReservation = null;
-                    if (captureDebugPasses && KimodoDebugTimelineWriter.TryResolveWindowPlaybackTiming(
+                    if (captureDebugPasses &&
+                        KimodoDebugTimelineWriter.TryResolveWindowPlaybackTiming(
                             request.TimelineClipSnapshot,
                             window.RequestFrameCount,
                             frameRate,
@@ -1184,8 +1185,8 @@ namespace KimodoBridge.Editor
                             {
                                 if (request.DebugConstraintPasses[passIndex] != null)
                                 {
-                                    request.DebugConstraintPasses[passIndex].DebugTimelineStart =
-                                        windowReservation.TimelineClip.start;
+                                    request.DebugConstraintPasses[passIndex].DebugClipTarget =
+                                        windowReservation.TimelineClip.asset as KimodoPlayableClip;
                                 }
                             }
                         }
@@ -1206,13 +1207,6 @@ namespace KimodoBridge.Editor
                             $"expected {window.RequestFrameCount}.");
                     }
 
-                    KimodoDebugTimelineWriter.TryWriteRawMotion(
-                        request.TimelineClipSnapshot.asset as KimodoPlayableClip,
-                        request,
-                        windowReservation,
-                        result.MotionData);
-                    request.DebugTimelineReservation = null;
-
                     generatedWindows.Add(result.MotionData);
                     int coreStartInRequest = window.CoreStartFrame - window.RequestStartFrame;
                     if (!KimodoRawMotionUtility.TrySlice(
@@ -1224,6 +1218,17 @@ namespace KimodoBridge.Editor
                     {
                         throw new InvalidOperationException($"Window {index + 1} core trim failed: {sliceError}");
                     }
+
+                    if (windowReservation != null)
+                    {
+                        KimodoDebugTimelineWriter.TryWriteRawMotion(
+                            request.TimelineClipSnapshot.asset as KimodoPlayableClip,
+                            request,
+                            windowReservation,
+                            result.MotionData);
+                    }
+                    request.DebugTimelineReservation = null;
+
                     coreMotions.Add(coreMotion);
                 }
 
@@ -1458,13 +1463,12 @@ namespace KimodoBridge.Editor
                     deferInConstraint: clip.postApplyInConstraint);
                 finalRequest.DebugTimelineGroup = firstRequest.DebugTimelineGroup;
                 KimodoRawMotionData motion = ParseFirstPassMotion(firstRequest, firstResult, "Trajectory");
-                double firstDebugTimelineStart =
-                    firstRequest.DebugTimelineReservation?.TimelineClip?.start ?? -1.0;
+                KimodoPlayableClip firstDebugClip = firstRequest.DebugTimelineReservation?.TimelineClip?.asset as KimodoPlayableClip;
                 KimodoDebugTimelineWriter.TryWriteRawMotion(
                     clip,
                     firstRequest,
                     firstRequest.DebugTimelineReservation,
-                    motion);
+                    firstRequest.DebugRuntimeMotion ?? motion);
                 firstRequest.DebugTimelineReservation = null;
                 finalRequest.DebugTimelineReservation = null;
                 List<KimodoDebugConstraintPass> debugConstraintPasses =
@@ -1481,7 +1485,7 @@ namespace KimodoBridge.Editor
                         ModelName = modelName,
                         FrameRate = Mathf.RoundToInt(firstRequest.TargetFrameRate),
                         FrameCount = firstRequest.EffectiveRuntimeFrameCount,
-                        DebugTimelineStart = firstDebugTimelineStart
+                    DebugClipTarget = firstDebugClip
                     });
                 }
                 string combinedConstraints = ShiftConstraintFrames(
@@ -1604,6 +1608,32 @@ namespace KimodoBridge.Editor
                         targetFrameCount: finalRequest.TargetFrameCount);
                     if (debugConstraintPasses != null)
                     {
+                        if (clip.postApplyInConstraint &&
+                            !string.IsNullOrWhiteSpace(finalRequest.DeferredInConstraintJson))
+                        {
+                            debugConstraintPasses.Add(new KimodoDebugConstraintPass
+                            {
+                                Name = "Post-Apply In Constraint",
+                                AddedConstraintsJson = finalRequest.DeferredInConstraintJson,
+                                CombinedConstraintsJson = finalRequest.Constraints.json,
+                                ModelName = modelName,
+                                FrameRate = Mathf.RoundToInt(finalRequest.TargetFrameRate),
+                                FrameCount = finalRequest.EffectiveRuntimeFrameCount
+                            });
+                        }
+                        if (clip.postApplyOutConstraint &&
+                            !string.IsNullOrWhiteSpace(finalRequest.DeferredOutConstraintJson))
+                        {
+                            debugConstraintPasses.Add(new KimodoDebugConstraintPass
+                            {
+                                Name = "Post-Apply Out Constraint",
+                                AddedConstraintsJson = finalRequest.DeferredOutConstraintJson,
+                                CombinedConstraintsJson = finalRequest.Constraints.json,
+                                ModelName = modelName,
+                                FrameRate = Mathf.RoundToInt(finalRequest.TargetFrameRate),
+                                FrameCount = finalRequest.EffectiveRuntimeFrameCount
+                            });
+                        }
                         debugConstraintPasses.Add(new KimodoDebugConstraintPass
                         {
                             Name = "Post-Apply In/Out Constraints",
@@ -1622,17 +1652,29 @@ namespace KimodoBridge.Editor
                 finalRequest.Progress = (stage, message) =>
                     progress?.Invoke(stage, $"Trajectory pass 2/2: {message}");
                 KimodoDebugTimelineWriter.TryPrepare(clip, finalRequest, "Trajectory Pass 2");
-                if (finalRequest.DebugTimelineReservation != null && debugConstraintPasses != null)
+                KimodoPlayableClip finalDebugClip = finalRequest.DebugTimelineReservation?.TimelineClip?.asset as KimodoPlayableClip;
+                if (debugConstraintPasses != null)
                 {
-                    double finalDebugStart = finalRequest.DebugTimelineReservation.TimelineClip.start;
+                    if (finalDebugClip != null &&
+                        !string.IsNullOrWhiteSpace(finalRequest.Constraints?.json))
+                    {
+                        debugConstraintPasses.Add(new KimodoDebugConstraintPass
+                        {
+                            Name = "Trajectory Pass 2 Constraints",
+                            AddedConstraintsJson = finalRequest.Constraints.json,
+                            CombinedConstraintsJson = finalRequest.Constraints.json,
+                            ModelName = modelName,
+                            FrameRate = Mathf.RoundToInt(finalRequest.TargetFrameRate),
+                            FrameCount = finalRequest.EffectiveRuntimeFrameCount,
+                            DebugClipTarget = finalDebugClip
+                        });
+                    }
                     for (int i = 0; i < debugConstraintPasses.Count; i++)
                     {
-                        if (debugConstraintPasses[i] != null && debugConstraintPasses[i].DebugTimelineStart < 0.0)
-                            debugConstraintPasses[i].DebugTimelineStart = finalDebugStart;
+                        if (debugConstraintPasses[i] != null && debugConstraintPasses[i].DebugClipTarget == null)
+                            debugConstraintPasses[i].DebugClipTarget = finalDebugClip;
                     }
                 }
-                // Pass 1 already wrote its raw clip; finalization only fills the overview clip.
-                finalRequest.DebugTimelineOutputCompleted = true;
                 KimodoEditorGenerationResult result = await KimodoEditorGeneratePipeline.ExecuteAsync(finalRequest);
                 token.ThrowIfCancellationRequested();
                 if (debugConstraintPasses != null)

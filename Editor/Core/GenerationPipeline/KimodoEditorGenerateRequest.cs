@@ -50,7 +50,8 @@ namespace KimodoBridge.Editor
         internal List<KimodoDebugConstraintPass> DebugConstraintPasses = new List<KimodoDebugConstraintPass>();
         internal KimodoDebugTimelineGroup DebugTimelineGroup;
         internal KimodoDebugTimelineReservation DebugTimelineReservation;
-        internal bool DebugTimelineOutputCompleted;
+        internal bool DebugCaptureUntrimmedMotion;
+        internal KimodoRawMotionData DebugRuntimeMotion;
         public string DeferredInConstraintJson = string.Empty;
         public string DeferredOutConstraintJson = string.Empty;
         public TimelineClip TimelineClipSnapshot;
