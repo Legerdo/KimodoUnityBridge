@@ -194,7 +194,8 @@ namespace KimodoBridge.Editor
             if (anchor != null)
             {
                 if (TryReadOriginalTimelineRoot(timelineContext, anchor.Frame, frameRate,
-                        runtimeTrimStartFrame, modelName, out Vector3 sourcePosition, out Quaternion sourceHeading))
+                        runtimeTrimStartFrame, modelName, false,
+                        out Vector3 sourcePosition, out Quaternion sourceHeading))
                 {
                     return PlanarTransform.FromSourceToTarget(
                         sourcePosition, sourceHeading, anchor.Position,
@@ -214,7 +215,9 @@ namespace KimodoBridge.Editor
                 0,
                 Mathf.Max(0, firstPassMotion.FrameCount - 1));
             if (!TryReadOriginalTimelineRoot(timelineContext, boundary.Frame, frameRate,
-                    runtimeTrimStartFrame, modelName, out Vector3 originalPosition, out Quaternion originalHeading) ||
+                    runtimeTrimStartFrame, modelName,
+                    !isIn && deferredOutAfterOutput,
+                    out Vector3 originalPosition, out Quaternion originalHeading) ||
                 !TryReadMotionRoot(firstPassMotion, modelName, outputFrame,
                     out Vector3 generatedPosition, out Quaternion generatedHeading))
             {
@@ -467,6 +470,7 @@ namespace KimodoBridge.Editor
             float frameRate,
             int runtimeTrimStartFrame,
             string modelName,
+            bool sampleAfterBoundary,
             out Vector3 position,
             out Quaternion heading)
         {
@@ -484,6 +488,11 @@ namespace KimodoBridge.Editor
                 : 1.0;
             double timelineTime = context.SourceClip.start +
                 (clipTime - context.SourceClip.clipIn) / timeScale;
+            double epsilon = 1.0 / Math.Max(1.0, KimodoTimelineConstraintSampler.ResolveTimelineFrameRate(context));
+            if (sampleAfterBoundary)
+            {
+                timelineTime += epsilon;
+            }
             TimelineClip range = timelineTime < context.SourceClip.start
                 ? context.PreviousTimelineClip
                 : timelineTime > context.SourceClip.end
@@ -491,8 +500,16 @@ namespace KimodoBridge.Editor
                     : context.SourceClip;
             if (range != null)
             {
-                double epsilon = 1.0 / Math.Max(1.0, KimodoTimelineConstraintSampler.ResolveTimelineFrameRate(context));
                 timelineTime = Math.Max(range.start, Math.Min(range.end - epsilon, timelineTime));
+            }
+
+            if (sampleAfterBoundary)
+            {
+                Debug.Log(
+                    $"[Kimodo][OutsideOutTimelineSample] runtimeFrame={runtimeFrame} " +
+                    $"sampledTimelineTime={timelineTime:F6} epsilon={epsilon:F6} " +
+                    $"sourceRange=[{context.SourceClip.start:F6},{context.SourceClip.end:F6}] " +
+                    $"selectedRange={(range == null ? "none" : range.displayName)}");
             }
 
             if (!KimodoTimelineConstraintSampler.TrySampleMarker(
