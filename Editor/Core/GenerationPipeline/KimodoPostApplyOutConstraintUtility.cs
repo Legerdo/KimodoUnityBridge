@@ -223,16 +223,6 @@ namespace KimodoBridge.Editor
             {
                 throw new InvalidOperationException($"Postapply {(isIn ? "In" : "Out")} could not resolve its first-pass trajectory Root2D anchor at frame {outputFrame}.");
             }
-            if (!isIn && deferredOutAfterOutput)
-            {
-                Debug.Log(
-                    $"[Kimodo][OutsideOutAnchor] model={modelName} " +
-                    $"firstFrame={firstFrame} lastFrame={lastFrame} boundaryFrame={boundary.Frame} " +
-                    $"runtimeTrimStart={runtimeTrimStartFrame} targetFrames={targetFrameCount} " +
-                    $"outputFrame={outputFrame} rawFrames={firstPassMotion.FrameCount} " +
-                    $"sourceTimelineRoot={originalPosition} generatedPass1Root={generatedPosition} " +
-                    $"sourceHeading={originalHeading} generatedHeading={generatedHeading}");
-            }
             return PlanarTransform.FromSourceToTarget(
                 originalPosition, originalHeading, generatedPosition, generatedHeading);
         }
@@ -501,15 +491,6 @@ namespace KimodoBridge.Editor
             if (range != null)
             {
                 timelineTime = Math.Max(range.start, Math.Min(range.end - epsilon, timelineTime));
-            }
-
-            if (sampleAfterBoundary)
-            {
-                Debug.Log(
-                    $"[Kimodo][OutsideOutTimelineSample] runtimeFrame={runtimeFrame} " +
-                    $"sampledTimelineTime={timelineTime:F6} epsilon={epsilon:F6} " +
-                    $"sourceRange=[{context.SourceClip.start:F6},{context.SourceClip.end:F6}] " +
-                    $"selectedRange={(range == null ? "none" : range.displayName)}");
             }
 
             if (!KimodoTimelineConstraintSampler.TrySampleMarker(
