@@ -1463,6 +1463,13 @@ namespace KimodoBridge.Editor
                     deferInConstraint: clip.postApplyInConstraint);
                 finalRequest.DebugTimelineGroup = firstRequest.DebugTimelineGroup;
                 KimodoRawMotionData motion = ParseFirstPassMotion(firstRequest, firstResult, "Trajectory");
+                Debug.Log(
+                    $"[Kimodo][TrajectoryPass1][AnchorInput] model={modelName} " +
+                    $"seed={firstRequest.EffectiveSeed} resultFrames={firstResult.MotionData?.FrameCount ?? 0} " +
+                    $"parsedFrames={motion.FrameCount} rawFrameRate={motion.FrameRate:F3} " +
+                    $"runtimeTrimStart={firstRequest.RuntimeTrimStartFrame} " +
+                    $"targetFrames={firstRequest.TargetFrameCount} " +
+                    $"debugRawFrames={firstRequest.DebugRuntimeMotion?.FrameCount ?? 0}");
                 KimodoPlayableClip firstDebugClip = firstRequest.DebugTimelineReservation?.TimelineClip?.asset as KimodoPlayableClip;
                 KimodoDebugTimelineWriter.TryWriteRawMotion(
                     clip,

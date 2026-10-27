@@ -71,12 +71,14 @@ namespace KimodoBridge.Editor
             PlanarTransform inTransform = ResolveTransform(
                 existingRows, inRows, firstPassMotion, modelName, frameRate,
                 runtimeTrimStartFrame, timelineContext, syntheticAutoBeginFrame, isIn: true,
+                targetFrameCount: targetFrameCount,
                 preferStart: preferStartForIn);
             bool preferStartForOut = ResolveBoundaryPreference(
                 outRows, runtimeTrimStartFrame, targetFrameCount, isIn: false);
             PlanarTransform outTransform = ResolveTransform(
                 existingRows, outRows, firstPassMotion, modelName, frameRate,
                 runtimeTrimStartFrame, timelineContext, syntheticAutoBeginFrame, isIn: false,
+                targetFrameCount: targetFrameCount,
                 preferStart: preferStartForOut);
 
             JArray filtered = new JArray();
@@ -170,6 +172,7 @@ namespace KimodoBridge.Editor
             KimodoTimelineInOutConstraintContext timelineContext,
             int? syntheticAutoBeginFrame,
             bool isIn,
+            int targetFrameCount,
             bool preferStart)
         {
             if (deferredRows == null || deferredRows.Count == 0) return PlanarTransform.Identity;
@@ -216,6 +219,16 @@ namespace KimodoBridge.Editor
                     out Vector3 generatedPosition, out Quaternion generatedHeading))
             {
                 throw new InvalidOperationException($"Postapply {(isIn ? "In" : "Out")} could not resolve its first-pass trajectory Root2D anchor at frame {outputFrame}.");
+            }
+            if (!isIn && deferredOutAfterOutput)
+            {
+                Debug.Log(
+                    $"[Kimodo][OutsideOutAnchor] model={modelName} " +
+                    $"firstFrame={firstFrame} lastFrame={lastFrame} boundaryFrame={boundary.Frame} " +
+                    $"runtimeTrimStart={runtimeTrimStartFrame} targetFrames={targetFrameCount} " +
+                    $"outputFrame={outputFrame} rawFrames={firstPassMotion.FrameCount} " +
+                    $"sourceTimelineRoot={originalPosition} generatedPass1Root={generatedPosition} " +
+                    $"sourceHeading={originalHeading} generatedHeading={generatedHeading}");
             }
             return PlanarTransform.FromSourceToTarget(
                 originalPosition, originalHeading, generatedPosition, generatedHeading);
